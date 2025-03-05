@@ -81,6 +81,7 @@ given AbsDom[ABool]:
   import ABool.*
 
   def top: ABool = Top
+
   def bot: ABool = Bot
 
   def subElement(b1: ABool, b2: ABool): Boolean =
@@ -90,14 +91,6 @@ given AbsDom[ABool]:
       case (True, True) | (False, False) => true
       case _ => false
 
-  //    @targetName("meet")
-  //    def &(b2: ABool): ABool =
-  //      (b1, b2) match
-  //        case (Top, b) => b
-  //        case (b, Top) => b
-  //        case (True, True) => True
-  //        case (False, False) => False
-  //        case _ => Bot
   def join(b1: ABool, b2: ABool): ABool =
     (b1, b2) match
       case (Bot, b) => b
@@ -105,5 +98,13 @@ given AbsDom[ABool]:
       case (True, True) => True
       case (False, False) => False
       case _ => Top
-  
+
+  //  def meet(b1: ABool, b2: ABool): ABool =
+  //    (b1, b2) match
+  //      case (Top, b) => b
+  //      case (b, Top) => b
+  //      case (True, True) => True
+  //      case (False, False) => False
+  //      case _ => Bot
+
   def widen(b1: ABool, b2: ABool): ABool = join(b1, b2)

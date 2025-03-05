@@ -1,9 +1,8 @@
 package flat.checker.abs
 
 import flat.checker
-import flat.checker.abs.analysis.{AbsPos, RelPos}
+import flat.checker.Issuer
 import flat.checker.ast.*
-import flat.checker.{Issuer, ast}
 
 import scala.collection.mutable
 
@@ -59,9 +58,8 @@ class AbsTyper:
   private object Evaluator extends NodeVisitor[State, AVal]:
     override def visitLiteral(node: Literal, state: State): AVal =
       node.value match
-        case n: Int => AInt.fromRange(Range.fromInt(n))
+        case n: Int => Range.fromInt(n)
         case b: Boolean => ABool.fromBoolean(b)
-        case c: Char => ???
         case s: String => ReLang.fromString(s)
 
     override def visitGlobalRef(node: GlobalRef, state: State): AVal = globalUbs(node.name)
@@ -69,109 +67,182 @@ class AbsTyper:
     override def visitLocalRef(node: LocalRef, state: State): AVal = state(node.localName)
 
     override def visitApply(node: Apply, state: State): AVal =
-      node.fun match
-        case op: Op =>
-          val vs = node.args.map(_.accept(this, state))
-          op.accept(OpEvaluator, vs)
-        case e: Expr =>
-          val AFun(argUbs, returnUb) = e.accept(this, state).asInstanceOf[AFun]
-          val vs = node.args.map(_.accept(this, state))
-          for
-            (ub, arg) <- argUbs zip node.args
-            v = arg.accept(this, state)
-            if !(v :<: ub)
-          do issuer.report(TypeMismatch(arg.loc, ub.show, v.show))
-          returnUb
+      val AFun(argUbs, returnUb) = node.fun.accept(this, state).asInstanceOf[AFun]
+      val vs = node.args.map(_.accept(this, state))
+      for
+        (ub, arg) <- argUbs zip node.args
+        v = arg.accept(this, state)
+        if !(v :<: ub)
+      do issuer.report(TypeMismatch(arg.loc, ub.show, v.show))
+      returnUb
 
-  private object OpEvaluator extends OpVisitor[Seq[AVal], AVal]:
-    override def visitEqual(input: Seq[AVal]): AVal = ???
+    // library operations
+    override def visitAdd(node: ApplyOp, state: State): AInt =
+      assert(node.args.length == 2)
+      val i1 = node.args.head.accept(this, state).asInstanceOf[AInt]
+      val i2 = node.args(1).accept(this, state).asInstanceOf[AInt]
+      val res = (i1, i2) match
+        case (index: Index, range: Range) if range.isInt => CNFOps.shiftIndex(index, range.asInt).toOption
+        case (range: Range, index: Index) if range.isInt => CNFOps.shiftIndex(index, range.asInt).toOption
+        case _ => None
+      res.getOrElse(i1.asRange + i2.asRange)
 
-    override def visitNotEqual(input: Seq[AVal]): AVal = ???
+    override def visitAnd(node: ApplyOp, state: State): ABool =
+      assert(node.args.length == 2)
+      val b1 = node.args.head.accept(this, state).asInstanceOf[ABool]
+      val b2 = node.args(1).accept(this, state).asInstanceOf[ABool]
+      b1 && b2
 
-    override def visitAdd(input: Seq[AVal]): AVal = input match
-      case Seq(AInt(r1, Some(cnf, k)), AInt(r2, _)) if r2.isInt =>
-        analysis.rightShift(RelPos(cnf, k), r2.asInt) match
-          case Left(err) => throw RuntimeException(err)
-          case Right(RelPos(cnf, k)) => AInt.fromIndex(cnf, k)
-      case Seq(AInt(r1, _), AInt(r2, _)) => AInt.fromRange(r1 + r2)
-      case _ => throw UnsupportedOperationException()
+    override def visitOr(node: ApplyOp, state: State): ABool =
+      assert(node.args.length == 2)
+      val b1 = node.args.head.accept(this, state).asInstanceOf[ABool]
+      val b2 = node.args(1).accept(this, state).asInstanceOf[ABool]
+      b1 || b2
 
-    override def visitSub(input: Seq[AVal]): AVal = input match
-      case Seq(AInt(r1, _), AInt(r2, _)) => AInt.fromRange(r1 - r2)
-      case _ => throw UnsupportedOperationException()
+    override def visitNot(node: ApplyOp, state: State): ABool =
+      assert(node.args.length == 1)
+      val b = node.args.head.accept(this, state).asInstanceOf[ABool]
+      !b
 
-    override def visitLessEqual(input: Seq[AVal]): AVal = ???
+    override def visitCharToCode(node: ApplyOp, state: State): AInt =
+      assert(node.args.length == 1)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      val len = s.length
+      if len.isInt && len.asInt == 1 then
+        if s.isChar then s.asChar.toInt else Range.full
+      else
+        issuer.report(TypeMismatch(node.args.head.loc, "String of length 1", s"String of length $len"))
+        Range.full
 
-    override def visitLessThan(input: Seq[AVal]): AVal = ???
+    override def visitCharFromCode(node: ApplyOp, state: State): AString =
+      assert(node.args.length == 1)
+      val range = node.args.head.accept(this, state).asInstanceOf[AInt].asRange
+      if range.isInt then ReLang.fromChar(range.asInt.toChar)
+      else ReLang.allChar
 
-    override def visitGreaterEqual(input: Seq[AVal]): AVal = ???
+    override def visitStringConcat(node: ApplyOp, state: State): AString =
+      assert(node.args.length == 2)
+      val s1 = node.args.head.accept(this, state).asInstanceOf[AString]
+      val s2 = node.args(1).accept(this, state).asInstanceOf[AString]
+      ReLangOps.concat(s1, s2)
 
-    override def visitGreaterThan(input: Seq[AVal]): AVal = ???
+    override def visitStringReverse(node: ApplyOp, state: State): AString =
+      assert(node.args.length == 1)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      s.reverse
 
-    override def visitAnd(input: Seq[AVal]): AVal = input match
-      case Seq(b1: ABool, b2: ABool) => b1 && b2
-      case _ => assert(false)
+    override def visitStringLength(node: ApplyOp, state: State): AInt =
+      assert(node.args.length == 1)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      s.length
 
-    override def visitOr(input: Seq[AVal]): AVal = input match
-      case Seq(b1: ABool, b2: ABool) => b1 || b2
-      case _ => assert(false)
+    override def visitStringAt(node: ApplyOp, state: State): AString =
+      assert(node.args.length == 2)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      val k = node.args(1).accept(this, state).asInstanceOf[AInt]
+      val cnf = s.toCNF
+      val range = k.asRange
+      if range.isInt then
+        ReLangOps.charAt(s, range.asInt) match
+          case Some(cs) => ReLang.ReChars(cs)
+          case None =>
+            issuer.report(IndexOutOfBounds(node.args(1).loc))
+            ReLang.ReChars(CharSet.full)
+      else
+        issuer.report(OverApprox(node.loc, "index is non-constant"))
+        ReLang.ReChars(CharSet.full)
 
-    override def visitNot(input: Seq[AVal]): AVal = input match
-      case Seq(b: ABool) => !b
-      case _ => assert(false)
+    override def visitSubstring(node: ApplyOp, state: State): AString =
+      assert(node.args.length == 3)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      val k1 = node.args(1).accept(this, state).asInstanceOf[AInt]
+      val k2 = node.args(2).accept(this, state).asInstanceOf[AInt]
+      val cnf = s.toCNF
+      CNFOps.convertToRelative(cnf, k1) match
+        case Right(fromPos) =>
+          CNFOps.convertToRelative(cnf, k2) match
+            case Right(untilPos) => CNFOps.substring(cnf, fromPos, untilPos)
+            case Left(reason) =>
+              issuer.report(OverApprox(node.loc, reason))
+              ReLang.full
+        case Left(reason) =>
+          issuer.report(OverApprox(node.loc, reason))
+          ReLang.full
 
-    override def visitCharToCode(input: Seq[AVal]): AVal = ???
+    override def visitStringIndexOf(node: ApplyOp, state: State): AInt =
+      assert(node.args.length == 3)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      val t = node.args(1).accept(this, state).asInstanceOf[AString]
+      val k = node.args(2).accept(this, state).asInstanceOf[AInt]
+      if t.isChar then
+        val cnf = s.toCNF
+        CNFOps.convertToRelative(cnf, k) match
+          case Left(reason) =>
+            issuer.report(OverApprox(node.loc, reason))
+            Range.full
+          case Right(fromPos) =>
+            CNFOps.indexOf(cnf, t.asChar, fromPos) match
+              case Right(pos) => Index(cnf, pos)
+              case Left(reason) =>
+                issuer.report(OverApprox(node.loc, reason))
+                Range.full
+      else
+        issuer.report(OverApprox(node.loc, "pattern is not a constant char"))
+        Range.full
 
-    override def visitCharFromCode(input: Seq[AVal]): AVal = ???
+    override def visitStringSplit(node: ApplyOp, state: State): AList =
+      assert(node.args.length == 3)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      val t = node.args(1).accept(this, state).asInstanceOf[AString]
+      if t.isChar then
+        val cnf = s.toCNF
+        CNFOps.split(cnf, t.asChar) match
+          case Right(l) => l
+          case Left(reason) =>
+            issuer.report(OverApprox(node.loc, reason))
+            AList.top(ReLang.full)
+      else
+        issuer.report(OverApprox(node.loc, "seperator is not a constant char"))
+        AList.top(ReLang.full)
 
-    override def visitStringConcat(input: Seq[AVal]): AVal = ???
+    override def visitStringStartsWith(node: ApplyOp, state: State): ABool =
+      assert(node.args.length == 2)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      val t = node.args(1).accept(this, state).asInstanceOf[AString]
+      if t.isString then ReLangOps.startsWith(s, t.asString)
+      else
+        issuer.report(OverApprox(node.loc, "prefix is not a constant string"))
+        ABool.Top
 
-    override def visitStringReverse(input: Seq[AVal]): AVal = input match
-      case Seq(r: ReLang) => ???
+    override def visitStringEndsWith(node: ApplyOp, state: State): ABool =
+      assert(node.args.length == 2)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      val t = node.args(1).accept(this, state).asInstanceOf[AString]
+      if t.isString then ReLangOps.endsWith(s, t.asString)
+      else
+        issuer.report(OverApprox(node.loc, "suffix is not a constant string"))
+        ABool.Top
 
-    override def visitStringLength(input: Seq[AVal]): AVal = input match
-      case Seq(r: ReLang) => AInt.fromRange(analysis.measureLength(r))
-      case _ => assert(false)
+    override def visitStringContains(node: ApplyOp, state: State): ABool =
+      assert(node.args.length == 2)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      val t = node.args(1).accept(this, state).asInstanceOf[AString]
+      if t.isChar then s.contains(t.asChar)
+      else
+        issuer.report(OverApprox(node.loc, "pattern is not a constant char"))
+        ABool.Top
 
-    override def visitStringAt(input: Seq[AVal]): AVal = ???
+    override def visitStringToInt(node: ApplyOp, state: State): AInt =
+      assert(node.args.length == 1)
+      val s = node.args.head.accept(this, state).asInstanceOf[AString]
+      if s.isNumber then
+        if s.isString then s.asString.toInt else Range.full
+      else
+        issuer.report(TypeMismatch(node.args.head.loc, "String of digits", s.show))
+        Range.full
 
-    override def visitSubstring(input: Seq[AVal]): AVal = input match
-      case Seq(l: ReLang, AInt(_, Some(l1, k1)), AInt(_, Some(l2, k2))) if l1 == l.toCNF && l2 == l.toCNF =>
-        ReLang.fromCNF(l.toCNF.slice(k1, k2))
-      case Seq(l, i, j) => throw UnsupportedOperationException(s"SUBSTR($l, $i, $j)")
-      case _ => assert(false)
-
-    override def visitStringIndexOf(input: Seq[AVal]): AVal = input match
-      case Seq(l: ReLang, t: ReLang, i: AInt) if t.isChar =>
-        val pos = i match
-          case AInt(_, Some(l1, k)) => RelPos(l1, k)
-          case AInt(r, None) => AbsPos(r.asInt)
-        analysis.find(l.toCNF, t.asChar, pos) match
-          case Left(err) => throw RuntimeException(err)
-          case Right(RelPos(cnf, k)) => AInt.fromIndex(cnf, k)
-      case Seq(l: ReLang, t: ReLang, i: AInt) => throw UnsupportedOperationException()
-      case _ => assert(false)
-
-    override def visitStringSplit(input: Seq[AVal]): AVal = ???
-
-    override def visitStringStartsWith(input: Seq[AVal]): AVal = ???
-
-    override def visitStringEndsWith(input: Seq[AVal]): AVal = ???
-
-    override def visitStringContains(input: Seq[AVal]): AVal = ???
-
-    override def visitStringToInt(input: Seq[AVal]): AVal = ???
-
-    override def visitStringFromInt(input: Seq[AVal]): AVal = ???
-
-    override def visitNewArray(input: Seq[AVal]): AVal = ???
-
-    override def visitArrayAt(input: Seq[AVal]): AVal = ???
-
-    override def visitArrayUpdate(input: Seq[AVal]): AVal = ???
-
-    override def visitArrayContains(input: Seq[AVal]): AVal = ???
-
-    override def visitArrayForallTrue(input: Seq[AVal]): AVal = ???
-
-    override def visitArrayExistsTrue(input: Seq[AVal]): AVal = ???
+    override def visitStringFromInt(node: ApplyOp, state: State): AString =
+      assert(node.args.length == 1)
+      val range = node.args.head.accept(this, state).asInstanceOf[AInt].asRange
+      if range.isInt then ReLang.fromString(range.asInt.toString)
+      else ReLang.number

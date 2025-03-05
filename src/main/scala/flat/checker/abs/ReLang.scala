@@ -1,5 +1,7 @@
 package flat.checker.abs
 
+import flat.checker.Bound.PosInf
+
 import scala.annotation.targetName
 
 enum ReLang:
@@ -94,6 +96,40 @@ enum ReLang:
       case ReStar(r) =>
         for r1 <- r.derivative(x) yield ReConcat(r1, this)
 
+  def reverse: ReLang = this match
+    case ReEmpty | ReChars(_) => this
+    case ReConcat(r1, r2) => ReConcat(r2.reverse, r1.reverse)
+    case ReUnion(r1, r2) => ReUnion(r1.reverse, r2.reverse)
+    case ReStar(r) => ReStar(r.reverse)
+
+  def length: Range = this match
+    case ReEmpty => 0
+    case ReChars(_) => 1
+    case ReConcat(r1, r2) => r1.length + r2.length
+    case ReUnion(r1, r2) => r1.length | r2.length
+    case ReStar(_) => Range(0, PosInf)
+
+  def alphabet: CharSet = this match
+    case ReEmpty => CharSet.empty
+    case ReChars(cs) => cs
+    case ReConcat(r1, r2) => r1.alphabet | r2.alphabet
+    case ReUnion(r1, r2) => r1.alphabet | r2.alphabet
+    case ReStar(r) => r.alphabet
+
+  def contains(c: Char): ABool = this match
+    case ReEmpty => ABool.False
+    case ReChars(cs) if cs.isSingleton => if cs.contains(c) then ABool.True else ABool.False
+    case ReChars(cs) => if cs.contains(c) then ABool.Top else ABool.False
+    case ReConcat(r1, r2) => r1.contains(c) || r2.contains(c)
+    case ReUnion(r1, r2) => r1.contains(c) | r2.contains(c)
+    case ReStar(r) => r.contains(c) match
+      case ABool.True => ABool.Top
+      case b => b
+
+  def neverContain(c: Char): Boolean = contains(c) == ABool.False
+
+  def isNumber: Boolean = alphabet.subsetOf(CharSet.NUM)
+
   override def toString: String =
     this match
       case ReEmpty => "ε"
@@ -148,7 +184,7 @@ given AbsDom[ReLang]:
   import ReLang.*
 
   def top: ReLang = full
-  
+
   def bot: ReLang = empty
 
   def subElement(r1: ReLang, r2: ReLang): Boolean =

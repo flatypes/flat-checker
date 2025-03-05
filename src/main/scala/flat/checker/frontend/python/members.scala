@@ -46,7 +46,6 @@ val strMemberTable = Map(
   "startswith" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Bool, { case Seq(s, s1) => apply(Op.STARTS_WITH, s, s1) }),
   "endswith" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Bool, { case Seq(s, s1) => apply(Op.ENDS_WITH, s, s1) }),
   "split" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Array(Sort.String), { case Seq(s, s1) => apply(Op.SPLIT, s, s1) }),
-  "isdigit" -> MemberInfo(Seq(), Seq(), Sort.Bool, { case Seq(s) => apply(Op.IS_DIGIT, s) }),
 )
 
 def arrayMemberTable(elemSort: Sort) = Map(

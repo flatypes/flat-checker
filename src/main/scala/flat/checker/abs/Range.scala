@@ -70,6 +70,8 @@ object Range:
     Range(lb, ub)
 
   def fromScalaRange(range: scala.Range): Range = Range(Fin(range.start), Fin(range.end))
+  
+  given Conversion[Int, Range] = k => Range(k, k)
 
 given AbsDom[Range]:
   def top: Range = Range.full

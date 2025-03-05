@@ -23,10 +23,10 @@ object GlobalContext:
 class GlobalChecker(override val issuer: Issuer) extends AnnotChecker:
   import GItem.*
 
-  def check(module: Module, ctx: GlobalContext = GlobalContext.empty): ast.Program =
+  def check(module: Module, ctx: GlobalContext = GlobalContext.empty): Seq[ast.FunDef] =
     val newCtx = module.body.foldLeft(ctx) { (c, s) => s.accept(FirstPass, c) }
     val localChecker = LocalChecker(issuer, newCtx)
-    val body = module.body.flatMap {
+    module.body.flatMap {
       case FunctionDef(f, _, body, _) =>
         val Func(args, returns) = newCtx(f): @unchecked
         val localCtx = LocalContext(args.toMap, returns)
@@ -34,7 +34,6 @@ class GlobalChecker(override val issuer: Issuer) extends AnnotChecker:
         Some(ast.FunDef(ast.Ident(f), args, returns, block))
       case _ => None
     }
-    ast.Program(body)
 
   private object FirstPass extends NodeVisitor[GlobalContext, GlobalContext]:
     override def visitImportFrom(node: ImportFrom, ctx: GlobalContext): GlobalContext =

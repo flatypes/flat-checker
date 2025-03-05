@@ -165,7 +165,7 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
         case head +: tail =>
           val (t, e) = head.accept(this, ctx)
           val es = for value <- tail yield value.accept(CheckMode, (t, ctx))
-          (ast.ArrayType(t), ast.Apply(ast.Op.ARRAY_MK, e +: es).copyLocation(node))
+          (ast.ArrayType(t), ast.ApplyOp(ast.Op.ARRAY_MK, e +: es).copyLocation(node))
 
     import GItem.Func
 
@@ -298,7 +298,7 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
       te match
         case ast.ArrayType(t) =>
           val es = for value <- node.values yield value.accept(this, (t, ctx))
-          ast.Apply(ast.Op.ARRAY_MK, es).copyLocation(node)
+          ast.ApplyOp(ast.Op.ARRAY_MK, es).copyLocation(node)
         case actual =>
           issuer.report(TypeMismatch(node.loc, "list", actual.show))
           ast.NoExpr

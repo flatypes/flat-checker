@@ -20,7 +20,7 @@ object Driver:
     val checker = python.GlobalChecker(issuer)
     val program = checker.check(tree)
     issuer.print()
-    if issuer.noError then check(program.body)
+    if issuer.noError then check(program)
 
   def main(args: Array[String]): Unit =
     if args.isEmpty then

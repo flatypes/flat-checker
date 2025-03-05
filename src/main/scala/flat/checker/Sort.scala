@@ -5,7 +5,6 @@ enum Sort:
   case Bot
   case Int
   case Bool
-  case Char
   case String
   case Array(elem: Sort)
   case Fun(args: Seq[Sort], returns: Sort)

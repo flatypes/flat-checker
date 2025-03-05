@@ -8,7 +8,6 @@ extension (sort: Sort)
     case Sort.Bot => "?"
     case Sort.Int => "int"
     case Sort.Bool => "bool"
-    case Sort.Char => "char"
     case Sort.String => "str"
     case Sort.Array(s) => s"list[${s.show}]"
     case Sort.Fun(ss, s) => s"Callable[[${ss.map(_.show).mkString(", ")}], ${s.show}]"
