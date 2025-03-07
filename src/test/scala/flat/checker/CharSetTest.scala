@@ -1,4 +1,4 @@
-package flat.checker.abs
+package flat.checker
 
 import org.scalatest.funsuite.AnyFunSuite
 

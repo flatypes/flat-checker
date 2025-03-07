@@ -1,11 +1,10 @@
-package flat.checker.abs
+package flat.checker
 
-import flat.checker.Bound
 import flat.checker.Bound.*
 
 import scala.annotation.targetName
 
-final case class Range(lb: Bound, ub: Bound):
+final case class Interval(lb: Bound, ub: Bound):
   def isEmpty: Boolean = ub < lb
 
   def isInt: Boolean =
@@ -41,51 +40,51 @@ final case class Range(lb: Bound, ub: Bound):
 
   /** Interval addition: `[a, b] + [c, d] = [a + c, b + d]` */
   @targetName("add")
-  def +(that: Range): Range =
-    if isEmpty || that.isEmpty then Range.empty
-    else Range(lb + that.lb, ub + that.ub)
+  def +(that: Interval): Interval =
+    if isEmpty || that.isEmpty then Interval.empty
+    else Interval(lb + that.lb, ub + that.ub)
 
   /** Interval subtraction: `[a, b] - [c, d] = [a - d, b - c]` */
   @targetName("sub")
-  def -(that: Range): Range =
-    if isEmpty || that.isEmpty then Range.empty
-    else Range(lb - that.ub, ub - that.lb)
+  def -(that: Interval): Interval =
+    if isEmpty || that.isEmpty then Interval.empty
+    else Interval(lb - that.ub, ub - that.lb)
 
   override def toString: String = s"[$lb, $ub]"
 
-object Range:
-  val empty: Range = Range(PosInf, NegInf)
+object Interval:
+  val empty: Interval = Interval(PosInf, NegInf)
 
-  val full: Range = Range(NegInf, PosInf)
+  val full: Interval = Interval(NegInf, PosInf)
 
-  def fromInt(value: Int): Range = Range(Fin(value), Fin(value))
-
-  @deprecated
-  def from(constant: Int): Range = Range(Fin(constant), Fin(constant))
+  def fromInt(value: Int): Interval = Interval(Fin(value), Fin(value))
 
   @deprecated
-  def from(begin: Option[Int], end: Option[Int]): Range =
+  def from(constant: Int): Interval = Interval(Fin(constant), Fin(constant))
+
+  @deprecated
+  def from(begin: Option[Int], end: Option[Int]): Interval =
     val lb = begin.map(Fin.apply).getOrElse(NegInf)
     val ub = end.map(Fin.apply).getOrElse(PosInf)
-    Range(lb, ub)
+    Interval(lb, ub)
 
-  def fromScalaRange(range: scala.Range): Range = Range(Fin(range.start), Fin(range.end))
+  def fromScalaRange(range: scala.Range): Interval = Interval(Fin(range.start), Fin(range.end))
   
-  given Conversion[Int, Range] = k => Range(k, k)
+  given Conversion[Int, Interval] = k => Interval(k, k)
 
-given AbsDom[Range]:
-  def top: Range = Range.full
+given AbsDom[Interval]:
+  def top: Interval = Interval.full
   
-  def bot: Range = Range.empty
+  def bot: Interval = Interval.empty
 
-  def subElement(r1: Range, r2: Range): Boolean = r2.lb <= r1.lb && r1.ub <= r2.ub
+  def subElement(r1: Interval, r2: Interval): Boolean = r2.lb <= r1.lb && r1.ub <= r2.ub
 
-  def join(r1: Range, r2: Range): Range = Range(r1.lb min r2.lb, r1.ub max r2.ub)
+  def join(r1: Interval, r2: Interval): Interval = Interval(r1.lb min r2.lb, r1.ub max r2.ub)
 
-  def widen(r1: Range, r2: Range): Range =
+  def widen(r1: Interval, r2: Interval): Interval =
     if r1.isEmpty then r2
     else if r2.isEmpty then r1
     else
       val lb = if r1.lb <= r2.lb then r1.lb else NegInf
       val ub = if r2.ub <= r1.ub then r1.ub else PosInf
-      Range(lb, ub)
+      Interval(lb, ub)

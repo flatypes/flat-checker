@@ -43,15 +43,16 @@ class Diagnostic(val loc: Location, val severity: DiagnosticSeverity, val messag
     buf.map(_ + '\n').mkString
 
 enum DiagnosticSeverity:
+  case FATAL
   case ERROR
   case WARN
   case INFO
-  case HINT
 
 import flat.checker.DiagnosticSeverity.ERROR
 
 class SyntaxError(loc: Location, details: Seq[String]) extends Diagnostic(loc, ERROR, "Syntax error", details)
 
-class NameError(loc: Location, details: Seq[String]) extends Diagnostic(loc, ERROR, "Name Error", details)
+class NameError(loc: Location, details: Seq[String]) extends Diagnostic(loc, ERROR, "Name Error", details):
+  def this(loc: Location, detail: String) = this(loc, Seq(detail))
 
 class TypeError(loc: Location, details: Seq[String]) extends Diagnostic(loc, ERROR, "Type Error", details)

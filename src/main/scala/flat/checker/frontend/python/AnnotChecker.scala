@@ -2,7 +2,7 @@ package flat.checker.frontend.python
 
 import flat.checker.Bound.*
 import flat.checker.frontend.python.ast.*
-import flat.checker.{Bound, Issuer, Location, ast, SyntaxError, TypeError}
+import flat.checker.{Bound, CharSet, Interval, Issuer, Location, ReLang, SyntaxError, TypeError, ast}
 
 import scala.util.parsing.combinator.Parsers
 import scala.util.parsing.input.{CharSequenceReader, OffsetPosition}
@@ -25,9 +25,9 @@ trait AnnotChecker:
           ast.NoType
         case None =>
           x match
-            case "int" => ast.IntType
-            case "bool" => ast.BoolType
-            case "str" => ast.StringType
+            case "int" => ast.intType
+            case "bool" => ast.boolType
+            case "str" => ast.stringType
             case "list" => TypeConstr("typing.List")
             case _ =>
               issuer.report(UndefinedName(node.loc))
@@ -66,7 +66,7 @@ trait AnnotChecker:
                   ast.ArrayType(t)
                 case "typing.Literal" =>
                   node.slice match
-                    case Constant(v) => ast.LiteralType(v)
+                    case Constant(v) => ast.literalType(v)
                     case _ =>
                       issuer.report(TypeError(node.slice.loc, Seq(
                         "invalid argument for typing.Literal",
@@ -84,7 +84,7 @@ trait AnnotChecker:
                         case None => PosInf
                         case Some(Constant(n: Int)) => n
                         case _ => assert(false)
-                      ast.RangeType(lb, ub)
+                      ast.IntervalType(Interval(lb, ub))
                     case _ =>
                       issuer.report(TypeError(node.slice.loc, Seq(
                         "invalid argument for flat.py.range",
@@ -150,11 +150,11 @@ trait AnnotChecker:
       issuer.report(SyntaxError(node.loc, Seq("expect a type")))
       ast.NoType
 
-  def parseReExpr(input: CharSequence, location: Location): ast.ReExpr =
+  def parseReExpr(input: CharSequence, location: Location): ReLang =
     ReExprParser(input) match
       case Left(details) =>
         issuer.report(SyntaxError(location, "regular expression has invalid syntax" +: details))
-        ast.ReEmpty
+        ReLang.empty
       case Right(r) => r
 
   private object ReExprParser extends Parsers:
@@ -172,26 +172,26 @@ trait AnnotChecker:
       ('b' ^^^ '\b' | 't' ^^^ '\t' | 'n' ^^^ '\n' | 'f' ^^^ '\f' | 'r' ^^^ '\r' | "\"'\\" | ".^$*+?[-]|(){,}"
         | err("bad escape"))
 
-    private def allChar: Parser[ast.ReExpr] = '.' ^^^ ast.ReAllChar
+    private def allChar: Parser[ReLang] = '.' ^^^ ReLang.allChar
 
-    private def charRange: Parser[ast.ReExpr] =
+    private def charRange: Parser[CharSet] =
       for
         c1 <- not("]")
         c2 <- '-' ~> not("]")
         if c1 <= c2
-      yield ast.ReRange(c1, c2)
+      yield CharSet.from(c1 to c2)
 
-    private def charSet: Parser[ast.ReExpr] =
+    private def charSet: Parser[ReLang] =
       for
         _ <- '['
         neg <- '^' ^^^ true | success(false)
-        choices <- (charRange | (not("]") | escapeSeq) ^^ ast.ReChar.apply).*
+        choices <- (charRange | (not("]") | escapeSeq) ^^ (CharSet.of(_))).*
         _ <- ']'
-        r = ast.mkReUnion(choices)
-      yield if neg then ast.ReComp(r) else r
+        cs = if choices.isEmpty then CharSet.empty else choices.reduce(_ | _)
+      yield ReLang.ReChars(if neg then !cs else cs)
 
-    private def base: Parser[ast.ReExpr] =
-      allChar | (not(".^$*+?\\[]|(){") | escapeSeq) ^^ ast.ReChar.apply | charSet | '(' ~> expr <~ ')'
+    private def base: Parser[ReLang] =
+      allChar | (not(".^$*+?\\[]|(){") | escapeSeq) ^^ ReLang.fromChar | charSet | '(' ~> expr <~ ')'
 
     private def fin: Parser[Fin] = rep1("0123456789") ^^ (cs => Fin(cs.mkString.toInt))
 
@@ -207,29 +207,21 @@ trait AnnotChecker:
       '*' ^^^ (Fin(0), PosInf) | '+' ^^^ (Fin(1), PosInf) | '?' ^^^ (Fin(0), Fin(1))
         | '{' ~> fin <~ '}' ^^ (b => (b, b)) | loopQuantifier
 
-    private def repeat: Parser[ast.ReExpr] =
-      for
-        r <- base
-        in <- getInput
-        oq <- quantifier.?
-        result <- oq match
-          case Some(lb, ub) =>
-            r match
-              case ast.ReRepeat(_, _, _) => err("multiple repeat", in)
-              case _ => success(ast.ReRepeat(lb, ub, r))
-          case None => success(r)
-      yield result
+    private def repeat: Parser[ReLang] = base ~ quantifier.? ^^ {
+      case r ~ None => r
+      case r ~ Some(lb, ub) => r.loop(lb, ub)
+    }
 
-    private def concat: Parser[ast.ReExpr] = (repeat | '}' ^^ ast.ReChar.apply).* ^^ ast.mkReConcat
+    private def concat: Parser[ReLang] = (repeat | '}' ^^ ReLang.fromChar).* ^^ ReLang.mkConcat
 
-    private def expr: Parser[ast.ReExpr] = repsep(concat, '|') ^^ ast.mkReUnion
+    private def expr: Parser[ReLang] = repsep(concat, '|') ^^ ReLang.mkUnion
 
     private def formatError(source: CharSequence, offset: Int, msg: String): Seq[String] =
       val pos = OffsetPosition(source, offset)
       val indentation = " ".repeat(pos.column - 1)
       Seq(pos.lineContents, indentation + "^", indentation + msg)
 
-    def apply(input: CharSequence): Either[Seq[String], ast.ReExpr] =
+    def apply(input: CharSequence): Either[Seq[String], ReLang] =
       val in = CharSequenceReader(input)
       phrase(expr)(in) match
         case Success(r, _) => Right(r)

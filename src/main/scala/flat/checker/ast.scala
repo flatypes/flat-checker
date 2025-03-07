@@ -4,12 +4,14 @@ object ast:
   trait Node:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T
 
-  final case class FunDef(ident: Ident, params: Seq[(String, Type)], returnType: Type, body: Stmt) extends Node:
+  final case class FunDef(ident: Ident, params: Seq[(Ident, Type)], returnType: Type, body: Stmt) extends Node:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitFunDef(this, ctx)
 
-  final case class Ident(name: String)
+  final case class Ident(name: String) extends Locational
 
   sealed trait Type:
+    def ignoreHint: Type = this
+
     def toSort: Sort
 
   case object AnyType extends Type:
@@ -18,20 +20,25 @@ object ast:
   case object NoType extends Type:
     def toSort: Sort = Sort.Bot
 
-  case object IntType extends Type:
+  final case class IntervalType(interval: Interval) extends Type:
     def toSort: Sort = Sort.Int
 
-  case object BoolType extends Type:
+  val intType: Type = IntervalType(Interval.full)
+
+  final case class TernaryType(value: Ternary) extends Type:
     def toSort: Sort = Sort.Bool
 
-  case object StringType extends Type:
+  val boolType: Type = TernaryType(Ternary.Maybe)
+
+  final case class LangType(reLang: ReLang) extends Type:
     def toSort: Sort = Sort.String
 
-  final case class LiteralType(value: Int | Boolean | String) extends Type:
-    def toSort: Sort = value match
-      case _: Int => Sort.Int
-      case _: Boolean => Sort.Bool
-      case _: String => Sort.String
+  val stringType: Type = LangType(ReLang.full)
+
+  def literalType(value: Int | Boolean | String): Type = value match
+    case i: Int => IntervalType(i)
+    case b: Boolean => TernaryType(b)
+    case s: String => LangType(s)
 
   final case class ArrayType(elem: Type) extends Type:
     def toSort: Sort = Sort.Array(elem.toSort)
@@ -39,58 +46,31 @@ object ast:
   final case class FunType(args: Seq[Type], returns: Type) extends Type:
     def toSort: Sort = Sort.Fun(args.map(_.toSort), returns.toSort)
 
-  final case class RangeType(lb: Bound, ub: Bound) extends Type:
-    def toSort: Sort = Sort.Int
+  final case class HintType(hint: Hint) extends Type:
+    override def ignoreHint: Type = hint.toType
 
-  final case class LangType(reExpr: ReExpr) extends Type:
-    def toSort: Sort = Sort.String
+    def toSort: Sort = hint.toType.toSort
 
   given fromSort: Conversion[Sort, Type] = {
     case Sort.Top => AnyType
     case Sort.Bot => NoType
-    case Sort.Int => IntType
-    case Sort.Bool => BoolType
-    case Sort.String => StringType
+    case Sort.Int => intType
+    case Sort.Bool => boolType
+    case Sort.String => stringType
     case Sort.Array(s) => ArrayType(s)
     case Sort.Fun(ss, s) => FunType(ss.map(fromSort), s)
   }
 
-  sealed trait ReExpr
-
-  case object ReEmpty extends ReExpr
-
-  case object ReAllChar extends ReExpr
-
-  final case class ReChar(value: Char) extends ReExpr
-
-  final case class ReRange(from: Char, to: Char) extends ReExpr
-
-  final case class ReConcat(lhs: ReExpr, rhs: ReExpr) extends ReExpr
-
-  def mkReConcat(parts: Seq[ReExpr]): ReExpr =
-    require(parts.nonEmpty)
-    parts.reduce(ReConcat(_, _))
-
-  final case class ReUnion(lhs: ReExpr, rhs: ReExpr) extends ReExpr
-
-  def mkReUnion(choices: Seq[ReExpr]): ReExpr =
-    require(choices.nonEmpty)
-    choices.reduce(ReConcat(_, _))
-
-  final case class ReRepeat(lb: Bound, ub: Bound, base: ReExpr) extends ReExpr
-
-  final case class ReComp(operand: ReExpr) extends ReExpr
-
   sealed trait Stmt extends Node
 
-  final case class Declare(localName: String, typ: Type) extends Stmt:
+  final case class Declare(ident: Ident, typ: Type) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitDeclare(this, ctx)
 
-  final case class Assign(target: Option[String], value: Expr) extends Stmt:
+  final case class Assign(target: Option[Ident], value: Expr) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitAssign(this, ctx)
 
   object Assign:
-    def apply(localName: String, value: Expr): Assign = Assign(Some(localName), value)
+    def apply(ident: Ident, value: Expr): Assign = Assign(Some(ident), value)
 
   final case class Assert(cond: Expr) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitAssert(this, ctx)
@@ -104,10 +84,6 @@ object ast:
   final case class While(cond: Expr, body: Stmt) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitWhile(this, ctx)
 
-  @deprecated
-  final case class PureStmt(value: Expr) extends Stmt:
-    override def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = ???
-
   final case class StmtBlock(body: Seq[Stmt]) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitStmtBlock(this, ctx)
 
@@ -116,11 +92,14 @@ object ast:
   final case class Literal(value: Int | Boolean | String) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitLiteral(this, ctx)
 
-  final case class GlobalRef(name: String) extends Expr:
+  final case class GlobalRef(ident: Ident) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitGlobalRef(this, ctx)
 
-  final case class LocalRef(localName: String) extends Expr:
+  final case class LocalRef(ident: Ident) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitLocalRef(this, ctx)
+
+  final case class IfExpr(cond: Expr, body: Expr, elseBody: Expr) extends Expr:
+    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitIfExpr(this, ctx)
 
   final case class Apply(fun: Expr, args: Seq[Expr]) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitApply(this, ctx)
@@ -130,10 +109,7 @@ object ast:
 
   def apply(op: Op, args: Expr*): Expr = ApplyOp(op, args.toSeq)
 
-  final case class IfExpr(cond: Expr, body: Expr, elseBody: Expr) extends Expr:
-    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitIfExpr(this, ctx)
-
-  val NoExpr: Expr = GlobalRef("")
+  val NoExpr: Expr = GlobalRef(Ident(""))
 
   enum Op:
     case EQ

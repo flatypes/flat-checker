@@ -2,7 +2,7 @@ package flat.checker.frontend.python
 
 import flat.checker.ast.StmtBlock
 import flat.checker.frontend.python.ast.*
-import flat.checker.{Issuer, Location, Sort, ast, SyntaxError, TypeError}
+import flat.checker.{Issuer, Location, Sort, SyntaxError, TypeError, ast}
 import org.apache.commons.text.StringEscapeUtils.unescapeJava
 
 import scala.annotation.tailrec
@@ -28,7 +28,7 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
     private val stmtBuf = ListBuffer.empty[ast.Stmt]
 
     def done: ast.StmtBlock =
-      val declares = for (x, t) <- varBuf yield ast.Declare(x, t)
+      val declares = for (x, t) <- varBuf yield ast.Declare(ast.Ident(x), t)
       ast.StmtBlock(declares.toSeq ++ stmtBuf.toSeq)
 
     override def visitAssign(node: Assign, ctx: LocalContext): LocalContext =
@@ -37,12 +37,12 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
           ctx.get(x) match
             case Some(t) => // write
               val e = node.value.accept(CheckMode, (t, ctx))
-              stmtBuf += ast.Assign(x, e)
+              stmtBuf += ast.Assign(ast.Ident(x), e)
               ctx
             case None => // declare a new variable
               val (t, e) = node.value.accept(InferMode, ctx)
               varBuf += x -> t
-              stmtBuf += ast.Assign(x, e)
+              stmtBuf += ast.Assign(ast.Ident(x), e)
               ctx.updated(x, t)
         case Subscript(receiver, index) if !index.isInstanceOf[Slice] =>
           val (t, e) = receiver.accept(InferMode, ctx)
@@ -62,7 +62,7 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
     private def writeValue(target: Node, value: ast.Expr, ctx: LocalContext): LocalContext =
       target match
         case Name(x) =>
-          stmtBuf += ast.Assign(x, value)
+          stmtBuf += ast.Assign(ast.Ident(x), value)
           ctx
         case Subscript(receiver, index) if !index.isInstanceOf[Slice] =>
           val (t, e) = receiver.accept(InferMode, ctx)
@@ -86,39 +86,39 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
               val t = checkAnnot(node.annotation, globalCtx)
               val e = node.value.accept(CheckMode, (t, ctx))
               varBuf += x -> t
-              stmtBuf += ast.Assign(x, e)
+              stmtBuf += ast.Assign(ast.Ident(x), e)
               ctx.updated(x, t)
         case _ =>
           issuer.report(UnsupportedFeature(node.target.loc))
           ctx
 
     override def visitAssert(node: Assert, ctx: LocalContext): LocalContext =
-      val e = node.test.accept(CheckMode, (ast.BoolType, ctx))
+      val e = node.test.accept(CheckMode, (ast.boolType, ctx))
       stmtBuf += ast.Assert(e)
       ctx
 
     override def visitPass(node: Pass, ctx: LocalContext): LocalContext = ctx
 
-    private def extractLocals(stmtBlock: StmtBlock): Map[String, ast.Type] = stmtBlock.body.collect {
+    private def extractLocals(stmtBlock: StmtBlock): Map[ast.Ident, ast.Type] = stmtBlock.body.collect {
       case ast.Declare(x, t) => x -> t
     }.toMap
 
     override def visitIf(node: If, ctx: LocalContext): LocalContext =
-      val e = node.test.accept(CheckMode, (ast.BoolType, ctx))
+      val e = node.test.accept(CheckMode, (ast.boolType, ctx))
       val b1 = check(node.body, ctx)
       val b2 = check(node.orElse, ctx)
       val locals1 = extractLocals(b1)
       val locals2 = extractLocals(b2)
       val xs = (locals1.keySet & locals2.keySet).filter(x => locals1(x) == locals2(x))
       val m = Seq.from(for x <- xs yield x -> locals1(x))
-      varBuf ++= m
+      varBuf ++= m.map { case (ast.Ident(x), t) => x -> t }
       val thenBlock = ast.StmtBlock(b1.body)
       val elseBlock = ast.StmtBlock(b2.body)
       stmtBuf += ast.IfStmt(e, thenBlock, elseBlock)
-      ctx.updated(m)
+      ctx.updated(m.map { case (ast.Ident(x), t) => x -> t })
 
     override def visitWhile(node: While, ctx: LocalContext): LocalContext =
-      val e = node.test.accept(CheckMode, (ast.BoolType, ctx))
+      val e = node.test.accept(CheckMode, (ast.boolType, ctx))
       val block = check(node.body, ctx)
       stmtBuf += ast.While(e, block)
       ctx
@@ -155,9 +155,9 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
   private object InferMode extends NodeVisitor[LocalContext, (ast.Type, ast.Expr)]:
     override def visitConstant(node: Constant, ctx: LocalContext): (ast.Type, ast.Expr) =
       node.value match
-        case v: Int => (ast.IntType, ast.Literal(v).copyLocation(node))
-        case v: Boolean => (ast.BoolType, ast.Literal(v).copyLocation(node))
-        case v: String => (ast.StringType, ast.Literal(unescapeJava(v)).copyLocation(node))
+        case v: Int => (ast.intType, ast.Literal(v).copyLocation(node))
+        case v: Boolean => (ast.boolType, ast.Literal(v).copyLocation(node))
+        case v: String => (ast.stringType, ast.Literal(unescapeJava(v)).copyLocation(node))
 
     override def visitListExpr(node: ListExpr, ctx: LocalContext): (ast.Type, ast.Expr) =
       node.values match
@@ -172,11 +172,11 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
     override def visitName(node: Name, ctx: LocalContext): (ast.Type, ast.Expr) =
       val x = node.id
       ctx.get(x) match
-        case Some(t) => (t, ast.LocalRef(x).copyLocation(node))
+        case Some(t) => (t, ast.LocalRef(ast.Ident(x)).copyLocation(node))
         case None =>
           globalCtx.get(x) match
             case Some(Func(args, returns)) =>
-              (ast.FunType(args.map(_._2), returns), ast.GlobalRef(x).copyLocation(node))
+              (ast.FunType(args.map(_._2), returns), ast.GlobalRef(ast.Ident(x)).copyLocation(node))
             case Some(_) =>
               issuer.report(TypeError(node.loc, Seq("expect a term")))
               (ast.NoType, ast.NoExpr)
@@ -202,11 +202,11 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
     override def visitBoolOp(node: BoolOp, ctx: LocalContext): (ast.Type, ast.Expr) =
       node.op match
         case And => // bool and bool
-          val es = node.values.map(_.accept(CheckMode, (ast.BoolType, ctx)))
-          (ast.BoolType, es.reduce(ast.apply(ast.Op.AND, _, _)))
+          val es = node.values.map(_.accept(CheckMode, (ast.boolType, ctx)))
+          (ast.boolType, es.reduce(ast.apply(ast.Op.AND, _, _)))
         case Or => // bool or bool
-          val es = node.values.map(_.accept(CheckMode, (ast.BoolType, ctx)))
-          (ast.BoolType, es.reduce(ast.apply(ast.Op.OR, _, _)))
+          val es = node.values.map(_.accept(CheckMode, (ast.boolType, ctx)))
+          (ast.boolType, es.reduce(ast.apply(ast.Op.OR, _, _)))
 
     import OpCompare.*
 
@@ -219,7 +219,7 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
               case In => checkInfix(loc, right, left, op, ctx)._2
               case NotIn => ast.apply(ast.Op.NOT, checkInfix(loc, right, left, op, ctx)._2)
               case _ => checkInfix(loc, left, right, op, ctx)._2
-      (ast.BoolType, es.reduce(ast.apply(ast.Op.AND, _, _)))
+      (ast.boolType, es.reduce(ast.apply(ast.Op.AND, _, _)))
 
     private def checkInfix(nodeLoc: Location, left: Expr, right: Expr, op: Op,
                            ctx: LocalContext): (ast.Type, ast.Expr) =
@@ -268,7 +268,7 @@ final class LocalChecker(override val issuer: Issuer, globalCtx: GlobalContext) 
               (ast.NoType, ast.NoExpr)
 
     override def visitIfExp(node: IfExp, ctx: LocalContext): (ast.Type, ast.Expr) =
-      val e = node.test.accept(CheckMode, (ast.BoolType, ctx))
+      val e = node.test.accept(CheckMode, (ast.boolType, ctx))
       val (t1, e1) = node.body.accept(this, ctx)
       val e2 = node.orElse.accept(CheckMode, (t1, ctx))
       (t1, ast.IfExpr(e, e1, e2).copyLocation(node))

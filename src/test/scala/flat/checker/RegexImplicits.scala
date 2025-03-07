@@ -1,6 +1,6 @@
-package flat.checker.abs
+package flat.checker
 
-import flat.checker.abs.ReLang.ReChars
+import flat.checker.ReLang.ReChars
 
 import scala.language.implicitConversions
 

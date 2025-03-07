@@ -1,6 +1,6 @@
-package flat.checker.abs
+package flat.checker
 
-trait AbsDom[T]:
+trait Lattice[T]:
   def top: T
 
   def bot: T
@@ -9,11 +9,14 @@ trait AbsDom[T]:
 
   def join(x: T, y: T): T
 
+trait AbsDom[T] extends Lattice[T]:
   def widen(x: T, y: T): T
 
+extension [T: Lattice as lat](x: T)
+  def :<:(y: T): Boolean = lat.subElement(x, y)
+  def |(y: T): T = lat.join(x, y)
+
 extension [T: AbsDom as dom](x: T)
-  def :<:(y: T): Boolean = dom.subElement(x, y)
-  def |(y: T): T = dom.join(x, y)
   def ∇(y: T): T = dom.widen(x, y)
 
 def kleene[T: AbsDom as dom](f: (T => T) => T => T)(t: T): T =

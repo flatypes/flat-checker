@@ -31,7 +31,7 @@ class GlobalChecker(override val issuer: Issuer) extends AnnotChecker:
         val Func(args, returns) = newCtx(f): @unchecked
         val localCtx = LocalContext(args.toMap, returns)
         val block = localChecker.check(body, localCtx)
-        Some(ast.FunDef(ast.Ident(f), args, returns, block))
+        Some(ast.FunDef(ast.Ident(f), for (x, t) <- args yield ast.Ident(x) -> t, returns, block))
       case _ => None
     }
 

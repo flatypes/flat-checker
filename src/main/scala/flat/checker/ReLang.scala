@@ -1,5 +1,6 @@
-package flat.checker.abs
+package flat.checker
 
+import flat.checker
 import flat.checker.Bound.PosInf
 
 import scala.annotation.targetName
@@ -31,6 +32,12 @@ enum ReLang:
     case 1 => this
     case k if k >= 2 => ReConcat(this, this ^ (k - 1))
     case _ => throw IllegalArgumentException()
+
+  def loop(lb: Bound, ub: Bound): ReLang =
+    val rep =
+      if ub == PosInf then ReStar(this)
+      else ReLang.mkUnion((for i <- 0 to ub.asInt yield this ^ i) *)
+    if lb.asInt == 0 then rep else ReLang.ReConcat(this ^ lb.asInt, rep)
 
   /** Convert to concatenation normal form. */
   def toCNF: List[ReLang] =
@@ -102,12 +109,12 @@ enum ReLang:
     case ReUnion(r1, r2) => ReUnion(r1.reverse, r2.reverse)
     case ReStar(r) => ReStar(r.reverse)
 
-  def length: Range = this match
+  def length: Interval = this match
     case ReEmpty => 0
     case ReChars(_) => 1
     case ReConcat(r1, r2) => r1.length + r2.length
     case ReUnion(r1, r2) => r1.length | r2.length
-    case ReStar(_) => Range(0, PosInf)
+    case ReStar(_) => Interval(0, PosInf)
 
   def alphabet: CharSet = this match
     case ReEmpty => CharSet.empty
@@ -116,17 +123,17 @@ enum ReLang:
     case ReUnion(r1, r2) => r1.alphabet | r2.alphabet
     case ReStar(r) => r.alphabet
 
-  def contains(c: Char): ABool = this match
-    case ReEmpty => ABool.False
-    case ReChars(cs) if cs.isSingleton => if cs.contains(c) then ABool.True else ABool.False
-    case ReChars(cs) => if cs.contains(c) then ABool.Top else ABool.False
+  def contains(c: Char): Ternary = this match
+    case ReEmpty => Ternary.False
+    case ReChars(cs) if cs.isSingleton => if cs.contains(c) then Ternary.True else Ternary.False
+    case ReChars(cs) => if cs.contains(c) then Ternary.Maybe else Ternary.False
     case ReConcat(r1, r2) => r1.contains(c) || r2.contains(c)
     case ReUnion(r1, r2) => r1.contains(c) | r2.contains(c)
     case ReStar(r) => r.contains(c) match
-      case ABool.True => ABool.Top
+      case Ternary.True => Ternary.Maybe
       case b => b
 
-  def neverContain(c: Char): Boolean = contains(c) == ABool.False
+  def neverContain(c: Char): Boolean = contains(c) == Ternary.False
 
   def isNumber: Boolean = alphabet.subsetOf(CharSet.NUM)
 
@@ -179,6 +186,8 @@ object ReLang:
   def fromString(value: String): ReLang = mkConcat(value.map(c => ReChars(CharSet.of(c))) *)
 
   def fromCNF(cnf: List[ReLang]): ReLang = mkConcat(cnf *)
+
+  given Conversion[String, ReLang] = fromString
 
 given AbsDom[ReLang]:
   import ReLang.*

@@ -1,12 +1,12 @@
-package flat.checker.abs
+package flat.checker
 
 import scala.annotation.targetName
 
-enum ABool:
+enum Ternary:
   case Bot
   case True
   case False
-  case Top
+  case Maybe
 
   def isEmpty: Boolean = this == Bot
 
@@ -26,78 +26,80 @@ enum ABool:
       case Bot => false
       case True => value
       case False => !value
-      case Top => true
+      case Maybe => true
 
   @targetName("and")
-  def &&(that: ABool): ABool =
+  def &&(that: Ternary): Ternary =
     (this, that) match
       case (Bot, _) | (_, Bot) => Bot
       case (False, _) | (_, False) => False
       case (True, bs) => bs
       case (bs, True) => bs
-      case _ => Top
+      case _ => Maybe
 
   @targetName("or")
-  def ||(that: ABool): ABool =
+  def ||(that: Ternary): Ternary =
     (this, that) match
       case (Bot, _) | (_, Bot) => Bot
       case (True, _) | (_, True) => True
       case (False, b) => b
       case (b, False) => b
-      case _ => Top
+      case _ => Maybe
 
   @targetName("not")
-  def unary_! : ABool =
+  def unary_! : Ternary =
     this match
       case Bot => Bot
       case True => False
       case False => True
-      case Top => Top
+      case Maybe => Maybe
 
-  infix def iff(that: ABool): ABool =
+  infix def iff(that: Ternary): Ternary =
     (this, that) match
       case (Bot, _) | (_, Bot) => Bot
       case (True, True) | (False, False) => True
       case (True, False) | (False, True) => False
-      case _ => Top
+      case _ => Maybe
 
   override def toString: String =
     this match
       case Bot => "⊥"
       case True => "true"
       case False => "false"
-      case Top => "Bool"
+      case Maybe => "Bool"
 
-object ABool:
-  def fromBoolean(value: Boolean): ABool =
+object Ternary:
+  def fromBoolean(value: Boolean): Ternary =
     if value then True else False
 
-  def from(tvl: Option[Boolean]): ABool =
+  def from(tvl: Option[Boolean]): Ternary =
     tvl match
       case Some(b) => fromBoolean(b)
-      case None => Top
+      case None => Maybe
 
-given AbsDom[ABool]:
-  import ABool.*
+  given Conversion[Boolean, Ternary] = fromBoolean
 
-  def top: ABool = Top
+given AbsDom[Ternary]:
+  import Ternary.*
 
-  def bot: ABool = Bot
+  def top: Ternary = Maybe
 
-  def subElement(b1: ABool, b2: ABool): Boolean =
+  def bot: Ternary = Bot
+
+  def subElement(b1: Ternary, b2: Ternary): Boolean =
     (b1, b2) match
-      case (_, Top) => true
+      case (_, Maybe) => true
       case (Bot, _) => true
       case (True, True) | (False, False) => true
       case _ => false
 
-  def join(b1: ABool, b2: ABool): ABool =
+  def join(b1: Ternary, b2: Ternary): Ternary =
     (b1, b2) match
       case (Bot, b) => b
       case (b, Bot) => b
       case (True, True) => True
       case (False, False) => False
-      case _ => Top
+      case _ => Maybe
 
   //  def meet(b1: ABool, b2: ABool): ABool =
   //    (b1, b2) match
@@ -107,4 +109,4 @@ given AbsDom[ABool]:
   //      case (False, False) => False
   //      case _ => Bot
 
-  def widen(b1: ABool, b2: ABool): ABool = join(b1, b2)
+  def widen(b1: Ternary, b2: Ternary): Ternary = join(b1, b2)

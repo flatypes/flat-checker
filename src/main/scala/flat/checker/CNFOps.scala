@@ -1,29 +1,23 @@
-package flat.checker.abs
+package flat.checker
 
+import flat.checker
 import flat.checker.Bound.PosInf
-import flat.checker.abs.ReLang.*
+import flat.checker.ReLang.*
 
 import scala.annotation.tailrec
 
 object CNFOps:
-  /** Try to convert an abstract integer into a relative position in `cnf`. */
-  def convertToRelative(cnf: List[ReLang], intVal: AInt): Either[String, Int] =
-    intVal match
-      case Index(cnf1, pos) if cnf1 == cnf => Right(pos)
-      case _ =>
-        val range = intVal.asRange
-        if range.isInt then
-          val k = range.asInt
-          var i = 0
-          var acc = Range.fromInt(0)
-          while i < cnf.length && !acc.contains(k) do {
-            acc += cnf(i).length
-            i += 1
-          }
-          if i == cnf.length then Right(cnf.length) // end position
-          else if acc.isInt then Right(i)
-          else Left("index position is ambiguous")
-        else Left("index is non-constant")
+  /** Try to convert an absolute position into a relative position in `cnf`. */
+  def convertToRelative(cnf: List[ReLang], k: Int): Either[String, Int] =
+    var i = 0
+    var acc = checker.Interval.fromInt(0)
+    while i < cnf.length && !acc.contains(k) do {
+      acc += cnf(i).length
+      i += 1
+    }
+    if i == cnf.length then Right(cnf.length) // end position
+    else if acc.isInt then Right(i)
+    else Left("index position is ambiguous")
 
   /** Try to shift a relative position with an absolute `offset`. */
   def shiftIndex(index: Index, offset: Int): Either[String, Index] =
@@ -44,10 +38,10 @@ object CNFOps:
     require(fromPos >= 0)
     if fromPos >= cnf.length then Right(cnf.length)
     else if cnf(fromPos).isChar && cnf(fromPos).asChar == target then Right(fromPos)
-    else if cnf(fromPos).contains(target) == ABool.False then indexOf(cnf, target, fromPos + 1)
+    else if cnf(fromPos).contains(target) == Ternary.False then indexOf(cnf, target, fromPos + 1)
     else Left("position is ambiguous")
 
-  def split(cnf: List[ReLang], sep: Char): Either[String, AList] =
+  def split(cnf: List[ReLang], sep: Char): Either[String, Split] =
     def matchStarStartsWithSep(regex: ReLang): Boolean = regex match {
       case ReStar(r) =>
         val cnf = r.toCNF
@@ -62,23 +56,23 @@ object CNFOps:
       case _ => false
     }
 
-    def iter(rest: List[ReLang], cache: List[ReLang]): Either[String, AList] = rest match
+    def iter(rest: List[ReLang], cache: List[ReLang]): Either[String, Split] = rest match
       case Nil =>
-        val sr = AList(Seq(ReLang.fromCNF(cache) -> None))
+        val sr = Split(Seq(ReLang.fromCNF(cache) -> None))
         Right(sr)
       case r :: rs =>
         if r.isChar && r.asChar == sep then
-          val sr1 = AList(Seq(ReLang.fromCNF(cache) -> None))
+          val sr1 = Split(Seq(ReLang.fromCNF(cache) -> None))
           for sr <- iter(rs, Nil) yield sr1 ++ sr
         else if matchStarStartsWithSep(r) then
           val ReStar(r1) = r: @unchecked
-          val sr1 = AList(Seq(ReLang.fromCNF(cache) -> None, ReLang.fromCNF(r1.toCNF.tail) -> Some(PosInf)))
+          val sr1 = Split(Seq(ReLang.fromCNF(cache) -> None, ReLang.fromCNF(r1.toCNF.tail) -> Some(PosInf)))
           if rs.isEmpty then Right(sr1)
           else if rs.head.isChar && rs.head.asChar == sep then for sr <- iter(rs.tail, Nil) yield sr1 ++ sr
           else Left("expect a sep after the star")
         else if matchStarEndsWithSep(r) then
           val ReStar(r1) = r: @unchecked
-          val sr1 = AList(Seq(ReLang.fromCNF(r1.toCNF.dropRight(1)) -> Some(PosInf)))
+          val sr1 = Split(Seq(ReLang.fromCNF(r1.toCNF.dropRight(1)) -> Some(PosInf)))
           if cache.isEmpty then for sr <- iter(rs, Nil) yield sr1 ++ sr
           else Left("expect a sep before the star")
         else if r.neverContain(sep) then

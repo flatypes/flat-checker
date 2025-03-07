@@ -1,8 +1,8 @@
-package flat.checker.abs
+package flat.checker
 
-import flat.checker.abs.ABool.*
-import flat.checker.abs.ReLang.*
-import flat.checker.abs.RegexImplicits.*
+import flat.checker.ReLang.*
+import flat.checker.RegexImplicits.*
+import flat.checker.Ternary.*
 import org.scalatest.funsuite.AnyFunSuite
 
 class ElementTest extends AnyFunSuite:
@@ -10,13 +10,13 @@ class ElementTest extends AnyFunSuite:
     val r = mkConcat('a', mkConcat('b', 'c').*, 'b')
     assert(r.contains('a') == True)
     assert(r.contains('b') == True)
-    assert(r.contains('c') == Top)
+    assert(r.contains('c') == Maybe)
 
   test("contain character 2"):
     val r = mkConcat(mkUnion('+', '-'), CharSet.NUM.+)
-    assert(r.contains('+') == Top)
-    assert(r.contains('-') == Top)
-    assert(r.contains('0') == Top)
+    assert(r.contains('+') == Maybe)
+    assert(r.contains('-') == Maybe)
+    assert(r.contains('0') == Maybe)
     assert(r.neverContain('*'))
 
   test("only contain characters"):
@@ -36,10 +36,10 @@ class ElementTest extends AnyFunSuite:
 
   test("may start with"):
     val r = mkConcat(mkUnion('+', '-'), CharSet.NUM.+)
-    assert(ReLangOps.startsWith(r, "+") == Top)
-    assert(ReLangOps.startsWith(r, "-") == Top)
-    assert(ReLangOps.startsWith(r, "-1") == Top)
-    assert(ReLangOps.startsWith(r, "+12") == Top)
+    assert(ReLangOps.startsWith(r, "+") == Maybe)
+    assert(ReLangOps.startsWith(r, "-") == Maybe)
+    assert(ReLangOps.startsWith(r, "-1") == Maybe)
+    assert(ReLangOps.startsWith(r, "+12") == Maybe)
 
   test("never start with"):
     val r = mkConcat(mkUnion('+', '-'), CharSet.NUM.+)

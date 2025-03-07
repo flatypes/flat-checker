@@ -1,6 +1,6 @@
-package flat.checker.abs
+package flat.checker
 
-import flat.checker.abs.ReLang.*
+import flat.checker.ReLang.*
 
 object ReLangOps:
   def concat(r1: ReLang, r2: ReLang): ReLang = ReConcat(r1, r2)
@@ -15,7 +15,7 @@ object ReLangOps:
       i += 1
     l.map(_.first)
 
-  def startsWith(r: ReLang, prefix: String): ABool =
+  def startsWith(r: ReLang, prefix: String): Ternary =
     var i = 0
     var l: Option[ReLang] = Some(r)
     var matches = true
@@ -25,8 +25,8 @@ object ReLangOps:
         matches = false
       l = l.get.derivative(CharSet.of(c))
       i += 1
-    if l.isEmpty then ABool.False
-    else if matches then ABool.True
-    else ABool.Top
+    if l.isEmpty then Ternary.False
+    else if matches then Ternary.True
+    else Ternary.Maybe
 
-  def endsWith(r: ReLang, suffix: String): ABool = startsWith(r.reverse, suffix.reverse)
+  def endsWith(r: ReLang, suffix: String): Ternary = startsWith(r.reverse, suffix.reverse)

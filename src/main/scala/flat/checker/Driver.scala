@@ -1,6 +1,5 @@
 package flat.checker
 
-import flat.checker.abs.AbsTyper
 import flat.checker.ast.FunDef
 import flat.checker.frontend.python
 
@@ -8,7 +7,7 @@ object Driver:
   def check(script: Seq[FunDef]): Unit =
     println(s"Input:\n$script")
     val issuer = new Issuer
-    val typer = new AbsTyper
+    val typer = new Typer
     typer.process(script)
     typer.issuer.print()
     if typer.issuer.noError then println("Type check OK")

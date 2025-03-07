@@ -1,13 +1,14 @@
-package flat.checker.abs
+package flat.checker
 
+import flat.checker
 import flat.checker.Bound.*
-import flat.checker.abs.ReLang.*
-import flat.checker.abs.RegexImplicits.*
+import flat.checker.ReLang.*
+import flat.checker.RegexImplicits.*
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.language.implicitConversions
 
-class LocalizationTest extends AnyFunSuite {
+class LocalizationTest extends AnyFunSuite:
   // [0-9] "." [0-9]{2}
   private val version1 = mkConcat(CharSet.NUM, '.', CharSet.NUM ^ 2)
 
@@ -97,11 +98,11 @@ class LocalizationTest extends AnyFunSuite {
     val r3 = mkConcat(number, ',', number, ReConcat(',', number).*, ',',
       ReConcat(number, ',').*, number)
     val sr3 = CNFOps.split(r3.toCNF, ',').toOption.get
-    assert(sr3.length == Range(3, PosInf))
+    assert(sr3.length == checker.Interval(3, PosInf))
     assert(sr3.forall(_ == number))
 
     assert(sr3.get(0).get == number)
     assert(sr3.get(1).get == number)
     assert(sr3.get(2).isEmpty)
     assert(sr3.get(-1).get == number)
-}
+
