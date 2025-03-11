@@ -1,4 +1,4 @@
-package flat.checker.frontend.python
+package flat.checker.py
 
 import flat.checker.Sort
 import flat.checker.ast.{Expr, Literal, Op, apply}
@@ -39,7 +39,7 @@ val strMemberTable = Map(
   "__int__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(s) => apply(Op.STR_TO_INT, s) }),
   "__ord__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(s) => apply(Op.CHAR_TO_CODE, s) }),
   "__getitem__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.String, { case Seq(s, i) => apply(Op.STR_AT, s, i) }),
-  "__getitem_slice__" -> MemberInfo(Seq(Sort.Int, Sort.Int), Seq(), Sort.String,
+  "__getitem_slice__" -> MemberInfo(Seq(Sort.Int), Seq(Sort.Int -> Literal(-1)), Sort.String,
     { case Seq(s, i, j) => apply(Op.SUBSTR, s, i, j) }),
   "find" -> MemberInfo(Seq(Sort.String), Seq(Sort.Int -> Literal(0)), Sort.Int,
     { case Seq(s, i, j) => apply(Op.INDEX_OF, s, i, j) }),

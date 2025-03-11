@@ -4,7 +4,8 @@ object ast:
   trait Node:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T
 
-  final case class FunDef(ident: Ident, params: Seq[(Ident, Type)], returnType: Type, body: Stmt) extends Node:
+  final case class FunDef(ident: Ident, paramTypes: Seq[ast.Type], returnType: ast.Type,
+                          varTypes: Seq[ast.Type], body: Stmt) extends Node:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitFunDef(this, ctx)
 
   final case class Ident(name: String) extends Locational
@@ -63,14 +64,8 @@ object ast:
 
   sealed trait Stmt extends Node
 
-  final case class Declare(ident: Ident, typ: Type) extends Stmt:
-    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitDeclare(this, ctx)
-
-  final case class Assign(target: Option[Ident], value: Expr) extends Stmt:
+  final case class Assign(id: Int, value: Expr) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitAssign(this, ctx)
-
-  object Assign:
-    def apply(ident: Ident, value: Expr): Assign = Assign(Some(ident), value)
 
   final case class Assert(cond: Expr) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitAssert(this, ctx)
@@ -81,8 +76,10 @@ object ast:
   final case class IfStmt(cond: Expr, body: Stmt, elseBody: Stmt) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitIfStmt(this, ctx)
 
-  final case class While(cond: Expr, body: Stmt) extends Stmt:
+  final case class While(cond: Expr, body: Stmt, invariants: Seq[Invariant] = Seq.empty) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitWhile(this, ctx)
+
+  final case class Invariant(id: Int, typ: Type) extends Locational
 
   final case class StmtBlock(body: Seq[Stmt]) extends Stmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitStmtBlock(this, ctx)
@@ -92,10 +89,10 @@ object ast:
   final case class Literal(value: Int | Boolean | String) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitLiteral(this, ctx)
 
-  final case class GlobalRef(ident: Ident) extends Expr:
+  final case class GlobalRef(name: String) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitGlobalRef(this, ctx)
 
-  final case class LocalRef(ident: Ident) extends Expr:
+  final case class LocalRef(id: Int) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitLocalRef(this, ctx)
 
   final case class IfExpr(cond: Expr, body: Expr, elseBody: Expr) extends Expr:
@@ -109,7 +106,7 @@ object ast:
 
   def apply(op: Op, args: Expr*): Expr = ApplyOp(op, args.toSeq)
 
-  val NoExpr: Expr = GlobalRef(Ident(""))
+  val NoExpr: Expr = GlobalRef("")
 
   enum Op:
     case EQ
@@ -161,8 +158,6 @@ object ast:
 
     // stmt
     def visitStmt(node: Stmt, ctx: C): T = visitNode(node, ctx)
-
-    def visitDeclare(node: Declare, ctx: C): T = visitStmt(node, ctx)
 
     def visitAssign(node: Assign, ctx: C): T = visitStmt(node, ctx)
 

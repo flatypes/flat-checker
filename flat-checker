@@ -1,5 +1,2 @@
 #!/bin/bash
-mkdir -p out
-source scripts/.venv/bin/activate
-python scripts/ast_json.py "$@"
-exec java -jar target/flat-checker.jar out/*.py.json
+exec java -jar target/flat-checker.jar "$@"

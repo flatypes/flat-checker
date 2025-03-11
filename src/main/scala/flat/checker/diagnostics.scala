@@ -1,41 +1,27 @@
 package flat.checker
 
-import flat.checker.DiagnosticSeverity.{FATAL, INFO, WARN}
+import flat.checker.DiagnosticSeverity.{ERROR, INFO, WARN}
 
-class IllSorted(loc: Location, details: Seq[String]) extends Diagnostic(loc, FATAL, "Program is ill-sorted", details)
+class SortError(detail: String, loc: Location)
+  extends Diagnostic(loc, ERROR, "Transpiled program is ill-sorted", detail)
 
-class Undefined(category: String, name: String, loc: Location) extends IllSorted(loc, Seq(
-  s"$category '$name' is not defined"))
+class TypeError(detail: String, loc: Location) extends Diagnostic(loc, ERROR, "Type Error", detail)
 
-class Redefined(category: String, name: String, loc: Location) extends IllSorted(loc, Seq(
-  s"$category '$name' has already been defined"))
+class TypeMayMismatch(expected: String, actual: String, loc: Location) extends TypeError(
+  Seq(
+    "type may mismatch",
+    s"expected: $expected",
+    s"actual:   $actual"
+  ).mkString("\n"), loc
+)
 
-class ArityMismatch(expected: Int, actual: Int, loc: Location) extends IllSorted(loc, Seq(
-  "number of arguments mismatch",
-  s"expected: $expected",
-  s"actual:   $actual"
-))
+class AssertionMayFail(loc: Location) extends TypeError("assertion may fail", loc)
 
-class SortMismatch(expected: String, actual: String, loc: Location) extends IllSorted(loc, Seq(
-  "type mismatch",
-  s"expected: $expected",
-  s"actual:   $actual"
-))
+class InvariantMayViolate(loc: Location) extends TypeError("invariant may violate", loc)
 
-class TypeMismatch(loc: Location, expected: String, actual: String) extends TypeError(loc, Seq(
-  "type may mismatch",
-  s"expected: $expected",
-  s"actual:   $actual"
-))
+class IndexMayOutOfBounds(loc: Location) extends TypeError("index may be out of bounds", loc)
 
-class AssertionError(loc: Location) extends TypeError(loc, Seq(
-  "assertion may not hold",
-))
+class OverApprox(reason: String, loc: Location) extends Diagnostic(loc, WARN, "Over-approximation",
+  s"cannot infer a precise result because $reason")
 
-class IndexOutOfBounds(loc: Location) extends TypeError(loc, Seq("index may out of bound"))
-
-class OverApprox(loc: Location, reason: String) extends Diagnostic(loc, WARN, "Over-approximation",
-  Seq(s"cannot infer a precise result because $reason"))
-
-class ShowType(loc: Location, inferred: String) extends Diagnostic(loc, INFO, "Show type",
-  Seq(inferred))
+class ShowType(inferred: String, loc: Location) extends Diagnostic(loc, INFO, "Show type", inferred)

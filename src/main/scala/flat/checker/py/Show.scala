@@ -1,4 +1,4 @@
-package flat.checker.frontend.python
+package flat.checker.py
 
 import flat.checker.{Sort, ast}
 

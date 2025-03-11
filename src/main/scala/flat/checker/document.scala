@@ -27,7 +27,7 @@ trait Locational:
     this
 
 class Diagnostic(val loc: Location, val severity: DiagnosticSeverity, val message: String,
-                 val explanations: Seq[String] = Seq()):
+                 val detail: String = ""):
   def longString: String =
     val buf = ListBuffer.empty[String]
     val lineNumberWidth = (loc.end.row + 1).toString.length
@@ -39,7 +39,9 @@ class Diagnostic(val loc: Location, val severity: DiagnosticSeverity, val messag
       val caretOffset = if row == loc.start.row then loc.start.offset else 0
       val indentation = " ".repeat(lineNumberWidth) + " |" + " ".repeat(caretOffset)
       buf += indentation + "^".repeat(if row == loc.end.row then loc.end.offset - caretOffset else code.length)
-      for explanation <- explanations do buf += indentation + explanation
+      if detail.nonEmpty then
+        for detailLine <- detail.split('\n') do
+          buf += indentation + detailLine
     buf.map(_ + '\n').mkString
 
 enum DiagnosticSeverity:
@@ -47,12 +49,3 @@ enum DiagnosticSeverity:
   case ERROR
   case WARN
   case INFO
-
-import flat.checker.DiagnosticSeverity.ERROR
-
-class SyntaxError(loc: Location, details: Seq[String]) extends Diagnostic(loc, ERROR, "Syntax error", details)
-
-class NameError(loc: Location, details: Seq[String]) extends Diagnostic(loc, ERROR, "Name Error", details):
-  def this(loc: Location, detail: String) = this(loc, Seq(detail))
-
-class TypeError(loc: Location, details: Seq[String]) extends Diagnostic(loc, ERROR, "Type Error", details)

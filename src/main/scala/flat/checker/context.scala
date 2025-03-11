@@ -17,46 +17,27 @@ final class GlobalContext(private val data: Map[String, FunInfo]):
 object GlobalContext:
   val empty = GlobalContext(Map.empty)
 
-final case class VarInfo(declaredType: Type, latestType: Type)
+final case class VarInfo(declaredType: Type, latestType: Type):
+  def havoc: VarInfo = copy(latestType = declaredType)
 
-final case class LocalContext(currentFun: String, private val stack: Seq[Map[String, VarInfo]]):
-  private def find(name: String): Option[(Int, VarInfo)] =
-    stack.indices.collectFirst { case i if stack(i).contains(name) => (i, stack(i)(name)) }
+final case class LocalContext private(currentFun: String, private val data: Seq[VarInfo]):
+  def apply(varId: Int): VarInfo = data(varId)
 
-  def lookup(name: String): Option[VarInfo] = find(name).map(_._2)
+  def update(varId: Int, typ: Type): LocalContext =
+    val info = data(varId)
+    copy(data = data.updated(varId, info.copy(latestType = typ)))
 
-  def push: LocalContext = copy(stack = Map.empty +: stack)
-
-  def pop: LocalContext = copy(stack = stack.tail)
-
-  def declare(name: String, typ: Type): LocalContext =
-    if stack.contains(name) then
-      throw IllegalArgumentException(s"variable '$name' is already defined")
-    val m = stack.head + (name -> VarInfo(typ, typ))
-    copy(stack = m +: stack.tail)
-
-  def update(name: String, typ: Type): LocalContext =
-    find(name) match
-      case Some(i, info) =>
-        val m = stack(i) + (name -> info.copy(latestType = typ))
-        copy(stack = stack.updated(i, m))
-      case None =>
-        throw IllegalArgumentException(s"variable '$name' not found")
+  def havoc: LocalContext = copy(data = data.map(_.havoc))
 
   def |(other: LocalContext): LocalContext =
-    require(stack.length == other.stack.length,
-      s"inconsistent stack: level different (${stack.length} != ${other.stack.length})")
-    val joined = for (m1, m2) <- stack zip other.stack yield
-      require(m1.keySet == m2.keySet, s"inconsistent stack: keys different (${m1.keySet} != ${m2.keySet}")
-      Map.from(
-        for
-          x <- m1.keySet
-          VarInfo(t1, v1) = m1(x)
-          VarInfo(t2, v2) = m2(x)
-          _ = require(t1 == t2, s"inconsistent stack: types of $x is different (${t1} != ${t2})")
-        yield x -> VarInfo(t1, v1 | v2)
-      )
-    LocalContext(currentFun, joined)
+    require(currentFun == other.currentFun, s"inconsistent context: function different")
+    require(data.length == other.data.length,
+      s"inconsistent stack: length different (${data.length} != ${other.data.length})")
+    val joined = for (info1, info2) <- data zip other.data yield
+      require(info1.declaredType == info2.declaredType, s"inconsistent stack: type different")
+      info1.copy(latestType = info1.latestType | info2.latestType)
+    copy(data = joined)
 
 object LocalContext:
-  def apply(currentFun: String): LocalContext = LocalContext(currentFun, Seq(Map.empty))
+  def from(currentFun: String, localTypes: Seq[ast.Type]): LocalContext =
+    LocalContext(currentFun, for t <- localTypes yield VarInfo(t, t))

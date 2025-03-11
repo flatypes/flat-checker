@@ -1,25 +1,21 @@
 package flat.checker
 
 import flat.checker.ast.FunDef
-import flat.checker.frontend.python
+import flat.checker.py.{Transpiler, Unpickler}
 
 object Driver:
   def check(script: Seq[FunDef]): Unit =
     println(s"Input:\n$script")
-    val issuer = new Issuer
     val typer = new Typer
     typer.process(script)
-    typer.issuer.print()
-    if typer.issuer.noError then println("Type check OK")
+    println("Type check OK")
 
-  def checkPython(astJSONPath: os.Path): Unit =
-    val json = os.read(astJSONPath)
-    val tree = python.Parser(json)
-    val issuer = new Issuer
-    val checker = python.GlobalChecker(issuer)
-    val program = checker.check(tree)
-    issuer.print()
-    if issuer.noError then check(program)
+  def checkPython(path: os.Path): Unit =
+    val unpickler = Unpickler(path)
+    val tree = unpickler.getTree
+    val transpiler = new Transpiler
+    val ir = transpiler.transpile(tree)
+    check(ir)
 
   def main(args: Array[String]): Unit =
     if args.isEmpty then

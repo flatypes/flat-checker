@@ -7,34 +7,26 @@ class Typer:
   given issuer: Issuer = new Issuer
 
   def process(script: Seq[FunDef], ctx: GlobalContext = GlobalContext.empty): GlobalContext =
-    val gCtx = script.foldLeft(ctx) { case (c, f) => declareFun(f, c) }
+    val gCtx = script.foldLeft(ctx) { (c, f) => declareFun(f, c) }
 
     given GlobalContext = gCtx
 
     val exprChecker = new ExprChecker
     val stmtChecker = new StmtChecker(exprChecker)
-    for FunDef(Ident(f), params, returnType, body) <- script do
-      val lCtx = LocalContext(f)
-      val newCtx = params.foldLeft(lCtx) { case (c, p) => declareParam(p, c) }
-      body.accept(stmtChecker, newCtx)
+    for FunDef(Ident(f), paramTypes, returnType, varTypes, body) <- script do
+      val lCtx = LocalContext.from(f, paramTypes ++ varTypes)
+      body.accept(stmtChecker, lCtx)
+
+    issuer.ensureNoError()
     gCtx
 
   private def declareFun(funDef: FunDef, ctx: GlobalContext): GlobalContext =
     ctx.lookup(funDef.ident.name) match
       case None =>
-        val paramTypes = funDef.params.map(_._2)
-        ctx.declare(funDef.ident.name, FunInfo(paramTypes, funDef.returnType, funDef.ident.loc))
-      case Some(info: FunInfo) =>
-        issuer.report(NameError(funDef.ident.loc, s"redefined function '${funDef.ident.name}'"))
-        ctx
-
-  private def declareParam(param: (Ident, Type), ctx: LocalContext): LocalContext =
-    val (ident, typ) = param
-    ctx.lookup(ident.name) match
-      case None => ctx.declare(ident.name, typ)
-      case Some(info: VarInfo) =>
-        issuer.report(NameError(ident.loc, s"redefined parameter '${ident.name}'"))
-        ctx
+        ctx.declare(funDef.ident.name, FunInfo(funDef.paramTypes, funDef.returnType, funDef.ident.loc))
+      case Some(_) =>
+        val err = SortError(s"function '${funDef.ident.name}' is already defined", funDef.ident.loc)
+        throw RuntimeException(err.longString)
 
   extension (typ: Type)
     def show: String = typ match
@@ -47,64 +39,68 @@ class Typer:
       case FunType(ts, t) => "(" + ts.map(_.show).mkString(", ") + ") → " + t.show
       case HintType(h) => h.toType.show + s"(with hint: $h)"
 
+  private def ensureSort(typ: Type, sort: Sort, exprLoc: Location): Unit =
+    if !(typ.toSort :<: sort) then
+      val err = SortError(s"expect sort $sort, but found ${typ.toSort}", exprLoc)
+      throw RuntimeException(err.longString)
+
   private class StmtChecker(exprChecker: ExprChecker)(using gCtx: GlobalContext)
     extends NodeVisitor[LocalContext, LocalContext]:
-    override def visitDeclare(node: Declare, ctx: LocalContext): LocalContext =
-      ctx.lookup(node.ident.name) match
-        case None => ctx.declare(node.ident.name, node.typ)
-        case Some(info: VarInfo) =>
-          issuer.report(NameError(node.ident.loc, s"redefined local variable '${node.ident.name}'"))
-          ctx
-
     override def visitAssign(node: Assign, ctx: LocalContext): LocalContext =
       val actual = node.value.accept(exprChecker, ctx)
       //      issuer.report(ShowType(node.value.loc, actual.toString))
-      node.target match
-        case Some(ident) =>
-          ctx.lookup(ident.name) match
-            case Some(info) =>
-              if actual :<: info.declaredType then ctx.update(ident.name, actual)
-              else
-                issuer.report(TypeMismatch(node.value.loc, info.declaredType.show, actual.show))
-                ctx
-            case None =>
-              issuer.report(NameError(ident.loc, s"undefined local variable '${ident.name}'"))
-              ctx
-        case None => ctx
+      val info = ctx(node.id)
+      if actual :<: info.declaredType then ctx.update(node.id, actual)
+      else
+        issuer.report(TypeMayMismatch(info.declaredType.show, actual.show, node.value.loc))
+        ctx
 
     override def visitAssert(node: Assert, ctx: LocalContext): LocalContext =
-      checkCond(node.cond, ctx) match
-        case Some(Ternary.True) => /* well-typed */
-        case Some(_) => issuer.report(new AssertionError(node.cond.loc))
-        case None =>
+      val t = node.cond.accept(exprChecker, ctx)
+      ensureSort(t, Sort.Bool, node.cond.loc)
+      t.asInstanceOf[TernaryType].value match
+        case Ternary.True => /* well-typed */
+        case _ => issuer.report(new AssertionMayFail(node.cond.loc))
       ctx
-
-    private def checkCond(cond: Expr, ctx: LocalContext): Option[Ternary] =
-      cond.accept(exprChecker, ctx) match
-        case TernaryType(b) => Some(b)
-        case actual =>
-          issuer.report(SortMismatch(Sort.Bool.toString, actual.toSort.toString, cond.loc))
-          None
 
     override def visitReturn(node: Return, ctx: LocalContext): LocalContext =
       val actual = node.value.accept(exprChecker, ctx)
       val expected = gCtx(ctx.currentFun).returnType
       if !(actual :<: expected) then
-        issuer.report(TypeMismatch(node.value.loc, expected.show, actual.show))
+        issuer.report(TypeMayMismatch(expected.show, actual.show, node.value.loc))
       ctx
 
     override def visitIfStmt(node: IfStmt, ctx: LocalContext): LocalContext =
-      val b = checkCond(node.cond, ctx).getOrElse(Ternary.Maybe)
-      val ctx1 = if b.contains(true) then node.body.accept(this, ctx) else ctx
-      val ctx2 = if b.contains(false) then node.elseBody.accept(this, ctx) else ctx
+      val t = node.cond.accept(exprChecker, ctx)
+      ensureSort(t, Sort.Bool, node.cond.loc)
+      val b = t.asInstanceOf[TernaryType].value
+      val ctx1 = if b.contains(true) then node.body.accept(this, tryAttachCond(node.cond, true, ctx)) else ctx
+      val ctx2 = if b.contains(false) then node.elseBody.accept(this, tryAttachCond(node.cond, false, ctx)) else ctx
       ctx1 | ctx2
 
+    private def tryAttachCond(cond: Expr, value: Boolean, ctx: LocalContext): LocalContext =
+      cond match
+        case LocalRef(id) => ctx.update(id, TernaryType(value))
+        case _ => ctx
+
     override def visitWhile(node: While, ctx: LocalContext): LocalContext =
-      throw UnsupportedOperationException("while")
+      // invariants should hold at entry
+      checkInvariants(node.invariants, ctx)
+      // whenever loop is entered, invariants should hold again after each iteration
+      val invCtx = node.invariants.foldLeft(ctx.havoc) { case (c, Invariant(id, t)) => ctx.update(id, t) }
+      val initCtx = tryAttachCond(node.cond, true, invCtx)
+      val finalCtx = node.body.accept(this, initCtx)
+      checkInvariants(node.invariants, finalCtx)
+      // when loop is exited, invariants hold again
+      tryAttachCond(node.cond, false, invCtx)
+
+    private def checkInvariants(invariants: Seq[Invariant], ctx: LocalContext): Unit =
+      for inv <- invariants do
+        if !(ctx(inv.id).latestType :<: inv.typ) then
+          issuer.report(InvariantMayViolate(inv.loc))
 
     override def visitStmtBlock(node: StmtBlock, ctx: LocalContext): LocalContext =
-      val newCtx = node.body.foldLeft(ctx.push) { (c, s) => s.accept(this, c) }
-      newCtx.pop
+      node.body.foldLeft(ctx) { (c, s) => s.accept(this, c) }
 
   private class ExprChecker(using gCtx: GlobalContext) extends NodeVisitor[LocalContext, Type]:
     override def visitLiteral(node: Literal, ctx: LocalContext): Type =
@@ -114,25 +110,19 @@ class Typer:
         case s: String => LangType(s)
 
     override def visitGlobalRef(node: GlobalRef, ctx: LocalContext): Type =
-      gCtx.lookup(node.ident.name) match
+      gCtx.lookup(node.name) match
         case Some(info) => FunType(info.paramTypes, info.returnType)
         case None =>
-          issuer.report(NameError(node.ident.loc, s"undefined function: ${node.ident.name}"))
-          NoType
+          val err = SortError(s"function '${node.name}' is not defined", node.loc)
+          throw RuntimeException(err.longString)
 
     override def visitLocalRef(node: LocalRef, ctx: LocalContext): Type =
-      ctx.lookup(node.ident.name) match
-        case Some(info) => info.latestType
-        case None =>
-          issuer.report(NameError(node.ident.loc, s"undefined function: ${node.ident.name}"))
-          NoType
+      ctx(node.id).latestType
 
     override def visitIfExpr(node: IfExpr, ctx: LocalContext): Type =
-      val b = node.cond.accept(this, ctx) match
-        case TernaryType(b) => b
-        case actual =>
-          issuer.report(SortMismatch(Sort.Bool.toString, actual.toSort.toString, node.cond.loc))
-          Ternary.Maybe
+      val t = node.cond.accept(this, ctx)
+      ensureSort(t, Sort.Bool, node.cond.loc)
+      val b = t.asInstanceOf[TernaryType].value
       val t1 = if b.contains(true) then node.body.accept(this, ctx) else NoType
       val t2 = if b.contains(false) then node.body.accept(this, ctx) else NoType
       t1 | t2
@@ -143,27 +133,21 @@ class Typer:
           for (e, expected) <- node.args zip expectedTypes do
             val actual = e.accept(this, ctx)
             if !(actual :<: expected) then
-              issuer.report(TypeMismatch(e.loc, expected.show, actual.show))
+              issuer.report(TypeMayMismatch(expected.show, actual.show, e.loc))
           returnType
         case actual =>
-          issuer.report(SortMismatch("function", actual.toString, node.fun.loc))
-          NoType
+          val err = SortError(s"expect function, but found ${actual.toSort}", node.fun.loc)
+          throw RuntimeException(err.longString)
 
     // library operations
     private def checkArgs(node: ApplyOp, paramSorts: Seq[Sort], ctx: LocalContext): Seq[Type] =
       if node.args.length != paramSorts.length then
-        issuer.report(???)
+        val err = SortError(s"arity mismatch: expect ${paramSorts.length}, but found ${node.args.length}", node.loc)
+        throw RuntimeException(err.longString)
       for (arg, expected) <- node.args zip paramSorts yield
         val actual = arg.accept(this, ctx)
-        if !(actual.toSort :<: expected) then
-          issuer.report(SortMismatch(expected.toString, actual.toSort.toString, arg.loc))
+        ensureSort(actual, expected, arg.loc)
         actual
-
-    private def checkSort(node: Expr, expected: Sort, ctx: LocalContext): Type =
-      val actual = node.accept(this, ctx)
-      if !(actual.toSort :<: expected) then
-        issuer.report(SortMismatch(expected.toString, actual.toSort.toString, node.loc))
-      actual
 
     override def visitAdd(node: ApplyOp, ctx: LocalContext): Type =
       val types = checkArgs(node, Seq(Sort.Int, Sort.Int), ctx)
@@ -206,7 +190,7 @@ class Typer:
         case Seq(LangType(r)) =>
           val k = r.length
           if !(k.isInt && k.asInt == 1) then
-            issuer.report(TypeMismatch(node.args.head.loc, "String of length 1", s"String of length $k"))
+            issuer.report(TypeMayMismatch("String of length 1", s"String of length $k", node.args.head.loc))
           intType
         case _ => intType
 
@@ -242,10 +226,10 @@ class Typer:
             ReLangOps.charAt(r, i.asInt) match
               case Some(cs) => LangType(ReLang.ReChars(cs))
               case None =>
-                issuer.report(IndexOutOfBounds(node.args(1).loc))
+                issuer.report(IndexMayOutOfBounds(node.args(1).loc))
                 LangType(ReLang.allChar)
           else
-            issuer.report(OverApprox(node.loc, "index is non-constant"))
+            issuer.report(OverApprox("index is non-constant", node.loc))
             LangType(ReLang.allChar)
         case _ => LangType(ReLang.allChar)
 
@@ -266,10 +250,10 @@ class Typer:
               getRelPos(cnf, until) match
                 case Right(untilPos) => LangType(CNFOps.substring(cnf, fromPos, untilPos))
                 case Left(reason) =>
-                  issuer.report(OverApprox(node.loc, reason))
+                  issuer.report(OverApprox(reason, node.loc))
                   stringType
             case Left(reason) =>
-              issuer.report(OverApprox(node.loc, reason))
+              issuer.report(OverApprox(reason, node.loc))
               stringType
         case _ => stringType
 
@@ -281,16 +265,16 @@ class Typer:
             val cnf = r.toCNF
             getRelPos(cnf, from) match
               case Left(reason) =>
-                issuer.report(OverApprox(node.args(2).loc, reason))
+                issuer.report(OverApprox(reason, node.args(2).loc))
                 intType
               case Right(fromPos) =>
                 CNFOps.indexOf(cnf, rt.asChar, fromPos) match
                   case Right(pos) => HintType(Index(cnf, pos))
                   case Left(reason) =>
-                    issuer.report(OverApprox(node.loc, reason))
+                    issuer.report(OverApprox(reason, node.loc))
                     intType
           else
-            issuer.report(OverApprox(node.loc, "pattern is not a constant char"))
+            issuer.report(OverApprox("pattern is not a constant char", node.loc))
             intType
         case _ => intType
 
@@ -303,10 +287,10 @@ class Typer:
             CNFOps.split(cnf, rt.asChar) match
               case Right(split) => HintType(split)
               case Left(reason) =>
-                issuer.report(OverApprox(node.loc, reason))
+                issuer.report(OverApprox(reason, node.loc))
                 ArrayType(stringType)
           else
-            issuer.report(OverApprox(node.loc, "seperator is not a constant char"))
+            issuer.report(OverApprox("seperator is not a constant char", node.loc))
             ArrayType(stringType)
         case _ => ArrayType(stringType)
 
@@ -316,7 +300,7 @@ class Typer:
         case Seq(LangType(r), LangType(rt)) =>
           if rt.isString then TernaryType(ReLangOps.startsWith(r, rt.asString))
           else
-            issuer.report(OverApprox(node.loc, "prefix is not a constant string"))
+            issuer.report(OverApprox("prefix is not a constant string", node.loc))
             boolType
         case _ => boolType
 
@@ -326,7 +310,7 @@ class Typer:
         case Seq(LangType(r), LangType(rt)) =>
           if rt.isString then TernaryType(ReLangOps.endsWith(r, rt.asString))
           else
-            issuer.report(OverApprox(node.loc, "prefix is not a constant string"))
+            issuer.report(OverApprox("prefix is not a constant string", node.loc))
             boolType
         case _ => boolType
 
@@ -336,7 +320,7 @@ class Typer:
         case Seq(LangType(r), LangType(rt)) =>
           if rt.isChar then TernaryType(r.contains(rt.asChar))
           else
-            issuer.report(OverApprox(node.loc, "prefix is not a constant char"))
+            issuer.report(OverApprox("prefix is not a constant char", node.loc))
             boolType
         case _ => boolType
 
@@ -345,7 +329,7 @@ class Typer:
       types match
         case Seq(LangType(r)) if r.isNumber && r.isString => IntervalType(r.asString.toInt)
         case Seq(t@LangType(r)) if !r.isNumber =>
-          issuer.report(TypeMismatch(node.args.head.loc, "String of digits", t.show))
+          issuer.report(TypeMayMismatch("String of digits", t.show, node.args.head.loc))
           intType
         case _ => intType
 
@@ -356,8 +340,6 @@ class Typer:
         case _ => LangType(ReLang.number)
 
     override def visitArrayAt(node: ApplyOp, ctx: LocalContext): Type =
-      if node.args.length != 2 then
-        issuer.report(???)
       val t1 = node.args.head.accept(this, ctx)
       val t2 = node.args(1).accept(this, ctx)
       (t1, t2.ignoreHint) match

@@ -69,12 +69,12 @@ object Interval:
     Interval(lb, ub)
 
   def fromScalaRange(range: scala.Range): Interval = Interval(Fin(range.start), Fin(range.end))
-  
+
   given Conversion[Int, Interval] = k => Interval(k, k)
 
 given AbsDom[Interval]:
   def top: Interval = Interval.full
-  
+
   def bot: Interval = Interval.empty
 
   def subElement(r1: Interval, r2: Interval): Boolean = r2.lb <= r1.lb && r1.ub <= r2.ub
