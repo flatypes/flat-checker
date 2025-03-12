@@ -26,7 +26,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
         case ListExpr(_) =>
           issuer.report(Unsupported("list", node.target.loc))
         case TupleExpr(_) =>
-          issuer.report(Unsupported("list", node.target.loc))
+          issuer.report(Unsupported("tuple", node.target.loc))
         case name@Name(x) =>
           ctx.get(x) match
             case Some(id) => // assignment
@@ -59,13 +59,19 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
       ctx
 
     override def visitAnnAssign(node: AnnAssign, env: (LCtx, LCtx)): LCtx =
+      // regard this kind of assignment as new variable declaration
       val (ctx, com) = env
-      val t = checkAnnot(node.annotation, gCtx)
-      val id = declare(node.ident, t, com)
-      for value <- node.init do
-        val e = checkType(value, vm.getType(id), ctx)
-        buf += ast.Assign(id, e)
-      ctx + (node.ident.name -> id)
+      ctx.get(node.ident.name) match
+        case None =>
+          val t = checkAnnot(node.annotation, gCtx)
+          val id = declare(node.ident, t, com)
+          for value <- node.init do
+            val e = checkType(value, vm.getType(id), ctx)
+            buf += ast.Assign(id, e)
+          ctx + (node.ident.name -> id)
+        case Some(_) =>
+          issuer.report(Redefined(node.ident))
+          ctx
 
     private def declare(ident: Ident, typ: ast.Type, com: LCtx): Int =
       com.get(ident.name) match

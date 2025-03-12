@@ -17,13 +17,8 @@ class Undefined(ident: Ident) extends NameError(s"'${ident.name}' is not defined
 
 class TypeError(detail: String, loc: Location) extends Diagnostic(loc, ERROR, "Type Error", detail)
 
-class TypeMismatch(expected: String, actual: String, loc: Location) extends TypeError(
-  Seq(
-    "type mismatch",
-    s"expected: $expected",
-    s"actual:   $actual"
-  ).mkString("\n"), loc
-)
+class TypeMismatch(expected: String, actual: String, loc: Location)
+  extends TypeError(s"type mismatch\nexpected: $expected\nactual:   $actual", loc)
 
 class NoAttribute(receiverType: String, attr: String, loc: Location)
   extends TypeError(s"object of type $receiverType has no attribute $attr", loc)

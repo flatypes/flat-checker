@@ -1,7 +1,5 @@
 package flat.checker
 
-import scala.annotation.targetName
-
 enum Ternary:
   case Bot
   case True
@@ -28,7 +26,6 @@ enum Ternary:
       case False => !value
       case Maybe => true
 
-  @targetName("and")
   def &&(that: Ternary): Ternary =
     (this, that) match
       case (Bot, _) | (_, Bot) => Bot
@@ -37,7 +34,6 @@ enum Ternary:
       case (bs, True) => bs
       case _ => Maybe
 
-  @targetName("or")
   def ||(that: Ternary): Ternary =
     (this, that) match
       case (Bot, _) | (_, Bot) => Bot
@@ -46,7 +42,6 @@ enum Ternary:
       case (b, False) => b
       case _ => Maybe
 
-  @targetName("not")
   def unary_! : Ternary =
     this match
       case Bot => Bot
@@ -71,11 +66,6 @@ enum Ternary:
 object Ternary:
   def fromBoolean(value: Boolean): Ternary =
     if value then True else False
-
-  def from(tvl: Option[Boolean]): Ternary =
-    tvl match
-      case Some(b) => fromBoolean(b)
-      case None => Maybe
 
   given Conversion[Boolean, Ternary] = fromBoolean
 

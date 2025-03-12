@@ -2,8 +2,6 @@ package flat.checker
 
 import flat.checker.Bound.*
 
-import scala.annotation.targetName
-
 final case class Interval(lb: Bound, ub: Bound):
   def isEmpty: Boolean = ub < lb
 
@@ -39,13 +37,11 @@ final case class Interval(lb: Bound, ub: Bound):
         case (PosInf, _) | (_, NegInf) => PosInf
 
   /** Interval addition: `[a, b] + [c, d] = [a + c, b + d]` */
-  @targetName("add")
   def +(that: Interval): Interval =
     if isEmpty || that.isEmpty then Interval.empty
     else Interval(lb + that.lb, ub + that.ub)
 
   /** Interval subtraction: `[a, b] - [c, d] = [a - d, b - c]` */
-  @targetName("sub")
   def -(that: Interval): Interval =
     if isEmpty || that.isEmpty then Interval.empty
     else Interval(lb - that.ub, ub - that.lb)
@@ -57,20 +53,11 @@ object Interval:
 
   val full: Interval = Interval(NegInf, PosInf)
 
-  def fromInt(value: Int): Interval = Interval(Fin(value), Fin(value))
+  def fromInt(value: Int): Interval = Interval(value, value)
 
-  @deprecated
-  def from(constant: Int): Interval = Interval(Fin(constant), Fin(constant))
+  def fromRange(range: scala.Range): Interval = Interval(range.start, range.end)
 
-  @deprecated
-  def from(begin: Option[Int], end: Option[Int]): Interval =
-    val lb = begin.map(Fin.apply).getOrElse(NegInf)
-    val ub = end.map(Fin.apply).getOrElse(PosInf)
-    Interval(lb, ub)
-
-  def fromScalaRange(range: scala.Range): Interval = Interval(Fin(range.start), Fin(range.end))
-
-  given Conversion[Int, Interval] = k => Interval(k, k)
+  given Conversion[Int, Interval] = fromInt
 
 given AbsDom[Interval]:
   def top: Interval = Interval.full

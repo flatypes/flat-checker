@@ -3,8 +3,10 @@ package flat.checker
 import scala.collection.mutable.ListBuffer
 import scala.compiletime.uninitialized
 
-class Document private(val name: String, val content: String):
-  def getLine(row: Int): String = content.split('\n')(row)
+class Document private(val name: String, content: String):
+  private val lines = content.split('\n')
+
+  def getLine(row: Int): String = lines(row)
 
 object Document:
   def fromText(name: String, content: String): Document = Document(name, content)

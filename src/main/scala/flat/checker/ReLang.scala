@@ -3,8 +3,6 @@ package flat.checker
 import flat.checker
 import flat.checker.Bound.PosInf
 
-import scala.annotation.targetName
-
 enum ReLang:
   /** Empty string (ε). */
   case ReEmpty
@@ -17,16 +15,12 @@ enum ReLang:
   /** Kleene closure (r*): repeating the element zero or multiple times. */
   case ReStar(r: ReLang)
 
-  @targetName("star")
   def * : ReLang = ReStar(this)
 
-  @targetName("plus")
   def + : ReLang = ReConcat(this, ReStar(this))
 
-  @targetName("opt")
   def ? : ReLang = ReUnion(ReEmpty, this)
 
-  @targetName("rep")
   def ^(k: Int): ReLang = k match
     case 0 => ReEmpty
     case 1 => this

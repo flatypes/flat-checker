@@ -2,8 +2,8 @@ package flat.checker
 
 import org.scalatest.funsuite.AnyFunSuite
 
-class CharSetTest extends AnyFunSuite {
-  test("predefined") {
+class CharSetTest extends AnyFunSuite:
+  test("predefined"):
     assert((CharSet.ALPHA_UPPER | CharSet.ALPHA_LOWER) == CharSet.ALPHA)
     assert((CharSet.ALPHA_LOWER & CharSet.ALPHA_UPPER).isEmpty)
     assert(CharSet.NUM ** CharSet.ALPHA)
@@ -12,9 +12,8 @@ class CharSetTest extends AnyFunSuite {
     assert(CharSet.ALPHA.subsetOf(CharSet.ALPHA_NUM))
     assert(CharSet.ALPHA_UPPER.subsetOf(CharSet.ALPHA_NUM))
     assert(CharSet.ALPHA_NUM.prettyString == "[0-9A-Za-z]")
-  }
 
-  test("union") {
+  test("union"):
     val s1 = CharSet.complementOf('a', 'b')
     val s2 = CharSet.complementOf('a', 'A')
     val s3 = s1 | s2
@@ -29,9 +28,8 @@ class CharSetTest extends AnyFunSuite {
     assert(s5.contains('b'))
     assert(!s5.contains('A'))
     assert(s5.contains('c'))
-  }
 
-  test("intersect") {
+  test("intersect"):
     val s1 = CharSet.complementOf('a', 'b')
     val s2 = CharSet.complementOf('a', 'A')
     val s3 = s1 & s2
@@ -44,15 +42,13 @@ class CharSetTest extends AnyFunSuite {
     val s5 = s4 & s2
     assert(s5.isSingleton)
     assert(s5.contains('b'))
-  }
 
-  test("disjointness") {
+  test("disjointness"):
     val s1 = CharSet.of('a')
     val s2 = CharSet.complementOf('a')
     assert(s1 ** s2)
-  }
 
-  test("subset") {
+  test("subset"):
     val s1 = CharSet.complementOf('a')
     val s2 = CharSet.complementOf('a', 'A')
     assert(s2.subsetOf(s1))
@@ -62,10 +58,7 @@ class CharSetTest extends AnyFunSuite {
     assert(s3.subsetOf(s1))
     assert(s3.subsetOf(s2))
     assert(!s2.subsetOf(s3))
-  }
 
-  test("compress") {
+  test("compress"):
     val s = CharSet.of('a', 'b', 'c', 'e', 'f', '1', '2', '4', '5', '6', '8', '.')
     assert(s.prettyString == "[1-24-68a-ce-f.]")
-  }
-}
