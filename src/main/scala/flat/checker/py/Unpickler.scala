@@ -4,17 +4,29 @@ import flat.checker.ast.Ident
 import flat.checker.py.ast.*
 import flat.checker.{Document, Issuer, Location, Position}
 
+import scala.collection.mutable.ListBuffer
+import scala.sys.process.{ProcessLogger, stringSeqToProcess}
+
 class Unpickler(path: os.Path):
   private val doc = Document.fromPath(path)
   private val issuer = new Issuer
 
   def getTree: Seq[TopStmt] =
-    import scala.sys.process.*
-    val json = s"python3 scripts/py_ast_dump.py ${path.toString}".!!
-    val jsonValue = ujson.read(json)
+    val outLines = ListBuffer.empty[String]
+    callScript(outLines)
+    val jsonValue = ujson.read(outLines.mkString("\n"))
     val tree = jsonValue.arr.flatMap(topStmt).toSeq
     issuer.ensureNoError()
     tree
+
+  private def callScript(outLines: ListBuffer[String]): Unit =
+    val errLines = ListBuffer.empty[String]
+    val logger = ProcessLogger(outLines += _, errLines += _)
+    val returnCode = Seq("python3", "scripts/py_ast_dump.py", path.toString) ! logger
+    if returnCode != 0 then
+      System.err.println("Python Syntax Error")
+      for line <- errLines do System.err.println(line)
+      System.exit(1)
 
   private type Parser[T] = ujson.Value => T
 
