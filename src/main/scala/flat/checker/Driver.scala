@@ -26,4 +26,5 @@ object Driver:
       if os.isFile(path) then
         checkPython(path)
       else if os.isDir(path) then
-        for file <- os.list(path) do checkPython(file)
+        for file <- os.list(path).filter(_.ext == "py") do
+          checkPython(file)
