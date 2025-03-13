@@ -54,6 +54,10 @@ final class CharSet(private val polarity: Boolean, private val chars: Set[Char])
     case other: CharSet => polarity == other.polarity && chars == other.chars
     case _ => false
 
+  def getRepresentative: Char =
+    require(polarity && chars.nonEmpty)
+    chars.head
+
   def prettyString: String =
     val raw =
       if isSingleton then chars.head.toString

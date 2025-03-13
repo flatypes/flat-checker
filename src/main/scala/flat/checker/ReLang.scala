@@ -2,6 +2,7 @@ package flat.checker
 
 import flat.checker
 import flat.checker.Bound.PosInf
+import flat.checker.py.RegexParser
 
 enum ReLang:
   /** Empty string (ε). */
@@ -30,7 +31,7 @@ enum ReLang:
   def loop(lb: Bound, ub: Bound): ReLang =
     val rep =
       if ub == PosInf then ReStar(this)
-      else ReLang.mkUnion((for i <- 0 to ub.asInt yield this ^ i) *)
+      else ReLang.mkUnion((for i <- 0 to (ub.asInt - lb.asInt) yield this ^ i) *)
     if lb.asInt == 0 then rep else ReLang.ReConcat(this ^ lb.asInt, rep)
 
   /** Convert to concatenation normal form. */
@@ -81,12 +82,15 @@ enum ReLang:
       case ReUnion(r1, r2) => r1.first | r2.first
       case ReStar(r) => r.first
 
-  /** Brzozowski derivative. Return `None` for the none language ∅. */
+  /** Brzozowski derivative (to a char). Return `None` for the empty language `∅`. */
+  def derivative(x: Char): Option[ReLang] = derivative(CharSet.of(x))
+
+  /** Positive derivative to a char set `x`: a superset of `{derivative(c) | c in x}`.
+   * Return `None` for `∅`. */
   def derivative(x: CharSet): Option[ReLang] =
     this match
       case ReEmpty => None
-      case ReChars(cs) =>
-        if cs ** x then None else Some(ReEmpty)
+      case ReChars(cs) => if cs ** x then None else Some(ReEmpty)
       case ReConcat(r1, r2) =>
         ReLang.langUnion(
           for r <- r1.derivative(x) yield ReConcat(r, r2),
@@ -157,7 +161,7 @@ object ReLang:
 
   def mkConcat(regexes: ReLang*): ReLang =
     regexes.toList match
-      case Nil => assert(false)
+      case Nil => ReEmpty
       case r :: Nil => r
       case rs => rs.reduce(ReConcat.apply)
 
@@ -181,9 +185,14 @@ object ReLang:
 
   def fromCNF(cnf: List[ReLang]): ReLang = mkConcat(cnf *)
 
+  def fromPython(regex: String): ReLang =
+    RegexParser(regex) match
+      case Left(msg) => throw IllegalArgumentException(msg)
+      case Right(r) => r
+
   given Conversion[String, ReLang] = fromString
 
-given AbsDom[ReLang]:
+given Lattice[ReLang]:
   import ReLang.*
 
   def top: ReLang = full
@@ -191,14 +200,9 @@ given AbsDom[ReLang]:
   def bot: ReLang = empty
 
   def subElement(r1: ReLang, r2: ReLang): Boolean =
-    if r2 == full || r1 == r2 then true else false // TODO: subtype check
+    if r2 == full then true else ReLangSub.check(r1, r2)
 
   def join(r1: ReLang, r2: ReLang): ReLang =
-    if subElement(r1, r2) then r2
-    else if subElement(r2, r1) then r1
-    else ReUnion(r1, r2)
-
-  def widen(r1: ReLang, r2: ReLang): ReLang =
     if subElement(r1, r2) then r2
     else if subElement(r2, r1) then r1
     else ReUnion(r1, r2)
