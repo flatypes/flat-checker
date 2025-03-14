@@ -12,7 +12,8 @@ object ast:
   final case class TypeAlias(ident: Ident, value: Expr) extends TopStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitTypeAlias(this, ctx)
 
-  final case class FunctionDef(ident: Ident, args: Seq[Arg], body: Seq[LocalStmt], returns: Expr) extends TopStmt:
+  final case class FunctionDef(ident: Ident, args: Seq[Arg], body: Seq[LocalStmt],
+                               returns: Option[Expr]) extends TopStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitFunctionDef(this, ctx)
 
   final case class Arg(ident: Ident, annotation: Expr) extends Node:
@@ -46,7 +47,7 @@ object ast:
 
   sealed trait Expr extends Node
 
-  final case class Constant(value: Int | Boolean | String) extends Expr:
+  final case class Constant(value: Int | Boolean | String | Null) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitConstant(this, ctx)
 
   final case class ListExpr(values: Seq[Expr]) extends Expr:
@@ -75,7 +76,8 @@ object ast:
   final case class Slice(lower: Option[Expr], upper: Option[Expr]) extends Locational
 
   trait NodeVisitor[C, T]:
-    def visitDefault(node: Node, ctx: C): T = throw UnsupportedOperationException()
+    def visitDefault(node: Node, ctx: C): T =
+      throw UnsupportedOperationException("visit " + node.getClass.getName)
 
     // top-level stmt
     def visitFunctionDef(node: FunctionDef, ctx: C): T = visitDefault(node, ctx)

@@ -21,6 +21,9 @@ object ast:
   case object NoType extends Type:
     def toSort: Sort = Sort.Bot
 
+  case object UnitType extends Type:
+    def toSort: Sort = Sort.Bot
+
   final case class IntervalType(interval: Interval) extends Type:
     def toSort: Sort = Sort.Int
 
@@ -35,6 +38,8 @@ object ast:
     def toSort: Sort = Sort.String
 
   val stringType: Type = LangType(ReLang.full)
+
+  val charType: Type = LangType(ReLang.allChar)
 
   def literalType(value: Int | Boolean | String): Type = value match
     case i: Int => IntervalType(i)
@@ -86,7 +91,7 @@ object ast:
 
   sealed trait Expr extends Node, Locational
 
-  final case class Literal(value: Int | Boolean | String) extends Expr:
+  final case class Literal(value: Int | Boolean | String | Unit) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitLiteral(this, ctx)
 
   final case class GlobalRef(name: String) extends Expr:
@@ -101,28 +106,17 @@ object ast:
   final case class Apply(fun: Expr, args: Seq[Expr]) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitApply(this, ctx)
 
-  final case class ApplyOp(op: Op, args: Seq[Expr]) extends Expr:
-    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitApplyOp(this, ctx)
-
-  def apply(op: Op, args: Expr*): Expr = ApplyOp(op, args.toSeq)
-
-  val NoExpr: Expr = GlobalRef("")
-
   enum Op:
-    case EQ
-    case NE
-    // integer arithmetic
-    case ADD
-    case SUB
-    // integer comparison
-    case LE
-    case LT
-    case GE
-    case GT
     // Boolean
     case AND
     case OR
     case NOT
+    // comparison0
+    case EQ
+    case LT
+    // Integer
+    case ADD
+    case SUB
     // Char
     case CHAR_TO_CODE
     case CHAR_FROM_CODE
@@ -148,6 +142,40 @@ object ast:
     case ARRAY_CONTAINS
     case ARRAY_FORALL_TRUE
     case ARRAY_EXISTS_TRUE
+
+  final case class ApplyOp(op: Op, args: Seq[Expr]) extends Expr:
+    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = op match
+      case Op.AND => visitor.visitAnd(this, ctx)
+      case Op.OR => visitor.visitOr(this, ctx)
+      case Op.NOT => visitor.visitNot(this, ctx)
+      case Op.EQ => visitor.visitEqual(this, ctx)
+      case Op.LT => visitor.visitLessThan(this, ctx)
+      case Op.ADD => visitor.visitAdd(this, ctx)
+      case Op.SUB => visitor.visitSub(this, ctx)
+      case Op.CHAR_TO_CODE => visitor.visitCharToCode(this, ctx)
+      case Op.CHAR_FROM_CODE => visitor.visitCharFromCode(this, ctx)
+      case Op.CONCAT => visitor.visitStringConcat(this, ctx)
+      case Op.REVERSE => visitor.visitStringReverse(this, ctx)
+      case Op.STR_LEN => visitor.visitStringLength(this, ctx)
+      case Op.STR_AT => visitor.visitStringAt(this, ctx)
+      case Op.SUBSTR => visitor.visitSubstring(this, ctx)
+      case Op.INDEX_OF => visitor.visitStringIndexOf(this, ctx)
+      case Op.SPLIT => visitor.visitStringSplit(this, ctx)
+      case Op.STARTS_WITH => visitor.visitStringStartsWith(this, ctx)
+      case Op.ENDS_WITH => visitor.visitStringEndsWith(this, ctx)
+      case Op.CONTAINS => visitor.visitStringContains(this, ctx)
+      case Op.STR_TO_INT => visitor.visitStringToInt(this, ctx)
+      case Op.STR_FROM_INT => visitor.visitStringFromInt(this, ctx)
+      case Op.ARRAY_MK => visitor.visitNewArray(this, ctx)
+      case Op.ARRAY_AT => visitor.visitArrayAt(this, ctx)
+      case Op.ARRAY_UPDATE => visitor.visitArrayUpdate(this, ctx)
+      case Op.ARRAY_CONTAINS => visitor.visitArrayContains(this, ctx)
+      case Op.ARRAY_FORALL_TRUE => visitor.visitArrayForallTrue(this, ctx)
+      case Op.ARRAY_EXISTS_TRUE => visitor.visitArrayExistsTrue(this, ctx)
+
+  def apply(op: Op, args: Expr*): Expr = ApplyOp(op, args.toSeq)
+
+  val NoExpr: Expr = GlobalRef("")
 
   trait NodeVisitor[C, T]:
     def visitNode(node: Node, ctx: C): T =
@@ -180,103 +208,64 @@ object ast:
 
     def visitLocalRef(node: LocalRef, ctx: C): T = visitExpr(node, ctx)
 
-    def visitApplyOp(node: ApplyOp, ctx: C): T =
-      node.op match
-        case Op.EQ => visitEqual(node, ctx)
-        case Op.NE => visitNotEqual(node, ctx)
-        case Op.ADD => visitAdd(node, ctx)
-        case Op.SUB => visitSub(node, ctx)
-        case Op.LE => visitLessEqual(node, ctx)
-        case Op.LT => visitLessThan(node, ctx)
-        case Op.GE => visitGreaterEqual(node, ctx)
-        case Op.GT => visitGreaterThan(node, ctx)
-        case Op.AND => visitAnd(node, ctx)
-        case Op.OR => visitOr(node, ctx)
-        case Op.NOT => visitNot(node, ctx)
-        case Op.CHAR_TO_CODE => visitCharToCode(node, ctx)
-        case Op.CHAR_FROM_CODE => visitCharFromCode(node, ctx)
-        case Op.CONCAT => visitStringConcat(node, ctx)
-        case Op.REVERSE => visitStringReverse(node, ctx)
-        case Op.STR_LEN => visitStringLength(node, ctx)
-        case Op.STR_AT => visitStringAt(node, ctx)
-        case Op.SUBSTR => visitSubstring(node, ctx)
-        case Op.INDEX_OF => visitStringIndexOf(node, ctx)
-        case Op.SPLIT => visitStringSplit(node, ctx)
-        case Op.STARTS_WITH => visitStringStartsWith(node, ctx)
-        case Op.ENDS_WITH => visitStringEndsWith(node, ctx)
-        case Op.CONTAINS => visitStringContains(node, ctx)
-        case Op.STR_TO_INT => visitStringToInt(node, ctx)
-        case Op.STR_FROM_INT => visitStringFromInt(node, ctx)
-        case Op.ARRAY_MK => visitNewArray(node, ctx)
-        case Op.ARRAY_AT => visitArrayAt(node, ctx)
-        case Op.ARRAY_UPDATE => visitArrayUpdate(node, ctx)
-        case Op.ARRAY_CONTAINS => visitArrayContains(node, ctx)
-        case Op.ARRAY_FORALL_TRUE => visitArrayForallTrue(node, ctx)
-        case Op.ARRAY_EXISTS_TRUE => visitArrayExistsTrue(node, ctx)
-
     def visitApply(node: Apply, ctx: C): T = visitExpr(node, ctx)
+
+    def visitApplyOp(node: ApplyOp, ctx: C): T =
+      throw UnsupportedOperationException(s"visit apply ${node.op}")
 
     def visitIfExpr(node: IfExpr, ctx: C): T = visitExpr(node, ctx)
 
     // apply op
-    def visitEqual(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitAnd(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitNotEqual(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitOr(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitAdd(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitNot(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitSub(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitEqual(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitLessEqual(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitLessThan(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitLessThan(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitAdd(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitGreaterEqual(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitSub(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitGreaterThan(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitCharToCode(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitAnd(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitCharFromCode(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitOr(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringConcat(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitNot(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringReverse(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitCharToCode(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringLength(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitCharFromCode(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringAt(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringConcat(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitSubstring(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringReverse(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringIndexOf(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringLength(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringSplit(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringAt(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringStartsWith(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitSubstring(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringEndsWith(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringIndexOf(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringContains(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringSplit(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringToInt(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringStartsWith(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitStringFromInt(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringEndsWith(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitNewArray(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringContains(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitArrayAt(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringToInt(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitArrayUpdate(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitStringFromInt(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitArrayContains(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitNewArray(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitArrayForallTrue(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)
 
-    def visitArrayAt(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
-
-    def visitArrayUpdate(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
-
-    def visitArrayContains(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
-
-    def visitArrayForallTrue(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
-
-    def visitArrayExistsTrue(node: ApplyOp, ctx: C): T = visitExpr(node, ctx)
+    def visitArrayExistsTrue(node: ApplyOp, ctx: C): T = visitApplyOp(node, ctx)

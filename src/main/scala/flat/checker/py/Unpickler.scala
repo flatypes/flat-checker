@@ -22,7 +22,7 @@ class Unpickler(path: os.Path):
   private def callScript(outLines: ListBuffer[String]): Unit =
     val errLines = ListBuffer.empty[String]
     val logger = ProcessLogger(outLines += _, errLines += _)
-    val returnCode = Seq("python3", "scripts/py_ast_dump.py", path.toString) ! logger
+    val returnCode = Seq("python3", "scripts/parse.py", path.toString) ! logger
     if returnCode != 0 then
       System.err.println("Python Syntax Error")
       for line <- errLines do System.err.println(line)
@@ -64,7 +64,7 @@ class Unpickler(path: os.Path):
         val decorators = m("decorator_list").arr
         if decorators.nonEmpty then
           issuer.report(Unsupported("decorator", decorators.head |> location))
-        val returns = m("returns") |> expr
+        val returns = m("returns").opt.map(expr)
         val typeParams = m("type_params").arr
         if typeParams.nonEmpty then
           issuer.report(Unsupported("type param", typeParams.head |> location))
@@ -122,6 +122,13 @@ class Unpickler(path: os.Path):
         val annot = m("annotation") |> expr
         val init = m("value").opt.map(expr)
         AnnAssign(ident, annot, init).setLocation(loc)
+      case "AugAssign" =>
+        val target = m("target") |> expr
+        val attr = m("op") |> binOp
+        val value = m("value") |> expr
+        Assign(target, mkInfix(attr, target, value)).setLocation(loc)
+      case "Raise" => // regarded as `assert False`
+        Assert(Constant(false).setLocation(loc)).setLocation(loc)
       case "Assert" =>
         val test = m("test") |> expr
         Assert(test).setLocation(loc)
@@ -158,7 +165,8 @@ class Unpickler(path: os.Path):
           case ujson.Num(d) => d.toInt
           case ujson.Bool(b) => b
           case ujson.Str(s) => s
-          case _ => throw IllegalStateException()
+          case ujson.Null => null
+          case other => throw IllegalStateException(s"illegal constant: $other")
         Constant(value).setLocation(loc)
       case "List" =>
         val values = m("elts") |> list(expr)
@@ -180,21 +188,7 @@ class Unpickler(path: os.Path):
         val operand = m("operand") |> expr
         Call(Attribute(operand, attr), Seq.empty).setLocation(loc)
       case "BinOp" =>
-        val attr = m("op").obj("_constr").str match
-          case "Add" => "__add__"
-          case "Sub" => "__sub__"
-          case "Mult" => "__mul__"
-          case "Div" => "__truediv__"
-          case "FloorDiv" => "__floordiv__"
-          case "Mod" => "__mod__"
-          case "Pow" => "__pow__"
-          case "LShift" => "__lshift__"
-          case "RShift" => "__rshift__"
-          case "BitOr" => "__or__"
-          case "BitXor" => "__xor__"
-          case "BitAnd" => "__and__"
-          case "MatMult" => "__matmul__"
-          case _ => assert(false)
+        val attr = m("op") |> binOp
         val left = m("left") |> expr
         val right = m("right") |> expr
         mkInfix(attr, left, right)
@@ -242,12 +236,29 @@ class Unpickler(path: os.Path):
           else m("slice") |> expr
         Subscript(value, slice).setLocation(loc)
 
+  private def binOp: Parser[String] = json =>
+    json.obj("_constr").str match
+      case "Add" => "__add__"
+      case "Sub" => "__sub__"
+      case "Mult" => "__mul__"
+      case "Div" => "__truediv__"
+      case "FloorDiv" => "__floordiv__"
+      case "Mod" => "__mod__"
+      case "Pow" => "__pow__"
+      case "LShift" => "__lshift__"
+      case "RShift" => "__rshift__"
+      case "BitOr" => "__or__"
+      case "BitXor" => "__xor__"
+      case "BitAnd" => "__and__"
+      case "MatMult" => "__matmul__"
+      case _ => assert(false)
+
   private def mkInfix(attr: String, left: Expr, right: Expr): Expr =
     Call(Attribute(left, attr), Seq(right))
       .setLocation(Location(doc, left.loc.start, right.loc.end))
 
   private def mkLeftAssoc(attr: String, tests: Seq[Expr]): Expr =
-    require(tests.length >= 2)
+    require(tests.nonEmpty)
     tests.reduce(mkInfix(attr, _, _))
 
   private def mkCmp(cmpConstr: String, left: Expr, right: Expr): Expr =

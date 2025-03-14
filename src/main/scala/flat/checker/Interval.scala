@@ -46,6 +46,18 @@ final case class Interval(lb: Bound, ub: Bound):
     if isEmpty || that.isEmpty then Interval.empty
     else Interval(lb - that.ub, ub - that.lb)
 
+  def <(that: Interval): Ternary =
+    if ub < that.lb then Ternary.True
+    else if that.ub <= lb then Ternary.False
+    else Ternary.Maybe
+
+  infix def equiv(that: Interval): Ternary =
+    val k1 = lb max that.lb
+    val k2 = ub min that.ub
+    if k1 == k2 then Ternary.True
+    else if k1 > k2 then Ternary.False
+    else Ternary.Maybe
+
   override def toString: String = s"[$lb, $ub]"
 
 object Interval:

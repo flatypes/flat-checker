@@ -111,12 +111,13 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
 
     override def visitReturn(node: Return, env: (LCtx, LCtx)): LCtx =
       val (ctx, _) = env
-      node.value match
-        case Some(expr) =>
-          val e = checkType(expr, returnType, ctx)
-          buf += ast.Return(e)
+      val e = node.value match
+        case Some(expr) => checkType(expr, returnType, ctx)
         case None =>
-          issuer.report(Unsupported("return None", node.loc))
+          if returnType != ast.UnitType then
+            issuer.report(TypeError("missing return value", node.loc))
+          ast.Literal(())
+      buf += ast.Return(e)
       ctx
 
     override def visitExprStmt(node: ExprStmt, env: (LCtx, LCtx)): LCtx =

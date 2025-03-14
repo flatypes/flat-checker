@@ -20,6 +20,7 @@ class AnnotChecker(using issuer: Issuer):
             case "int" => ast.intType
             case "bool" => ast.boolType
             case "str" => ast.stringType
+            case "Char" => ast.charType
             case "Callable" => "Callable"
             case "list" | "List" => "List"
             case "Literal" => "Literal"

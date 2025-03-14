@@ -26,6 +26,10 @@ class ExprChecker(using issuer: Issuer, gCtx: GCtx, vm: VarManager):
           val es = for value <- tail yield value.accept(CheckMode, (t, ctx))
           (ast.ArrayType(t), ast.ApplyOp(ast.Op.ARRAY_MK, e +: es).copyLocation(node))
 
+    override def visitTupleExpr(node: TupleExpr, ctx: LCtx): (ast.Type, ast.Expr) =
+      issuer.report(Unsupported("tuple", node.loc))
+      (ast.NoType, ast.NoExpr)
+
     override def visitName(node: Name, ctx: LCtx): (ast.Type, ast.Expr) =
       val x = node.id
       ctx.get(x) match

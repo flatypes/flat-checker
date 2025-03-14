@@ -93,7 +93,7 @@ enum ReLang:
       case ReChars(cs) => if cs ** x then None else Some(ReEmpty)
       case ReConcat(r1, r2) =>
         ReLang.langUnion(
-          for r <- r1.derivative(x) yield ReConcat(r, r2),
+          for r <- r1.derivative(x) yield ReLang.mkConcat(r, r2),
           if r1.nullable then r2.derivative(x) else None
         )
       case ReUnion(r1, r2) =>
@@ -160,7 +160,7 @@ object ReLang:
   val number: ReLang = ReChars(CharSet.NUM).+
 
   def mkConcat(regexes: ReLang*): ReLang =
-    regexes.toList match
+    regexes.toList.filterNot(_ == ReEmpty) match
       case Nil => ReEmpty
       case r :: Nil => r
       case rs => rs.reduce(ReConcat.apply)
@@ -181,7 +181,11 @@ object ReLang:
 
   def fromChar(value: Char): ReLang = ReChars(CharSet.of(value))
 
+  given Conversion[Char, ReLang] = fromChar
+
   def fromString(value: String): ReLang = mkConcat(value.map(c => ReChars(CharSet.of(c))) *)
+
+  given Conversion[String, ReLang] = fromString
 
   def fromCNF(cnf: List[ReLang]): ReLang = mkConcat(cnf *)
 
@@ -189,8 +193,6 @@ object ReLang:
     RegexParser(regex) match
       case Left(msg) => throw IllegalArgumentException(msg)
       case Right(r) => r
-
-  given Conversion[String, ReLang] = fromString
 
 given Lattice[ReLang]:
   import ReLang.*

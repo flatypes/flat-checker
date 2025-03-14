@@ -32,6 +32,7 @@ class Typer:
     def show: String = typ match
       case AnyType => "⊤"
       case NoType => "?"
+      case UnitType => "Unit"
       case IntervalType(i) => if i == Interval.full then "Int" else i.toString
       case TernaryType(b) => b.toString
       case LangType(r) => if r == ReLang.full then "String" else "/" + r.toString + "/"
@@ -108,6 +109,7 @@ class Typer:
         case i: Int => IntervalType(i)
         case b: Boolean => TernaryType(b)
         case s: String => LangType(s)
+        case () => UnitType
 
     override def visitGlobalRef(node: GlobalRef, ctx: LocalContext): Type =
       gCtx.lookup(node.name) match
@@ -149,22 +151,7 @@ class Typer:
         ensureSort(actual, expected, arg.loc)
         actual
 
-    override def visitAdd(node: ApplyOp, ctx: LocalContext): Type =
-      val types = checkArgs(node, Seq(Sort.Int, Sort.Int), ctx)
-      types match
-        case Seq(HintType(index: Index), IntervalType(i)) if i.isInt =>
-          CNFOps.shiftIndex(index, i.asInt) match
-            case Right(newIndex) => return HintType(newIndex)
-            case _ =>
-        case Seq(IntervalType(i), HintType(index: Index)) if i.isInt =>
-          CNFOps.shiftIndex(index, i.asInt) match
-            case Right(newIndex) => return HintType(newIndex)
-            case _ =>
-        case _ =>
-      types.map(_.ignoreHint) match
-        case Seq(IntervalType(i1), IntervalType(i2)) => IntervalType(i1 + i2)
-        case _ => intType
-
+    // Boolean
     override def visitAnd(node: ApplyOp, ctx: LocalContext): Type =
       val types = checkArgs(node, Seq(Sort.Bool, Sort.Bool), ctx)
       types match
@@ -183,6 +170,49 @@ class Typer:
         case Seq(TernaryType(b)) => TernaryType(!b)
         case _ => boolType
 
+    // Comparison
+    override def visitEqual(node: ApplyOp, ctx: LocalContext): Type =
+      val types = checkArgs(node, Seq(Sort.Top, Sort.Top), ctx)
+      val Seq(t1, t2) = types.map(_.ignoreHint)
+      (t1, t2) match
+        case (IntervalType(i1), IntervalType(i2)) => TernaryType(i1 equiv i2)
+        case (TernaryType(b1), TernaryType(b2)) if b1.isBoolean && b2.isBoolean =>
+          TernaryType(b1.asBoolean == b2.asBoolean)
+        case (LangType(s1), LangType(s2)) if s1.isString && s2.isString =>
+          TernaryType(s1.asString == s2.asString)
+        case _ => boolType
+
+    override def visitLessThan(node: ApplyOp, ctx: LocalContext): Type =
+      val types = checkArgs(node, Seq(Sort.Top, Sort.Top), ctx)
+      val Seq(t1, t2) = types.map(_.ignoreHint)
+      (t1, t2) match
+        case (IntervalType(i1), IntervalType(i2)) => TernaryType(i1 < i2)
+        case _ => boolType
+
+    // Int
+    override def visitAdd(node: ApplyOp, ctx: LocalContext): Type =
+      val types = checkArgs(node, Seq(Sort.Int, Sort.Int), ctx)
+      types match
+        case Seq(HintType(index: Index), IntervalType(i)) if i.isInt =>
+          CNFOps.shiftIndex(index, i.asInt) match
+            case Right(newIndex) => return HintType(newIndex)
+            case _ =>
+        case Seq(IntervalType(i), HintType(index: Index)) if i.isInt =>
+          CNFOps.shiftIndex(index, i.asInt) match
+            case Right(newIndex) => return HintType(newIndex)
+            case _ =>
+        case _ =>
+      types.map(_.ignoreHint) match
+        case Seq(IntervalType(i1), IntervalType(i2)) => IntervalType(i1 + i2)
+        case _ => intType
+
+    override def visitSub(node: ApplyOp, ctx: LocalContext): Type =
+      val types = checkArgs(node, Seq(Sort.Int, Sort.Int), ctx)
+      types.map(_.ignoreHint) match
+        case Seq(IntervalType(i1), IntervalType(i2)) => IntervalType(i1 - i2)
+        case _ => intType
+
+    // Char
     override def visitCharToCode(node: ApplyOp, ctx: LocalContext): Type =
       val types = checkArgs(node, Seq(Sort.String), ctx)
       types match
@@ -200,6 +230,7 @@ class Typer:
         case Seq(IntervalType(i)) if i.isInt => LangType(ReLang.fromChar(i.asInt.toChar))
         case _ => LangType(ReLang.allChar)
 
+    // String
     override def visitStringConcat(node: ApplyOp, ctx: LocalContext): Type =
       val types = checkArgs(node, Seq(Sort.String, Sort.String), ctx)
       types match

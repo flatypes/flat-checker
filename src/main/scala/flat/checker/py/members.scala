@@ -17,21 +17,30 @@ val intMemberTable = Map(
   "__neg__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(n) => apply(Op.SUB, Literal(0), n) }),
   "__add__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Int, { case Seq(x, y) => apply(Op.ADD, x, y) }),
   "__sub__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Int, { case Seq(x, y) => apply(Op.SUB, x, y) }),
+  "__eq__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.EQ, x, y) }),
+  "__ne__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.NOT, apply(Op.EQ, x, y)) }),
   "__lt__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.LT, x, y) }),
-  "__gt__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.GT, x, y) }),
-  "__le__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.LE, x, y) }),
-  "__ge__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.GE, x, y) }),
+  // x > y iff y < x
+  "__gt__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.LT, y, x) }),
+  // x <= y iff !(y < x)
+  "__le__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.NOT, apply(Op.LT, y, x)) }),
+  // x >= y iff !(x < y)
+  "__ge__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.NOT, apply(Op.LT, x, y)) }),
   "__str__" -> MemberInfo(Seq(), Seq(), Sort.String, { case Seq(n) => apply(Op.STR_FROM_INT, n) }),
   "__chr__" -> MemberInfo(Seq(), Seq(), Sort.String, { case Seq(n) => apply(Op.CHAR_FROM_CODE, n) }),
 )
 
 val boolMemberTable = Map(
+  "__eq__" -> MemberInfo(Seq(Sort.Bool), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.EQ, x, y) }),
+  "__ne__" -> MemberInfo(Seq(Sort.Bool), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.NOT, apply(Op.EQ, x, y)) }),
   "__and__" -> MemberInfo(Seq(Sort.Bool), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.AND, x, y) }),
   "__or__" -> MemberInfo(Seq(Sort.Bool), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.OR, x, y) }),
   "__not__" -> MemberInfo(Seq(), Seq(), Sort.Bool, { case Seq(x) => apply(Op.NOT, x) }),
 )
 
 val strMemberTable = Map(
+  "__eq__" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.EQ, x, y) }),
+  "__ne__" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Bool, { case Seq(x, y) => apply(Op.NOT, apply(Op.EQ, x, y)) }),
   "__add__" -> MemberInfo(Seq(Sort.String), Seq(), Sort.String, { case Seq(s1, s2) => apply(Op.CONCAT, s1, s2) }),
   "__len__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(s) => apply(Op.STR_LEN, s) }),
   "__reversed__" -> MemberInfo(Seq(), Seq(), Sort.String, { case Seq(s) => apply(Op.REVERSE, s) }),

@@ -10,10 +10,14 @@ object ReLangOps:
   def charAt(r: ReLang, k: Int): Option[CharSet] =
     var i = 0
     var l: Option[ReLang] = Some(r)
-    while i <= k && l.isDefined do
+    while i < k && l.isDefined do
       l = l.get.derivative(CharSet.full)
       i += 1
-    l.map(_.first)
+    l match
+      case Some(r) =>
+        val cs = r.first
+        if cs.isEmpty then None else Some(cs)
+      case None => None
 
   def startsWith(r: ReLang, prefix: String): Ternary =
     var i = 0

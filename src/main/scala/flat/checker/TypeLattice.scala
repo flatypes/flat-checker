@@ -9,6 +9,7 @@ given TypeLattice: Lattice[Type]:
 
   def subElement(t1: Type, t2: Type): Boolean = (t1, t2) match
     case (_, AnyType) | (NoType, _) => true
+    case (UnitType, UnitType) => true
     case (IntervalType(r1), IntervalType(r2)) => r1 :<: r2
     case (TernaryType(b1), TernaryType(b2)) => b1 :<: b2
     case (LangType(r1), LangType(r2)) => r1 :<: r2
@@ -22,6 +23,7 @@ given TypeLattice: Lattice[Type]:
   def join(t1: Type, t2: Type): Type = (t1, t2) match
     case (NoType, t) => t
     case (t, NoType) => t
+    case (UnitType, UnitType) => UnitType
     case (IntervalType(r1), IntervalType(r2)) => IntervalType(r1 | r2)
     case (TernaryType(b1), TernaryType(b2)) => TernaryType(b1 | b2)
     case (LangType(r1), LangType(r2)) => LangType(r1 | r2)
