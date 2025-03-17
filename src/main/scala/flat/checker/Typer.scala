@@ -36,6 +36,7 @@ class Typer:
       case IntervalType(i) => if i == Interval.full then "Int" else i.toString
       case TernaryType(b) => b.toString
       case LangType(r) => if r == ReLang.full then "String" else "/" + r.toString + "/"
+      case TupleType(ts) => "(" + ts.map(_.show).mkString(", ") + ")"
       case ArrayType(t) => s"Array[${t.show}]"
       case FunType(ts, t) => "(" + ts.map(_.show).mkString(", ") + ") → " + t.show
       case HintType(h) => h.toType.show + s"(with hint: $h)"
@@ -120,6 +121,10 @@ class Typer:
 
     override def visitLocalRef(node: LocalRef, ctx: LocalContext): Type =
       ctx(node.id).latestType
+
+    override def visitTupleExpr(node: TupleExpr, ctx: LocalContext): Type =
+      val ts = for e <- node.elems yield e.accept(this, ctx)
+      ast.TupleType(ts)
 
     override def visitIfExpr(node: IfExpr, ctx: LocalContext): Type =
       val t = node.cond.accept(this, ctx)

@@ -27,8 +27,8 @@ class ExprChecker(using issuer: Issuer, gCtx: GCtx, vm: VarManager):
           (ast.ArrayType(t), ast.ApplyOp(ast.Op.ARRAY_MK, e +: es).copyLocation(node))
 
     override def visitTupleExpr(node: TupleExpr, ctx: LCtx): (ast.Type, ast.Expr) =
-      issuer.report(Unsupported("tuple", node.loc))
-      (ast.NoType, ast.NoExpr)
+      val (ts, es) = (for value <- node.values yield value.accept(this, ctx)).unzip
+      (ast.TupleType(ts), ast.TupleExpr(es))
 
     override def visitName(node: Name, ctx: LCtx): (ast.Type, ast.Expr) =
       val x = node.id

@@ -1,6 +1,7 @@
 type Input = lang(r'..*')
 
-def f055(s: Input):
+# TODO: return char cannot be 'a'
+def f055(s: Input) -> Char:
   if s[0] == 'a':
     return "A"
   else:

@@ -1,6 +1,6 @@
 type Input = lang(r'a')
 
-def f085(s: Input):
+def f085(s: Input) -> Input:
   if not len(s) == 1:
     raise Exception
   assert s[0] == 'a'

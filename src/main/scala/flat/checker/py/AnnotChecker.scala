@@ -22,6 +22,7 @@ class AnnotChecker(using issuer: Issuer):
             case "str" => ast.stringType
             case "Char" => ast.charType
             case "Callable" => "Callable"
+            case "tuple" | "Tuple" => "Tuple"
             case "list" | "List" => "List"
             case "Literal" => "Literal"
             case "range" => "range"
@@ -53,6 +54,16 @@ class AnnotChecker(using issuer: Issuer):
                   issuer.report(TypeError(
                     "invalid arguments for typing.Callable\n" +
                       "expect an input type list and an output type: Callable[[input, ...], output]", node.index.loc))
+                  ast.NoType
+            case "Tuple" =>
+              node.index match
+                case TupleExpr(args) if args.length != 1 =>
+                  val ts = for arg <- args yield arg.accept(this, ctx)
+                  ast.TupleType(ts)
+                case _ =>
+                  issuer.report(TypeError(
+                    "invalid arguments for typing.Tuple\n" +
+                      "expect a type list: Tuple[t1, t2, ...]", node.index.loc))
                   ast.NoType
             case "List" =>
               node.index match

@@ -46,6 +46,9 @@ object ast:
     case b: Boolean => TernaryType(b)
     case s: String => LangType(s)
 
+  final case class TupleType(elems: Seq[Type]) extends Type:
+    def toSort: Sort = Sort.Tuple(elems.map(_.toSort))
+
   final case class ArrayType(elem: Type) extends Type:
     def toSort: Sort = Sort.Array(elem.toSort)
 
@@ -63,6 +66,7 @@ object ast:
     case Sort.Int => intType
     case Sort.Bool => boolType
     case Sort.String => stringType
+    case Sort.Tuple(ss) => TupleType(ss.map(fromSort))
     case Sort.Array(s) => ArrayType(s)
     case Sort.Fun(ss, s) => FunType(ss.map(fromSort), s)
   }
@@ -99,6 +103,9 @@ object ast:
 
   final case class LocalRef(id: Int) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitLocalRef(this, ctx)
+
+  final case class TupleExpr(elems: Seq[Expr]) extends Expr:
+    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitTupleExpr(this, ctx)
 
   final case class IfExpr(cond: Expr, body: Expr, elseBody: Expr) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitIfExpr(this, ctx)
@@ -207,6 +214,8 @@ object ast:
     def visitGlobalRef(node: GlobalRef, ctx: C): T = visitExpr(node, ctx)
 
     def visitLocalRef(node: LocalRef, ctx: C): T = visitExpr(node, ctx)
+
+    def visitTupleExpr(node: TupleExpr, ctx: C): T = visitExpr(node, ctx)
 
     def visitApply(node: Apply, ctx: C): T = visitExpr(node, ctx)
 

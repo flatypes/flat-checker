@@ -6,6 +6,7 @@ enum Sort:
   case Int
   case Bool
   case String
+  case Tuple(elems: Seq[Sort])
   case Array(elem: Sort)
   case Fun(args: Seq[Sort], returns: Sort)
 

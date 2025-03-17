@@ -1,6 +1,6 @@
 type Input = lang(r'...')
 
-def f066(s: Input):
+def f066(s: Input) -> Input:
   if len(s) > 3:
     raise Exception
   else:
