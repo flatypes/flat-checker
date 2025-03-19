@@ -1,6 +1,7 @@
 package flat.checker.py
 
-import flat.checker.ast.{Ident, Op}
+import flat.checker.ast.CmpOp.EQ
+import flat.checker.ast.{Ident, StrAt, StrLen}
 import flat.checker.py.ast.*
 import flat.checker.{Issuer, Sort, ast}
 
@@ -44,13 +45,12 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
           val (t, e) = inferType(node.value, ctx)
           t.toSort match
             case Sort.String =>
-              val id = vm.declare(ast.stringType)
+              val id = vm.declare(ast.strType)
               out += ast.Assign(id, e)
-              out += ast.Assert(ast.apply(Op.EQ, ast.apply(Op.STR_LEN, ast.LocalRef(id)), ast.Literal(values.length)))
+              out += ast.Assert(EQ(StrLen(ast.Var(id)), ast.Const(values.length)))
               var newCtx = ctx
               for i <- values.indices do
-                newCtx = checkAssign(values(i), ast.apply(Op.STR_AT, ast.LocalRef(id), ast.Literal(i)), ast.charType,
-                  (newCtx, com))
+                newCtx = checkAssign(values(i), StrAt(ast.Var(id), ast.Const(i)), ast.charType, (newCtx, com))
               return newCtx
             case _ =>
               issuer.report(Unsupported("tuple", node.target.loc))
@@ -141,9 +141,9 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
       val e = node.value match
         case Some(expr) => checkType(expr, returnType, ctx)
         case None =>
-          if returnType != ast.UnitType then
+          if returnType != ast.unitType then
             issuer.report(TypeError("missing return value", node.loc))
-          ast.Literal(())
+          ast.mkUnit
       out += ast.Return(e)
       ctx
 

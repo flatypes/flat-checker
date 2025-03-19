@@ -67,7 +67,7 @@ final class Transpiler:
           do issuer.report(Redefined(node.args(i).ident))
           val argTypes = for arg <- node.args yield checkAnnot(arg.annotation, ctx)
           val returnType = node.returns match
-            case Some(Constant(null)) | None => ast.UnitType
+            case Some(Constant(null)) | None => ast.unitType
             case Some(annot) => checkAnnot(annot, ctx)
           ctx + (f -> FunInfo(ast.FunType(argTypes, returnType), node.ident))
         case Some(conflict) =>

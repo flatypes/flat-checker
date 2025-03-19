@@ -14,17 +14,9 @@ class ExprChecker(using issuer: Issuer, gCtx: GCtx, vm: VarManager):
   private object InferMode extends NodeVisitor[LCtx, (ast.Type, ast.Expr)]:
     override def visitConstant(node: Constant, ctx: LCtx): (ast.Type, ast.Expr) =
       node.value match
-        case v: Int => (ast.intType, ast.Literal(v).copyLocation(node))
-        case v: Boolean => (ast.boolType, ast.Literal(v).copyLocation(node))
-        case v: String => (ast.stringType, ast.Literal(unescapeJava(v)).copyLocation(node))
-
-    override def visitListExpr(node: ListExpr, ctx: LCtx): (ast.Type, ast.Expr) =
-      node.values match
-        case Seq() => (ast.ArrayType(ast.NoType), ast.apply(ast.Op.ARRAY_MK).copyLocation(node))
-        case head +: tail =>
-          val (t, e) = head.accept(this, ctx)
-          val es = for value <- tail yield value.accept(CheckMode, (t, ctx))
-          (ast.ArrayType(t), ast.ApplyOp(ast.Op.ARRAY_MK, e +: es).copyLocation(node))
+        case v: Int => (ast.intType, ast.Const(v).copyLocation(node))
+        case v: Boolean => (ast.boolType, ast.Const(v).copyLocation(node))
+        case v: String => (ast.strType, ast.Const(unescapeJava(v)).copyLocation(node))
 
     override def visitTupleExpr(node: TupleExpr, ctx: LCtx): (ast.Type, ast.Expr) =
       val (ts, es) = (for value <- node.values yield value.accept(this, ctx)).unzip
@@ -33,7 +25,7 @@ class ExprChecker(using issuer: Issuer, gCtx: GCtx, vm: VarManager):
     override def visitName(node: Name, ctx: LCtx): (ast.Type, ast.Expr) =
       val x = node.id
       ctx.get(x) match
-        case Some(id) => (vm.getType(id), ast.LocalRef(id).copyLocation(node))
+        case Some(id) => (vm.getType(id), ast.Var(id).copyLocation(node))
         case None =>
           gCtx.get(x) match
             case Some(info: FunInfo) =>
@@ -108,24 +100,14 @@ class ExprChecker(using issuer: Issuer, gCtx: GCtx, vm: VarManager):
       val e = node.test.accept(CheckMode, (ast.boolType, ctx))
       val (t1, e1) = node.body.accept(this, ctx)
       val e2 = node.orElse.accept(CheckMode, (t1, ctx))
-      (t1, ast.IfExpr(e, e1, e2).copyLocation(node))
+      (t1, ast.Ite(e, e1, e2).copyLocation(node))
 
   private object CheckMode extends NodeVisitor[(ast.Type, LCtx), ast.Expr]:
-    override def visitListExpr(node: ListExpr, arg: (ast.Type, LCtx)): ast.Expr =
-      val (te, ctx) = arg
-      te match
-        case ast.ArrayType(t) =>
-          val es = for value <- node.values yield value.accept(this, (t, ctx))
-          ast.ApplyOp(ast.Op.ARRAY_MK, es).copyLocation(node)
-        case actual =>
-          issuer.report(TypeMismatch("list", actual.show, node.loc))
-          ast.NoExpr
-
     override def visitIfExp(node: IfExp, ctx: (ast.Type, LCtx)): ast.Expr =
       val e = node.test.accept(this, ctx)
       val e1 = node.body.accept(this, ctx)
       val e2 = node.orElse.accept(this, ctx)
-      ast.IfExpr(e, e1, e2).copyLocation(node)
+      ast.Ite(e, e1, e2).copyLocation(node)
 
     override def visitDefault(node: Node, arg: (ast.Type, LCtx)): ast.Expr =
       val (expected, ctx) = arg

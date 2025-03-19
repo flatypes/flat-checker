@@ -1,6 +1,6 @@
 package flat.checker
 
-import flat.checker.ast.{ArrayType, IntervalType, Type, stringType}
+import flat.checker.ast.{ArrayType, IntervalType, Type, strType}
 
 trait Hint:
   def toType: Type
@@ -11,7 +11,7 @@ final case class Index(cnf: List[ReLang], pos: Int) extends Hint:
   override def toString: String = s"index($pos)"
 
 final class Split(private val elems: Seq[(ReLang, Option[Bound])]) extends Hint:
-  def toType: ArrayType = ArrayType(stringType)
+  def toType: ArrayType = ArrayType(strType)
 
   def isEmpty: Boolean = elems.isEmpty
 

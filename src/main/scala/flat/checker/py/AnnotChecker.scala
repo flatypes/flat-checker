@@ -19,7 +19,7 @@ class AnnotChecker(using issuer: Issuer):
           x match
             case "int" => ast.intType
             case "bool" => ast.boolType
-            case "str" => ast.stringType
+            case "str" => ast.strType
             case "Char" => ast.charType
             case "Callable" => "Callable"
             case "tuple" | "Tuple" => "Tuple"
