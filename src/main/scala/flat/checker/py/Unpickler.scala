@@ -1,6 +1,6 @@
 package flat.checker.py
 
-import flat.checker.ast.Ident
+import flat.checker.backend.core.Ident
 import flat.checker.py.ast.*
 import flat.checker.{Document, Issuer, Location, Position}
 
@@ -11,11 +11,11 @@ class Unpickler(path: os.Path):
   private val doc = Document.fromPath(path)
   private val issuer = new Issuer
 
-  def getTree: Seq[TopStmt] =
+  def getTree: List[TopStmt] =
     val outLines = ListBuffer.empty[String]
     callScript(outLines)
     val jsonValue = ujson.read(outLines.mkString("\n"))
-    val tree = jsonValue.arr.flatMap(topStmt).toSeq
+    val tree = jsonValue.arr.flatMap(topStmt).toList
     issuer.ensureNoError()
     tree
 
@@ -146,6 +146,8 @@ class Unpickler(path: os.Path):
         if orElse.nonEmpty then
           issuer.report(Unsupported("else block in while-statement", orElse.head.loc))
         While(test, body).setLocation(loc)
+      case "Break" =>
+        Break().setLocation(loc)
       case "Return" =>
         val optValue = m("value").opt.map(expr)
         Return(optValue).setLocation(loc)

@@ -1,6 +1,7 @@
-package flat.checker
+package flat.checker.backend
 
 import flat.checker.DiagnosticSeverity.{ERROR, INFO, WARN}
+import flat.checker.{Diagnostic, Location}
 
 class SortError(detail: String, loc: Location)
   extends Diagnostic(loc, ERROR, "Transpiled program is ill-sorted", detail)

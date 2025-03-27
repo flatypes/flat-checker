@@ -1,18 +1,26 @@
 package flat.checker.py
 
 import flat.checker.Sort
-import flat.checker.ast.*
-import flat.checker.ast.ArithOp.*
-import flat.checker.ast.CmpOp.*
+import flat.checker.backend.core.*
+import flat.checker.backend.core.ArithOp.*
+import flat.checker.backend.core.CmpOp.*
 
 final case class MemberInfo(required: Seq[Sort], optional: Seq[(Sort, Expr)], returns: Sort,
-                            builder: PartialFunction[Seq[Expr], Expr]):
+                            builder: PartialFunction[Seq[Expr], Expr],
+                            preCond: Option[PartialFunction[Seq[Expr], Expr]] = None):
   def apply(args: Seq[Expr]): Expr =
     require(1 + required.length <= args.length && args.length <= 1 + required.length + optional.length,
       s"arity mismatch: expect ${1 + required.length} (+ ${optional.length}), but found ${args.length}")
-    val es = args ++ optional.drop(args.length - required.length - 1).map(_._2)
+    val es = args ++ optional.drop(args.length - required.length - 1).map(_._2.copyLocation(args.last))
     assert(builder.isDefinedAt(es))
     builder.apply(es)
+
+  def applyPre(args: Seq[Expr]): Expr =
+    require(1 + required.length <= args.length && args.length <= 1 + required.length + optional.length,
+      s"arity mismatch: expect ${1 + required.length} (+ ${optional.length}), but found ${args.length}")
+    val es = args ++ optional.drop(args.length - required.length - 1).map(_._2.copyLocation(args.last))
+    assert(preCond.get.isDefinedAt(es))
+    preCond.get.apply(es)
 
 val intMemberTable = Map(
   "__pos__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(n) => n }),
@@ -51,6 +59,9 @@ val strMemberTable = Map(
     { case Seq(s, i, j) => StrSlice(s, i, j) }),
   "find" -> MemberInfo(Seq(Sort.String), Seq(Sort.Int -> Const(0)), Sort.Int,
     { case Seq(s, i, j) => StrFind(s, i, j) }),
+  "index" -> MemberInfo(Seq(Sort.String), Seq(Sort.Int -> Const(0)), Sort.Int,
+    { case Seq(s, t, i) => StrFind(s, t, i) },
+    preCond = Some({ case Seq(s, t, i) => StrContains(if i == Const(0) then s else StrSlice(s, i, StrLen(s)), t) })),
   "startswith" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Bool, { case Seq(s, s1) => StrStartsWith(s, s1) }),
   "endswith" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Bool, { case Seq(s, s1) => StrEndsWith(s, s1) }),
   "split" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Array(Sort.String), { case Seq(s, s1) => StrSplit(s, s1) }),

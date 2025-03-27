@@ -1,23 +1,26 @@
 package flat.checker
 
-import flat.checker.ast.FunDef
+import com.typesafe.scalalogging.LazyLogging
+import flat.checker.backend.Checker
+import flat.checker.backend.core.Program
 import flat.checker.py.{Transpiler, Unpickler}
 
-object Driver:
-  def check(script: Seq[FunDef]): Unit =
-    val typer = new Typer
-    typer.process(script)
-    println("Check OK")
+object Driver extends LazyLogging:
+  def check(programs: List[Program]): Unit =
+    val checker = new Checker
+    for program <- programs do checker.check(program)
+    logger.info("Check OK")
 
   def checkPython(path: os.Path): Unit =
-    println(s"Checking: $path")
+    logger.info(s"Checking: $path")
     val unpickler = Unpickler(path)
     val tree = unpickler.getTree
     val transpiler = new Transpiler
-    val ir = transpiler.transpile(tree)
-    check(ir)
+    val programs = transpiler.transpile(tree)
+    check(programs)
 
   def main(args: Array[String]): Unit =
+    logger.debug("Logger starts")
     if args.isEmpty then
       System.err.println("No input files")
       System.exit(1)

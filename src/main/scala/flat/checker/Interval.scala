@@ -80,6 +80,8 @@ given AbsDom[Interval]:
 
   def join(r1: Interval, r2: Interval): Interval = Interval(r1.lb min r2.lb, r1.ub max r2.ub)
 
+  def meet(r1: Interval, r2: Interval): Interval = Interval(r1.lb max r2.lb, r1.ub min r2.ub)
+
   def widen(r1: Interval, r2: Interval): Interval =
     if r1.isEmpty then r2
     else if r2.isEmpty then r1

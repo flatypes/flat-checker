@@ -5,6 +5,8 @@ import flat.checker.Bound.PosInf
 import flat.checker.py.RegexParser
 
 enum ReLang:
+  /** Empty language. */
+  case ReNone
   /** Empty string (ε). */
   case ReEmpty
   /** Set of characters in `cs`. */
@@ -26,7 +28,7 @@ enum ReLang:
     case 0 => ReEmpty
     case 1 => this
     case k if k >= 2 => ReConcat(this, this ^ (k - 1))
-    case _ => throw IllegalArgumentException()
+    case _ => throw IllegalArgumentException(k.toString)
 
   def loop(lb: Bound, ub: Bound): ReLang =
     val rep =
@@ -46,6 +48,36 @@ enum ReLang:
     this match
       case ReUnion(r1, r2) => r1.toUNF ++ r2.toUNF
       case r => r :: Nil
+
+  def isEmpty: Boolean =
+    this match
+      case ReNone => true
+      case ReEmpty => false
+      case ReChars(cs) => cs.isEmpty
+      case ReConcat(r1, r2) => r1.isEmpty || r2.isEmpty
+      case ReUnion(r1, r2) => r1.isEmpty && r2.isEmpty
+      case ReStar(r) => false
+
+  /** Basic normalization that removes redundant `ε` (in concatenation) and `∅` (in union). */
+  def normalize: ReLang =
+    this match
+      case ReNone | ReEmpty | ReChars(_) => this
+      case ReConcat(_, _) =>
+        val terms = toCNF.map(_.normalize).filter(_ != ReEmpty)
+        if terms.contains(ReNone) then ReNone
+        else if terms.isEmpty then ReEmpty
+        else terms.reduce(ReConcat.apply)
+      case ReUnion(_, _) =>
+        val terms = toUNF.map(_.normalize).filter(_ != ReNone)
+        if terms.isEmpty then ReNone else terms.reduce(ReUnion.apply)
+      case ReStar(r) =>
+        r.normalize match
+          case ReNone | ReEmpty => ReEmpty
+          case ReStar(r1) => ReStar(r1)
+          case r1 => ReStar(r1)
+
+  /** Language equivalence. For now, simply check the syntactic equality of their normalizations. */
+  infix def equiv(other: ReLang): Boolean = normalize == other.normalize
 
   def isChar: Boolean =
     this match
@@ -67,7 +99,7 @@ enum ReLang:
 
   def nullable: Boolean =
     this match
-      case ReEmpty => true
+      case ReNone | ReEmpty => true
       case ReChars(_) => false
       case ReConcat(r1, r2) => r1.nullable && r2.nullable
       case ReUnion(r1, r2) => r1.nullable || r2.nullable
@@ -76,7 +108,7 @@ enum ReLang:
   /** First set: a set of possible first characters. */
   def first: CharSet =
     this match
-      case ReEmpty => CharSet.empty
+      case ReNone | ReEmpty => CharSet.empty
       case ReChars(cs) => cs
       case ReConcat(r1, r2) => if r1.nullable then r1.first | r2.first else r1.first
       case ReUnion(r1, r2) => r1.first | r2.first
@@ -89,7 +121,7 @@ enum ReLang:
    * Return `None` for `∅`. */
   def derivative(x: CharSet): Option[ReLang] =
     this match
-      case ReEmpty => None
+      case ReNone | ReEmpty => None
       case ReChars(cs) => if cs ** x then None else Some(ReEmpty)
       case ReConcat(r1, r2) =>
         ReLang.langUnion(
@@ -102,27 +134,27 @@ enum ReLang:
         for r1 <- r.derivative(x) yield ReConcat(r1, this)
 
   def reverse: ReLang = this match
-    case ReEmpty | ReChars(_) => this
+    case ReNone | ReEmpty | ReChars(_) => this
     case ReConcat(r1, r2) => ReConcat(r2.reverse, r1.reverse)
     case ReUnion(r1, r2) => ReUnion(r1.reverse, r2.reverse)
     case ReStar(r) => ReStar(r.reverse)
 
   def length: Interval = this match
-    case ReEmpty => 0
+    case ReNone | ReEmpty => 0
     case ReChars(_) => 1
     case ReConcat(r1, r2) => r1.length + r2.length
     case ReUnion(r1, r2) => r1.length | r2.length
     case ReStar(_) => Interval(0, PosInf)
 
   def alphabet: CharSet = this match
-    case ReEmpty => CharSet.empty
+    case ReNone | ReEmpty => CharSet.empty
     case ReChars(cs) => cs
     case ReConcat(r1, r2) => r1.alphabet | r2.alphabet
     case ReUnion(r1, r2) => r1.alphabet | r2.alphabet
     case ReStar(r) => r.alphabet
 
   def contains(c: Char): Ternary = this match
-    case ReEmpty => Ternary.False
+    case ReNone | ReEmpty => Ternary.False
     case ReChars(cs) if cs.isSingleton => if cs.contains(c) then Ternary.True else Ternary.False
     case ReChars(cs) => if cs.contains(c) then Ternary.Maybe else Ternary.False
     case ReConcat(r1, r2) => r1.contains(c) || r2.contains(c)
@@ -135,8 +167,29 @@ enum ReLang:
 
   def isNumber: Boolean = alphabet.subsetOf(CharSet.NUM)
 
+  private def size: Option[Int] = this match
+    case ReNone => Some(0)
+    case ReEmpty => Some(1)
+    case ReChars(cs) => Some(cs.size)
+    case ReConcat(r1, r2) => for n1 <- r1.size; n2 <- r2.size yield n1 * n2
+    case ReUnion(r1, r2) => for n1 <- r1.size; n2 <- r2.size yield n1 + n2
+    case ReStar(r) => None
+
+  def isSmall: Boolean = normalize.size.exists(_ < 20)
+
+  def getLang: Set[String] =
+    require(isSmall)
+    normalize match
+      case ReNone => Set.empty
+      case ReEmpty => Set("")
+      case ReChars(cs) => cs.getChars.map(_.toString)
+      case ReConcat(r1, r2) => for s1 <- r1.getLang; s2 <- r2.getLang yield s1 + s2
+      case ReUnion(r1, r2) => r1.getLang | r2.getLang
+      case ReStar(r) => assert(false)
+
   override def toString: String =
     this match
+      case ReNone => "None"
       case ReEmpty => "ε"
       case ReChars(cs) => cs.prettyString
       case ReConcat(r1, r2) => s"$r1$r2"
@@ -208,3 +261,5 @@ given Lattice[ReLang]:
     if subElement(r1, r2) then r2
     else if subElement(r2, r1) then r1
     else ReUnion(r1, r2)
+
+  def meet(r1: ReLang, r2: ReLang): ReLang = ???

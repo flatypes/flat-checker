@@ -4,6 +4,7 @@ import flat.checker
 import flat.checker.Bound.*
 import flat.checker.ReLang.*
 import flat.checker.RegexImplicits.*
+import flat.checker.backend.Index
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.language.implicitConversions

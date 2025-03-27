@@ -91,12 +91,12 @@ given AbsDom[Ternary]:
       case (False, False) => False
       case _ => Maybe
 
-  //  def meet(b1: ABool, b2: ABool): ABool =
-  //    (b1, b2) match
-  //      case (Top, b) => b
-  //      case (b, Top) => b
-  //      case (True, True) => True
-  //      case (False, False) => False
-  //      case _ => Bot
+  def meet(b1: Ternary, b2: Ternary): Ternary =
+    (b1, b2) match
+      case (Maybe, b) => b
+      case (b, Maybe) => b
+      case (True, True) => True
+      case (False, False) => False
+      case _ => Bot
 
   def widen(b1: Ternary, b2: Ternary): Ternary = join(b1, b2)

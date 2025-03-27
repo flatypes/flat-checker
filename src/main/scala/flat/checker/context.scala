@@ -1,6 +1,7 @@
 package flat.checker
 
-import flat.checker.ast.Type
+import flat.checker.backend.core
+import flat.checker.backend.core.Type
 
 final case class FunInfo(paramTypes: Seq[Type], returnType: Type, loc: Location)
 
@@ -39,5 +40,5 @@ final case class LocalContext private(currentFun: String, private val data: Seq[
     copy(data = joined)
 
 object LocalContext:
-  def from(currentFun: String, localTypes: Seq[ast.Type]): LocalContext =
+  def from(currentFun: String, localTypes: Seq[core.Type]): LocalContext =
     LocalContext(currentFun, for t <- localTypes yield VarInfo(t, t))

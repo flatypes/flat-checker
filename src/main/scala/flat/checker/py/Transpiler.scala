@@ -1,31 +1,37 @@
 package flat.checker.py
 
-import flat.checker.ast.Ident
+import flat.checker.Issuer
+import flat.checker.backend.core
+import flat.checker.backend.core.Ident
 import flat.checker.py.ast.*
-import flat.checker.{Issuer, ast}
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-final case class TypeInfo(expansion: ast.Type, ident: Ident)
+final case class TypeInfo(expansion: core.Type, ident: Ident)
 
-final case class FunInfo(funType: ast.FunType, ident: Ident)
+final case class FunInfo(funType: core.FunType, ident: Ident)
 
-final case class VarInfo(typ: ast.Type, ident: Ident)
+final case class VarInfo(typ: core.Type, ident: Ident)
 
 final class VarManager:
-  private val data = ListBuffer.empty[VarInfo]
+  private val data = mutable.Map.empty[String, VarInfo]
+  private var nextTmp = 0
 
-  def declare(typ: ast.Type, ident: Ident): Int =
-    data += VarInfo(typ, ident)
-    data.length - 1
+  def declare(typ: core.Type, ident: Ident): String =
+    assert(!data.contains(ident.name))
+    data(ident.name) = VarInfo(typ, ident)
+    ident.name
 
-  def declare(typ: ast.Type): Int =
-    data += VarInfo(typ, Ident(""))
-    data.length - 1
+  def declare(typ: core.Type): String =
+    nextTmp += 1
+    val x = s"tmp-$nextTmp"
+    data(x) = VarInfo(typ, Ident(x))
+    x
 
-  def getType(id: Int): ast.Type = data(id).typ
+  def getType(id: String): core.Type = data(id).typ
 
-  def getTypes: Seq[ast.Type] = data.toSeq.map(_.typ)
+  def getTypes: Map[String, core.Type] = Map.from(for (x, VarInfo(t, _)) <- data yield x -> t)
 
 type GCtx = Map[String, FunInfo | TypeInfo]
 
@@ -35,14 +41,15 @@ final class Transpiler:
   private val annotChecker = new AnnotChecker
   import annotChecker.checkAnnot
 
-  def transpile(tree: Seq[TopStmt]): Seq[ast.FunDef] =
+  def transpile(tree: List[TopStmt]): List[core.Program] =
     val initCtx: GCtx = Map.empty
     val finalCtx = tree.foldLeft(initCtx) { (c, s) => s.accept(FirstPass, c) }
-    val out = ListBuffer.empty[ast.FunDef]
+    val out = ListBuffer.empty[core.Program]
     val secondPass = SecondPass(out)
     for s <- tree do s.accept(secondPass, finalCtx)
     issuer.ensureNoError()
-    out.toSeq
+    // TODO: check all expressions have location
+    out.toList
 
   private object FirstPass extends NodeVisitor[GCtx, GCtx]:
     override def visitTypeAlias(node: TypeAlias, ctx: GCtx): GCtx =
@@ -67,14 +74,14 @@ final class Transpiler:
           do issuer.report(Redefined(node.args(i).ident))
           val argTypes = for arg <- node.args yield checkAnnot(arg.annotation, ctx)
           val returnType = node.returns match
-            case Some(Constant(null)) | None => ast.unitType
+            case Some(Constant(null)) | None => core.unitType
             case Some(annot) => checkAnnot(annot, ctx)
-          ctx + (f -> FunInfo(ast.FunType(argTypes, returnType), node.ident))
+          ctx + (f -> FunInfo(core.FunType(argTypes, returnType), node.ident))
         case Some(conflict) =>
           issuer.report(Redefined(node.ident))
           ctx
 
-  private class SecondPass(out: ListBuffer[ast.FunDef]) extends NodeVisitor[GCtx, Unit]:
+  private class SecondPass(out: ListBuffer[core.Program]) extends NodeVisitor[GCtx, Unit]:
     override def visitTypeAlias(node: TypeAlias, ctx: GCtx): Unit = () // do nothing
 
     override def visitFunctionDef(node: FunctionDef, ctx: GCtx): Unit =
@@ -82,12 +89,11 @@ final class Transpiler:
 
       given gCtx: GCtx = ctx
 
-      given returnType: ast.Type = info.funType.returns
+      given returnType: core.Type = info.funType.returns
 
       given vm: VarManager = new VarManager
 
       val checker = new BodyChecker
       val lCtx = Map.from(for (Arg(a, _), t) <- node.args zip info.funType.args yield a.name -> vm.declare(t, a))
-      val (s, _) = checker.checkBody(node.body, lCtx, Map.empty)
-      val (paramTypes, varTypes) = vm.getTypes.splitAt(info.funType.args.length)
-      out += ast.FunDef(node.ident, paramTypes, returnType, varTypes, s)
+      val (s, _) = checker.checkBody(node.body, lCtx, Map.empty)(using insideLoop = false)
+      out += core.Program(vm.getTypes + ("return" -> returnType), s)

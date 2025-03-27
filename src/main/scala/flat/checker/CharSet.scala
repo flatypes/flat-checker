@@ -5,7 +5,7 @@ import org.apache.commons.text.StringEscapeUtils
 import scala.collection.mutable
 
 /** A set of Unicode characters. */
-final class CharSet(private val polarity: Boolean, private val chars: Set[Char]):
+final class CharSet(val polarity: Boolean, val chars: Set[Char]):
   // If polarity is true, `chars` stores included characters. Otherwise, it stores excluded characters.
   require(chars.size < 1000)
 
@@ -50,13 +50,26 @@ final class CharSet(private val polarity: Boolean, private val chars: Set[Char])
     else if polarity then /* !other.polarity */ (chars & other.chars).isEmpty
     else /* !polarity && other.polarity */ false
 
+  def --(exclude: Set[Char]): CharSet =
+    if polarity then CharSet(true, chars -- exclude)
+    else CharSet(false, chars | exclude)
+
   override def equals(obj: Any): Boolean = obj match
     case other: CharSet => polarity == other.polarity && chars == other.chars
     case _ => false
 
+  def size: Int = if polarity then chars.size else 0x2FFFF - chars.size
+
+  def getChars: Set[Char] =
+    require(polarity)
+    chars
+
   def getRepresentative: Char =
-    require(polarity && chars.nonEmpty)
-    chars.head
+    if polarity then
+      require(chars.nonEmpty, "Cannot get representative for empty char set")
+      chars.head
+    else if chars.isEmpty then 0.toChar
+    else if chars.min.toInt > 0 then (chars.min.toInt - 1).toChar else (chars.max.toInt + 1).toChar
 
   def prettyString: String =
     val raw =

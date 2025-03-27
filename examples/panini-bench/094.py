@@ -1,6 +1,6 @@
 type Input = lang(r'a?')
 
-def f094(s: Input):
+def f094(s: Input) -> Input:
   if len(s) > 0:    
     t = s[0:1]
     assert t == "a"

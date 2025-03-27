@@ -1,7 +1,7 @@
 package flat.checker.py
 
 import flat.checker.Locational
-import flat.checker.ast.Ident
+import flat.checker.backend.core.Ident
 
 object ast:
   sealed trait Node extends Locational:
@@ -38,6 +38,9 @@ object ast:
 
   final case class While(test: Expr, body: Seq[LocalStmt]) extends LocalStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitWhile(this, ctx)
+
+  final case class Break() extends LocalStmt:
+    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitBreak(this, ctx)
 
   final case class Return(value: Option[Expr]) extends LocalStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitReturn(this, ctx)
@@ -98,6 +101,8 @@ object ast:
     def visitIf(node: If, ctx: C): T = visitDefault(node, ctx)
 
     def visitWhile(node: While, ctx: C): T = visitDefault(node, ctx)
+
+    def visitBreak(node: Break, ctx: C): T = visitDefault(node, ctx)
 
     def visitReturn(node: Return, ctx: C): T = visitDefault(node, ctx)
 

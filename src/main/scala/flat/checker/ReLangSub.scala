@@ -40,6 +40,7 @@ object ReLangSub:
    */
   private def next(regex: ReLang): Partition =
     regex match
+      case ReNone => throw IllegalArgumentException()
       case ReEmpty => Set(CharSet.empty)
       case ReChars(cs) => Set(cs)
       case ReConcat(r1, r2) => if r1.nullable then next(r1) | next(r2) else next(r1)

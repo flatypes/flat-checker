@@ -1,7 +1,7 @@
 package flat.checker.py
 
 import flat.checker.DiagnosticSeverity.ERROR
-import flat.checker.ast.Ident
+import flat.checker.backend.core.Ident
 import flat.checker.{Diagnostic, Location}
 
 class Unsupported(feature: String, loc: Location) extends Diagnostic(loc, ERROR, "Unsupported Feature",

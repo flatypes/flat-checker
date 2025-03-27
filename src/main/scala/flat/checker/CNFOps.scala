@@ -3,6 +3,7 @@ package flat.checker
 import flat.checker
 import flat.checker.Bound.PosInf
 import flat.checker.ReLang.*
+import flat.checker.backend.{Index, Split}
 
 import scala.annotation.tailrec
 

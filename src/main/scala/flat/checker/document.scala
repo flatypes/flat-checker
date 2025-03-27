@@ -1,7 +1,6 @@
 package flat.checker
 
 import scala.collection.mutable.ListBuffer
-import scala.compiletime.uninitialized
 
 class Document private(val name: String, content: String):
   private val lines = content.split('\n')
@@ -18,14 +17,18 @@ final case class Position(row: Int, offset: Int)
 final case class Location(doc: Document, start: Position, end: Position)
 
 trait Locational:
-  var loc: Location = uninitialized
+  protected var optLoc: Option[Location] = None
+
+  def loc: Location =
+    require(optLoc.isDefined, s"missing location for node $this")
+    optLoc.get
 
   def setLocation(newLoc: Location): this.type =
-    this.loc = newLoc
+    this.optLoc = Some(newLoc)
     this
 
   def copyLocation(from: Locational): this.type =
-    this.loc = from.loc
+    this.optLoc = Some(from.loc)
     this
 
 class Diagnostic(val loc: Location, val severity: DiagnosticSeverity, val message: String,

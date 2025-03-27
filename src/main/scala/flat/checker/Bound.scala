@@ -5,7 +5,11 @@ enum Bound:
   case Fin(value: Int)
   case PosInf
 
-  def asInt: Int = asInstanceOf[Fin].value
+  def isFin: Boolean = isInstanceOf[Fin]
+
+  def asInt: Int = this match
+    case Fin(k) => k
+    case _ => throw IllegalArgumentException(s"cannot convert $this to Int")
 
   override def toString: String = this match
     case NegInf => "-∞"

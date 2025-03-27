@@ -1,6 +1,6 @@
 package flat.checker
 
-import flat.checker.ast.*
+import flat.checker.backend.core.*
 
 given TypeLattice: Lattice[Type]:
   def top: Type = AnyType
@@ -25,7 +25,6 @@ given TypeLattice: Lattice[Type]:
   def join(t1: Type, t2: Type): Type = (t1, t2) match
     case (NoType, t) => t
     case (t, NoType) => t
-    case (`unitType`, `unitType`) => unitType
     case (IntervalType(r1), IntervalType(r2)) => IntervalType(r1 | r2)
     case (TernaryType(b1), TernaryType(b2)) => TernaryType(b1 | b2)
     case (LangType(r1), LangType(r2)) => LangType(r1 | r2)
@@ -38,3 +37,19 @@ given TypeLattice: Lattice[Type]:
     case (HintType(h), _) => join(h.toType, t2)
     case (_, HintType(h)) => join(t1, h.toType)
     case _ => AnyType
+
+  def meet(t1: Type, t2: Type): Type = (t1, t2) match
+    case (AnyType, t) => t
+    case (t, AnyType) => t
+    case (IntervalType(r1), IntervalType(r2)) => IntervalType(r1 & r2)
+    case (TernaryType(b1), TernaryType(b2)) => TernaryType(b1 & b2)
+    case (LangType(r1), LangType(r2)) => LangType(r1 & r2)
+    case (TupleType(ts1), TupleType(ts2)) if ts1.length == ts2.length =>
+      TupleType(for (x, y) <- ts1 zip ts2 yield x & y)
+    case (ArrayType(t1), ArrayType(t2)) => ArrayType(t1 & t2)
+    case (FunType(ts1, t1), FunType(ts2, t2)) if ts1.length == ts2.length =>
+      FunType(for (x, y) <- ts1 zip ts2 yield x & y, t1 & t2)
+    case (HintType(h1), HintType(h2)) if h1 == h2 => t1
+    case (HintType(h), _) => join(h.toType, t2)
+    case (_, HintType(h)) => join(t1, h.toType)
+    case _ => NoType

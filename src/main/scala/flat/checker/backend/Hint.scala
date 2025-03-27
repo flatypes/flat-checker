@@ -1,6 +1,7 @@
-package flat.checker
+package flat.checker.backend
 
-import flat.checker.ast.{ArrayType, IntervalType, Type, strType}
+import flat.checker.backend.core.{ArrayType, IntervalType, Type, strType}
+import flat.checker.{Bound, Interval, ReLang}
 
 trait Hint:
   def toType: Type
