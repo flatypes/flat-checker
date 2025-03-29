@@ -9,5 +9,6 @@ def f241(s: Input):
     assert s[i] == "a"
     i += 1
   while i < len(s):
+    inv(first_b <= i <= len(s))
     assert s[i] == "b"
     i += 1

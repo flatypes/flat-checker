@@ -8,6 +8,7 @@ import flat.checker.backend.core.*
 import flat.checker.backend.core.CmpOp.{EQ, LE, NE}
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 final class Types(store: Map[String, Type]):
   def apply(name: String): Type =
@@ -56,14 +57,24 @@ class Checker extends LazyLogging:
   def check(program: Program): Unit =
     given Types = Types.from(program.vars)
 
+    given Fresher = new Fresher
     val pre = wlp(program.body, True, True)(using pReturn = True)
-    logger.debug("Proof Obligation: " + pre.toString)
+    logger.debug(s"Overall Goal: $pre")
     discharge(pre, Nil)
     issuer.ensureNoError()
 
+  class Fresher:
+    private val latest = mutable.Map.empty[String, Int]
+
+    def fresh(name: String): String =
+      require(!name.contains('@'))
+      val k = latest.getOrElse(name, 0)
+      latest(name) = k + 1
+      s"$name@${k + 1}"
+
   /** Compute the weakest liberal pre of a statement `stmt` and a post condition `post`. */
   private def wlp(stmt: Stmt, post: Formula, body: List[Stmt], pNext: Formula)
-                 (using types: Types, pReturn: Formula): Formula =
+                 (using types: Types, pReturn: Formula, fresher: Fresher): Formula =
     stmt match
       case Assign(x, e) =>
         val pSide = mkLAnd(collectSideGoals(e))
@@ -87,13 +98,14 @@ class Checker extends LazyLogging:
         val pEnter = (b :: inv).foldRight(wlp(s, pInv, post))(LImp.apply)
         val pExit = (Not(b).copyLocation(b) :: inv).foldRight(post)(LImp.apply)
         val pLoop = mkLAnd(pEnter, pExit)
-        val m = Map.from(for x <- collectVars(pLoop) yield x -> Var(fresh(x)))
+        val m = Map.from(for x <- Analyzer.getModifiedVars(whileStmt) yield x -> Var(fresher.fresh(x)))
         mkLAnd(pInv, pSide, pLoop.subst(m))
       case Break() => pNext
       case Return(_) => pReturn
 
   @tailrec
-  private def wlp(body: List[Stmt], post: Formula, pNext: Formula)(using types: Types, pReturn: Formula): Formula =
+  private def wlp(body: List[Stmt], post: Formula, pNext: Formula)
+                 (using types: Types, pReturn: Formula, fresher: Fresher): Formula =
     if body.isEmpty then post
     else wlp(body.dropRight(1), wlp(body.last, post, body, pNext), pNext)
 
@@ -116,13 +128,6 @@ class Checker extends LazyLogging:
       case LAnd(phi1, phi2) => collectVars(phi1) | collectVars(phi2)
       case LImp(e, phi) => e.collectVars | collectVars(phi)
 
-  private def fresh(name: String): String =
-    name.indexOf('@') match
-      case -1 => s"$name@1"
-      case k =>
-        val version = name.substring(k + 1).toInt
-        s"$name@${version + 1}"
-
   /** Discharge a proof goal encoded as a formula `phi`, under `premises`. */
   private def discharge(goal: Formula, premises: List[Expr])(using types: Types): Unit =
     goal match
@@ -136,24 +141,30 @@ class Checker extends LazyLogging:
               case actual => issuer.report(TypeMayMismatch(r2.toString, actual.toString, loc))
           case _ => // NOTE: should be well-sorted
       case Goal(cond, err) =>
+        logger.debug("")
+        logger.debug("Goal: " + premises.mkString(" ∧ ") + " ⇒ " + goal.toString)
         prove(cond, premises) match
           case Valid => logger.debug("Goal proved")
-          case Invalid(cm) => issuer.report(err)
+          case Invalid(cm) =>
+            issuer.report(err)
+            logger.error("Goal failed")
       case LAnd(goal1, goal2) =>
         discharge(goal1, premises)
         discharge(goal2, premises)
       case LImp(cond, goal) =>
-        discharge(goal, cond :: premises)
+        discharge(goal, destruct(cond) ++ premises)
+
+  private def destruct(premise: Expr): List[Expr] = premise match
+    case And(e1, e2) => destruct(e1) ++ destruct(e2)
+    case _ => List(premise)
 
   @tailrec
   private def prove(goal: Expr, premises: List[Expr])(using types: Types): SolverResult =
-    logger.debug(premises.mkString(" ∧ ") + " ⇒ " + goal.toString)
     // First try: consider only key expressions in goal
     tryProve(goal, premises, List(goal)) match
       case Valid => Valid
       case _ =>
         // Second try: consider key expressions in all premises and goal
-        logger.debug("first try failed, now start second try")
         tryProve(goal, premises, goal :: premises) match
           case Valid => Valid
           case result =>
@@ -185,6 +196,7 @@ class Checker extends LazyLogging:
 
   @tailrec
   private def encodeHasType(value: Expr, typ: Type): Expr = typ match
+    case HintType(Pred(_, p)) => p(value)
     case HintType(hint) =>
       encodeHasType(value, hint.toType)
     case IntervalType(interval) =>
@@ -201,7 +213,6 @@ class Checker extends LazyLogging:
         case Ternary.False => Not(value)
         case Ternary.Maybe => true
     case LangType(r) if r.isSmall =>
-      logger.debug(s"small language $r")
       val ss = r.getLang
       mkOr(for s <- ss yield EQ(value, s))
     case LangType(ReLang.ReChars(cs)) =>

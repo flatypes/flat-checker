@@ -5,7 +5,7 @@ import flat.checker.Bound.*
 import flat.checker.backend.core.*
 import optimus.algebra.{Int2Const, Expression as MPExpr}
 import optimus.optimization.*
-import optimus.optimization.model.{MPBinaryVar, MPIntVar, MPVar}
+import optimus.optimization.model.{MPBinaryVar, MPFloatVar, MPVar}
 
 import scala.collection.mutable
 
@@ -63,14 +63,12 @@ object LPSolver:
           add(x - y + m * a >:= 1)
           add(x - y + m * a <:= m - 1)
 
-
     def solve(objective: Expr, minimize: Boolean): Bound =
       val o = encodeExpr(objective)
       optimize(o, minimize)
-      start()
-      val result = solver.objectiveValue match
-        case Some(value) => Fin(value.toInt)
-        case None => if minimize then NegInf else PosInf
+      val result: Bound =
+        if start() then objectiveValue.toInt
+        else if minimize then NegInf else PosInf
       release()
       result
 
@@ -90,10 +88,10 @@ object LPSolver:
                 case ArithOp.ADD => me1 + me2
                 case ArithOp.SUB => me1 - me2
             case StrLen(_) =>
-              val x = MPIntVar(0 to Int.MaxValue)(this)
+              val x = MPFloatVar.positive()(this)
               abstraction(expr) = x
               x
             case _ =>
-              val x = MPIntVar(Int.MinValue to Int.MaxValue)(this)
+              val x = MPFloatVar()(this)
               abstraction(expr) = x
               x

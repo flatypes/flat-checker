@@ -1,10 +1,13 @@
 package flat.checker.backend
 
-import flat.checker.backend.core.{ArrayType, IntervalType, Type, strType}
-import flat.checker.{Bound, Interval, ReLang}
+import flat.checker.backend.core.*
+import flat.checker.{Bound, Interval, ReLang, Sort}
 
 trait Hint:
   def toType: Type
+
+final case class Pred(sort: Sort, predicate: Expr => Expr) extends Hint:
+  override def toType: Type = sort
 
 final case class Index(cnf: List[ReLang], pos: Int) extends Hint:
   def toType: IntervalType = IntervalType(ReLang.fromCNF(cnf.take(pos)).length)

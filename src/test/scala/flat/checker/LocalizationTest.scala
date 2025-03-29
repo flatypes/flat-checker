@@ -26,10 +26,23 @@ class LocalizationTest extends AnyFunSuite:
     val cs = ReLangOps.charAt(version1, 2).get
     assert(cs == CharSet.NUM)
 
+  test("char at range"):
+    // s[1:4]
+    val cs = ReLangOps.charAt(version1, 1, 4)
+    assert(cs == CharSet.from('.', '0' to '9'))
+
   test("char at out-of-bound index"):
     // s[4]
     val result = ReLangOps.charAt(version1, 4)
     assert(result.isEmpty)
+
+  test("char at manyAB"):
+    val r = ReLang.fromPython("a*b*")
+    val cs = CharSet.of('a', 'b')
+    assert(ReLangOps.charAt(r, 10).get == cs)
+    assert(ReLangOps.charAt(r, 0, 2) == cs)
+    assert(ReLangOps.charAt(r, 0, -1) == cs)
+    assert(ReLangOps.charAt(r, 2, -2) == cs)
 
   test("slice constant ranges"):
     val cnf = version1.toCNF
@@ -69,6 +82,7 @@ class LocalizationTest extends AnyFunSuite:
     // s[afterFirstDot:secondDot]
     val r = CNFOps.substring(cnf, afterFirstDot, secondDot)
     assert(r.isNumber)
+
 
   test("split finite"):
     val sr1 = CNFOps.split(version1.toCNF, '.').toOption.get

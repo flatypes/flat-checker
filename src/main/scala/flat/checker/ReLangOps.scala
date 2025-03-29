@@ -40,7 +40,7 @@ object ReLangOps:
       l = l.map(_.reverse)
       while i < -toIndex - 1 && l.isDefined do
         l = l.get.derivative(CharSet.full)
-      i += 1
+        i += 1
       l.map(_.alphabet).getOrElse(CharSet.empty)
 
   def startsWith(r: ReLang, prefix: String): Ternary =

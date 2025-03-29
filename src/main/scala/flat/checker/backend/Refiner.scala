@@ -8,30 +8,40 @@ import flat.checker.backend.core.*
 import flat.checker.backend.core.CmpOp.*
 import flat.checker.{&, CharSet, Interval, ReLang, given}
 
+import scala.collection.mutable.ListBuffer
+
 object Refiner extends LazyLogging:
   def refine(base: ReLang, withRefine: ReLangRefine): ReLang = withRefine(base)
 
   def refine(name: String, declared: ReLang, premises: List[Expr]): ReLang =
-    for p <- premises do logger.debug(p.toString)
+    // refiners
+    val refiners = ListBuffer.empty[ReLangRefine]
+    val chars = premises.flatMap(_.collect {
+      case StrFind(Var(x), Const(c: String), Const(0)) if x == name && c.length == 1 => c.head
+    })
+    for c <- chars do
+      val lb = LPSolver.solveLower(StrFind(Var(name), c.toString, 0), premises)
+      if lb >= 0 then
+        logger.debug(s"$name must contain $c")
+        refiners += Contain(c)
+      else
+        val ub = LPSolver.solveUpper(StrFind(Var(name), c.toString, 0), premises)
+        if ub <= 0 then
+          logger.debug(s"$name must not contain $c")
+          refiners += NotContain(c)
     var r = declared
-    if premises.flatMap(_.collect { case StrLen(Var(x)) if x == name => x }).nonEmpty then
-      val (lb, ub) = LPSolver.solve(StrLen(name), premises)
-      if lb > Fin(0) || ub < PosInf then
-        val interval = Interval(lb, ub)
-        logger.debug(s"|$name| in $interval")
-        r = refine(declared, LenIn(interval))
-    for
-      e <- premises
-      f <- collectRefine(name, e)
-    do r = refine(r, f)
-    r
+    for f <- refiners do r = refine(r, f).normalize
+    if r != declared then
+      logger.debug(s"refine $declared as $r by chars")
 
-  private def collectRefine(name: String, premise: Expr): Option[ReLangRefine] = premise match
-    case Cmp(LT, StrFind(Var(x), Const(c: String), Const(0)), Const(0)) if x == name && c.length == 1 =>
-      Some(NotContain(c.head))
-    case Not(Cmp(LT, StrFind(Var(x), Const(c: String), Const(0)), Const(0))) if x == name && c.length == 1 =>
-      Some(Contain(c.head))
-    case _ => None
+    if premises.exists(_.collect { case StrLen(Var(x)) if x == name => x }.nonEmpty) then
+      val (lb, ub) = LPSolver.solve(StrLen(name), premises)
+      val lenRange = r.length
+      if lb > lenRange.lb || ub < lenRange.ub then
+        val r0 = r
+        r = refine(r0, LenIn(Interval(lb, ub))).normalize
+        logger.debug(s"refine $r0 as $r by length")
+    r
 
 trait ReLangRefine:
   def apply(base: ReLang): ReLang

@@ -2,12 +2,13 @@ package flat.checker.backend
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker
-import flat.checker.*
-import flat.checker.Bound.PosInf
+import flat.checker.Bound.{NegInf, PosInf}
 import flat.checker.ReLang.ReChars
+import flat.checker.Ternary.True
 import flat.checker.backend.core.*
-import flat.checker.backend.core.ArithOp.SUB
-import flat.checker.backend.core.CmpOp.{EQ, NE}
+import flat.checker.backend.core.ArithOp.{ADD, SUB}
+import flat.checker.backend.core.CmpOp.*
+import flat.checker.*
 
 import scala.collection.mutable
 
@@ -37,7 +38,13 @@ class Inferer(types: Types, premises: List[Expr])(using issuer: Issuer) extends 
     if !cache.contains(x) then
       val t = types(x).toSort match
         case Sort.Int =>
-          val (lb, ub) = LPSolver.solve(node, premises)
+          var lb = NegInf
+          var ub = PosInf
+          val (a, b) = LPSolver.solve(node, premises)
+          if a != NegInf && validateLPSolverResult(LE(a.asInt, node)) then
+            lb = a
+          if b != PosInf && validateLPSolverResult(LE(node, b.asInt)) then
+            ub = b
           IntervalType(Interval(lb, ub))
         case Sort.Bool => boolType
         case Sort.String =>
@@ -122,13 +129,30 @@ class Inferer(types: Types, premises: List[Expr])(using issuer: Issuer) extends 
   override def visitStrAt(node: StrAt, ctx: Unit): Type =
     val t = node.str.accept(this, ctx)
     val r = t.asInstanceOf[LangType].reLang
-    val (k1, k2) = getStrIndex(node.str, node.index)
     val cs =
-      if k1 == k2 then ReLangOps.charAt(r, k1).getOrElse(CharSet.empty)
-      else if k1 >= 0 then ReLangOps.charAt(r, k1, k2)
-      else if k1 < 0 && k2 < 0 then ReLangOps.charAt(r.reverse, -k1 - 1, -k2 - 1)
-      else r.alphabet
+      tryGetRelIndex(node.str, node.index) match
+        case Some(op, Index(cnf, i)) =>
+          val (from, until) = op match
+            case EQ => (i, i + 1)
+            case NE => (0, cnf.length)
+            case LT => (0, i)
+            case LE => (0, i + 1)
+            case GT => (i + 1, cnf.length)
+            case GE => (i, cnf.length)
+          ReLang.fromCNF(cnf.slice(from, until)).alphabet
+        case None =>
+          tryGetAbsIndex(node.str, node.index) match
+            case Some(k) if k >= 0 => ReLangOps.charAt(r, k).getOrElse(CharSet.empty)
+            case Some(k) if k < 0 => ReLangOps.charAt(r.reverse, -k - 1).getOrElse(CharSet.empty)
+            case _ => r.alphabet
     LangType(ReChars(cs))
+  //    val (k1, k2) = getStrIndex(node.str, node.index)
+  //    val cs =
+  //      if k1 == k2 then ReLangOps.charAt(r, k1).getOrElse(CharSet.empty)
+  //      else if k1 >= 0 then ReLangOps.charAt(r, k1, k2)
+  //      else if k1 < 0 && k2 < 0 then ReLangOps.charAt(r.reverse, -k1 - 1, -k2 - 1)
+  //      else r.alphabet
+  //    logger.debug(s"$r[$k1:$k2] : [$cs]")
   //    val t1 = node.index.accept(this, ctx)
   //    (t.ignoreHint, t1.ignoreHint) match
   //      case (LangType(r), IntervalType(i)) =>
@@ -142,19 +166,38 @@ class Inferer(types: Types, premises: List[Expr])(using issuer: Issuer) extends 
   //          LangType(ReChars(r.alphabet))
   //      case _ => LangType(ReLang.allChar)
 
-  private def getStrIndex(str: Expr, index: Expr): (Int, Int) =
+  private def tryGetRelIndex(str: Expr, index: Expr): Option[(CmpOp, Index)] =
+    for
+      (op, pos) <- premises.collectFirst {
+        case Cmp(op, pos@StrFind(s, _, _), i) if s == str && i == index => Analyzer.reverseCmpOp(op) -> pos
+        case Cmp(op, i, pos@StrFind(s, _, _)) if s == str && i == index => op -> pos
+      }
+      t = pos.accept(this, ())
+      index <- t match
+        case HintType(index@Index(_, _)) => Some(index)
+        case _ => None
+    yield (op, index)
+
+  private def tryGetAbsIndex(str: Expr, index: Expr): Option[Int] =
     index match
-      case Const(k: Int) => (k, k)
-      case Arith(SUB, StrLen(s), Const(k: Int)) if s == str => (-k, -k)
+      case Const(k: Int) => Some(k)
+      case Arith(SUB, StrLen(s), Const(k: Int)) if s == str => Some(-k)
       case _ =>
-        val (lb1, ub1) = LPSolver.solve(index, premises)
-        if ub1.isFin && lb1 == ub1 then return (lb1.asInt, ub1.asInt)
-        val (lb2, ub2) = LPSolver.solve(SUB(index, StrLen(str)), premises)
-        if ub2.isFin && lb2 == ub2 then return (lb2.asInt, ub2.asInt)
-        val k1 = if lb2.isFin && -lb2.asInt < 1000 then lb2.asInt else if lb1.isFin then lb1.asInt else 0
-        val k2 = if ub1 < 1000 then ub1.asInt else if ub2.isFin then ub2.asInt else -1
-        logger.debug(s"merge [$lb1, $ub1] with [$lb2, $ub2] as [$k1, $k2]")
-        (k1, k2)
+        val inBounds = LE(0, index) :: LT(index, StrLen(str)) :: Nil
+        val (lb1, ub1) = LPSolver.solve(index, inBounds ++ premises)
+        if ub1.isFin && lb1 == ub1 && validateLPSolverResult(EQ(index, lb1.asInt)) then
+          return Some(lb1.asInt)
+        val (lb2, ub2) = LPSolver.solve(SUB(index, StrLen(str)), inBounds ++ premises)
+        if ub2.isFin && lb2 == ub2 && validateLPSolverResult(EQ(index, ADD(StrLen(str), lb2.asInt))) then
+          return Some(lb2.asInt)
+        None
+
+  private def validateLPSolverResult(result: Expr): Boolean =
+    SMTSolver.prove(result, premises)(using types) match
+      case SolverResult.Valid => true
+      case SolverResult.Invalid(_) =>
+        logger.debug(s"LP solver unsound: cannot prove $result")
+        false
 
   private def getRelPos(cnf: List[ReLang], intType: Type): Either[String, Int] = intType match
     case HintType(Index(cnf1, pos)) =>
@@ -198,8 +241,9 @@ class Inferer(types: Types, premises: List[Expr])(using issuer: Issuer) extends 
               CNFOps.indexOf(cnf, rt.asChar, fromPos) match
                 case Right(pos) => HintType(Index(cnf, pos))
                 case Left(reason) =>
-                  issuer.report(OverApprox(reason, node.loc))
-                  intType
+                  if r.contains(rt.asChar) == True
+                  then HintType(Pred(Sort.Int, x => And(LE(0, x), LT(x, StrLen(node.str)))))
+                  else intType
         else
           issuer.report(OverApprox("pattern is not a constant char", node.loc))
           intType

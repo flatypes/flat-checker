@@ -1,6 +1,7 @@
 package flat.checker.backend
 
 import flat.checker.*
+import flat.checker.backend.Util.renderSubscript
 import org.apache.commons.text.StringEscapeUtils.escapeJava
 
 import scala.collection.immutable.Iterable
@@ -196,7 +197,11 @@ object core:
       case Some(e) => e
       case None => this
 
-    override def toString: String = name
+    override def toString: String =
+      if name.contains('@') then
+        val Array(x, ver) = name.split('@')
+        x + renderSubscript(ver.toInt)
+      else name
 
   final case class TupleExpr(elems: Seq[Expr]) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitTupleExpr(this, ctx)

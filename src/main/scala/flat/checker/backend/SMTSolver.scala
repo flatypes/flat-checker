@@ -19,6 +19,7 @@ object SMTSolver:
     val slv = Solver(smt)
     slv.setLogic("ALL")
     slv.setOption("produce-models", "true")
+    slv.setOption("tlimit-per", "3000")
 
     val vars = (goal :: premises).flatMap(_.collectVars).toSet
     val ctxBuf = mutable.Map.empty[String, Term]

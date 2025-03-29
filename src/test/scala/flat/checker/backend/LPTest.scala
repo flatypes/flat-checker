@@ -1,12 +1,18 @@
 package flat.checker.backend
 
-import flat.checker.Bound.PosInf
+import flat.checker.Bound.{NegInf, PosInf}
 import flat.checker.backend.core.*
 import flat.checker.backend.core.ArithOp.SUB
 import flat.checker.backend.core.CmpOp.*
 import org.scalatest.funsuite.AnyFunSuite
 
 class LPTest extends AnyFunSuite:
+  test("0"):
+    val i = Var("i")
+    val (lb, ub) = LPSolver.solve(i, Nil)
+    assert(lb == NegInf)
+    assert(ub == PosInf)
+
   test("1"):
     // simplify ¬ (|s| > 0) as |s| = 0
     val sLen = StrLen(Var("|s|"))
@@ -40,3 +46,21 @@ class LPTest extends AnyFunSuite:
     val (lb, ub) = LPSolver.solve(SUB(sLen, i), conds)
     assert(lb.asInt == 1)
     assert(ub.asInt == 1)
+
+  test("5"):
+    // 0 <= x < y
+    val x = Var("x")
+    val y = Var("y")
+    val (lb, ub) = LPSolver.solve(SUB(x, y), List(LE(0, x), LT(x, y)))
+    // x - y <= -1, x - y
+    assert(lb == NegInf)
+    assert(ub.asInt == -1)
+
+  test("6"):
+    // x <= y - 1, !(x < y - 1)
+    val x = Var("x")
+    val y = Var("y")
+    val (lb, ub) = LPSolver.solve(SUB(x, y), List(LE(x, SUB(y, 1)), Not(LT(x, SUB(y, 1)))))
+    assert(lb.asInt == -1 && ub.asInt == -1)
+    val (lb1, ub1) = LPSolver.solve(SUB(y, x), List(LE(x, SUB(y, 1)), Not(LT(x, SUB(y, 1)))))
+    assert(lb1.asInt == 1 && ub1.asInt == 1)
