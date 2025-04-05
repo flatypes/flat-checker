@@ -4,7 +4,7 @@ def f142(s: Input):
   i = 0
   while i < len(s):
     inv(0 <= i <= len(s))
-    inv(i <= s.find('a'))
+    inv('a' not in s[:i])
     if s[i] == "a":
       return
     i += 1

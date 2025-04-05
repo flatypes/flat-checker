@@ -14,6 +14,9 @@ class ExprChecker(out: ListBuffer[core.Stmt])(using issuer: Issuer, gCtx: GCtx, 
 
   def checkType(expr: Expr, expected: core.Type, ctx: LCtx): core.Expr = expr.accept(CheckMode, (expected, ctx))
 
+  private val annotChecker = new AnnotChecker
+  import annotChecker.*
+
   private object InferMode extends NodeVisitor[LCtx, (core.Type, core.Expr)]:
     override def visitConstant(node: Constant, ctx: LCtx): (core.Type, core.Expr) =
       node.value match
@@ -74,6 +77,10 @@ class ExprChecker(out: ListBuffer[core.Stmt])(using issuer: Issuer, gCtx: GCtx, 
                 case None =>
                   issuer.report(NoAttribute(t.show, s"__${f}__", node.loc))
                   (core.NoType, core.NoExpr)
+            case Seq(obj, annot) if f == "isinstance" =>
+              val t = checkAnnot(annot, gCtx)
+              val e = checkType(obj, t.toSort, ctx)
+              (core.boolType, core.TypeTest(e, t).copyLocation(node))
             case other =>
               issuer.report(TypeError(s"function $f takes exactly one argument", node.loc))
               (core.NoType, core.NoExpr)

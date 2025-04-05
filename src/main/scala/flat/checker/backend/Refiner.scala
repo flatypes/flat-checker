@@ -17,15 +17,15 @@ object Refiner extends LazyLogging:
     // refiners
     val refiners = ListBuffer.empty[ReLangRefine]
     val chars = premises.flatMap(_.collect {
-      case StrFind(Var(x), Const(c: String), Const(0)) if x == name && c.length == 1 => c.head
+      case StrFind(Var(x), Const(c: String)) if x == name && c.length == 1 => c.head
     })
     for c <- chars do
-      val lb = LPSolver.solveLower(StrFind(Var(name), c.toString, 0), premises)
+      val lb = LPSolver.solveLower(StrFind(Var(name), c.toString), premises)
       if lb >= 0 then
         logger.debug(s"$name must contain $c")
         refiners += Contain(c)
       else
-        val ub = LPSolver.solveUpper(StrFind(Var(name), c.toString, 0), premises)
+        val ub = LPSolver.solveUpper(StrFind(Var(name), c.toString), premises)
         if ub <= 0 then
           logger.debug(s"$name must not contain $c")
           refiners += NotContain(c)

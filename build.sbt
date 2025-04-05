@@ -16,6 +16,7 @@ lazy val root = (project in file("."))
 libraryDependencies += "org.scala-lang.modules" %% "scala-collection-contrib" % "0.4.0"
 libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.4.0"
 libraryDependencies += "org.apache.commons" % "commons-text" % "1.13.0"
+libraryDependencies += "org.apache.commons" % "commons-math" % "2.2"
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.11.4"
 libraryDependencies += "com.lihaoyi" %% "upickle" % "4.1.0"
 libraryDependencies += "com.github.vagmcs" %% "optimus" % "3.4.5"

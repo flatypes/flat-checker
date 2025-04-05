@@ -5,6 +5,7 @@ import flat.checker.*
 import flat.checker.Bound.*
 import flat.checker.backend.SolverResult.{Invalid, Valid}
 import flat.checker.backend.core.*
+import flat.checker.backend.core.ArithOp.SUB
 import flat.checker.backend.core.CmpOp.{EQ, LE, NE}
 
 import scala.annotation.tailrec
@@ -58,6 +59,7 @@ class Checker extends LazyLogging:
     given Types = Types.from(program.vars)
 
     given Fresher = new Fresher
+
     val pre = wlp(program.body, True, True)(using pReturn = True)
     logger.debug(s"Overall Goal: $pre")
     discharge(pre, Nil)
@@ -133,26 +135,40 @@ class Checker extends LazyLogging:
     goal match
       case True => // trivially hold
       case HasType(e, t, loc) =>
-        t match
-          case LangType(r2) =>
-            val inferer = Inferer(types, premises)
-            e.accept(inferer, ()) match
-              case LangType(r1) if ReLangSub.check(r1, r2) =>
-              case actual => issuer.report(TypeMayMismatch(r2.toString, actual.toString, loc))
-          case _ => // NOTE: should be well-sorted
+        for actual <- hasType(e, t, premises) do
+          issuer.report(TypeMayMismatch(t.toString, actual.toString, loc))
       case Goal(cond, err) =>
         logger.debug("")
         logger.debug("Goal: " + premises.mkString(" ∧ ") + " ⇒ " + goal.toString)
-        prove(cond, premises) match
-          case Valid => logger.debug("Goal proved")
-          case Invalid(cm) =>
-            issuer.report(err)
-            logger.error("Goal failed")
+        cond match
+          case TypeTest(e, t) =>
+            hasType(e, t, premises) match
+              case None => logger.debug("Goal proved")
+              case Some(_) =>
+                issuer.report(err)
+                logger.error("Goal failed")
+          case _ =>
+            prove(cond, premises) match
+              case Valid => logger.debug("Goal proved")
+              case Invalid(cm) =>
+                issuer.report(err)
+                logger.error("Goal failed")
       case LAnd(goal1, goal2) =>
         discharge(goal1, premises)
         discharge(goal2, premises)
       case LImp(cond, goal) =>
         discharge(goal, destruct(cond) ++ premises)
+
+  private def hasType(expr: Expr, typ: Type, premises: List[Expr])(using types: Types): Option[Type] =
+    typ match
+      case LangType(r2) =>
+        val inferer = Inferer(types, premises)
+        expr.accept(inferer, ()) match
+          case LangType(r1) if ReLangSub.check(r1, r2) => None
+          case actual =>
+            logger.debug(s"cannot prove $actual <: $r2")
+            Some(actual)
+      case _ => throw NotImplementedError()
 
   private def destruct(premise: Expr): List[Expr] = premise match
     case And(e1, e2) => destruct(e1) ++ destruct(e2)
@@ -161,11 +177,11 @@ class Checker extends LazyLogging:
   @tailrec
   private def prove(goal: Expr, premises: List[Expr])(using types: Types): SolverResult =
     // First try: consider only key expressions in goal
-    tryProve(goal, premises, List(goal)) match
+    trySolve(goal, premises, List(goal)) match
       case Valid => Valid
       case _ =>
         // Second try: consider key expressions in all premises and goal
-        tryProve(goal, premises, goal :: premises) match
+        trySolve(goal, premises, goal :: premises) match
           case Valid => Valid
           case result =>
             goal match
@@ -173,7 +189,7 @@ class Checker extends LazyLogging:
                 prove(q, Not(p) :: premises)
               case _ => result
 
-  private def tryProve(goal: Expr, premises: List[Expr], keyExprs: List[Expr])
+  private def trySolve(goal: Expr, premises: List[Expr], keyExprs: List[Expr])
                       (using types: Types): SolverResult =
     val es = keyExprs.flatMap {
       _.collect {
@@ -194,9 +210,17 @@ class Checker extends LazyLogging:
       logger.debug("  hints: " + hints.mkString(", "))
     SMTSolver.prove(goal, premises ++ hints)
 
-  @tailrec
   private def encodeHasType(value: Expr, typ: Type): Expr = typ match
     case HintType(Pred(_, p)) => p(value)
+    case HintType(index@Index(cnf, k)) =>
+      val i = ReLang.fromCNF(cnf.drop(k)).length
+      val additional: Expr =
+        if i.isInt then
+          value match
+            case StrFind(s, _) => EQ(value, SUB(StrLen(s), i.asInt))
+            case _ => true
+        else true
+      mkAnd(encodeHasType(value, index.toType), additional)
     case HintType(hint) =>
       encodeHasType(value, hint.toType)
     case IntervalType(interval) =>

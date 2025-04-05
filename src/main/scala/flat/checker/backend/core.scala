@@ -394,15 +394,15 @@ object core:
 
     override def toString: String = s"$str.contains($infix)"
 
-  final case class StrFind(str: Expr, target: Expr, fromIndex: Expr) extends Expr:
+  final case class StrFind(str: Expr, target: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrFind(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrFind(str.transform(pf), target.transform(pf), fromIndex.transform(pf))
+        case None => StrFind(str.transform(pf), target.transform(pf))
 
-    override def toString: String = s"$str.find($target, $fromIndex)"
+    override def toString: String = s"$str.find($target)"
 
   final case class StrSplit(str: Expr, sep: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrSplit(this, ctx)

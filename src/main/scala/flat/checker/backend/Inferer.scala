@@ -2,13 +2,13 @@ package flat.checker.backend
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker
+import flat.checker.*
 import flat.checker.Bound.{NegInf, PosInf}
+import flat.checker.CNFOps.BiIndex
 import flat.checker.ReLang.ReChars
-import flat.checker.Ternary.True
 import flat.checker.backend.core.*
 import flat.checker.backend.core.ArithOp.{ADD, SUB}
 import flat.checker.backend.core.CmpOp.*
-import flat.checker.*
 
 import scala.collection.mutable
 
@@ -142,8 +142,8 @@ class Inferer(types: Types, premises: List[Expr])(using issuer: Issuer) extends 
           ReLang.fromCNF(cnf.slice(from, until)).alphabet
         case None =>
           tryGetAbsIndex(node.str, node.index) match
-            case Some(k) if k >= 0 => ReLangOps.charAt(r, k).getOrElse(CharSet.empty)
-            case Some(k) if k < 0 => ReLangOps.charAt(r.reverse, -k - 1).getOrElse(CharSet.empty)
+            case Some(k1, k2) if k1 >= 0 => ReLangOps.charAt(r, k1, k2)
+            case Some(k1, k2) if k1 < 0 && k1 == k2 => ReLangOps.charAt(r.reverse, -k1 - 1).getOrElse(CharSet.empty)
             case _ => r.alphabet
     LangType(ReChars(cs))
   //    val (k1, k2) = getStrIndex(node.str, node.index)
@@ -169,8 +169,8 @@ class Inferer(types: Types, premises: List[Expr])(using issuer: Issuer) extends 
   private def tryGetRelIndex(str: Expr, index: Expr): Option[(CmpOp, Index)] =
     for
       (op, pos) <- premises.collectFirst {
-        case Cmp(op, pos@StrFind(s, _, _), i) if s == str && i == index => Analyzer.reverseCmpOp(op) -> pos
-        case Cmp(op, i, pos@StrFind(s, _, _)) if s == str && i == index => op -> pos
+        case Cmp(op, pos@StrFind(s, _), i) if s == str && i == index => Analyzer.reverseCmpOp(op) -> pos
+        case Cmp(op, i, pos@StrFind(s, _)) if s == str && i == index => op -> pos
       }
       t = pos.accept(this, ())
       index <- t match
@@ -178,18 +178,22 @@ class Inferer(types: Types, premises: List[Expr])(using issuer: Issuer) extends 
         case _ => None
     yield (op, index)
 
-  private def tryGetAbsIndex(str: Expr, index: Expr): Option[Int] =
+  private def tryGetAbsIndex(str: Expr, index: Expr): Option[(Int, Int)] =
     index match
-      case Const(k: Int) => Some(k)
-      case Arith(SUB, StrLen(s), Const(k: Int)) if s == str => Some(-k)
+      case Const(k: Int) => Some(k, k)
+      case Arith(SUB, StrLen(s), Const(k: Int)) if s == str => Some(-k, -k)
       case _ =>
         val inBounds = LE(0, index) :: LT(index, StrLen(str)) :: Nil
         val (lb1, ub1) = LPSolver.solve(index, inBounds ++ premises)
         if ub1.isFin && lb1 == ub1 && validateLPSolverResult(EQ(index, lb1.asInt)) then
-          return Some(lb1.asInt)
+          return Some(lb1.asInt, lb1.asInt)
         val (lb2, ub2) = LPSolver.solve(SUB(index, StrLen(str)), inBounds ++ premises)
         if ub2.isFin && lb2 == ub2 && validateLPSolverResult(EQ(index, ADD(StrLen(str), lb2.asInt))) then
-          return Some(lb2.asInt)
+          return Some(lb2.asInt, lb2.asInt)
+        if lb2 == NegInf && ub2.isFin then
+          return Some(0, ub2.asInt)
+        if lb1.isFin && ub1 == PosInf then
+          return Some(lb1.asInt, -1)
         None
 
   private def validateLPSolverResult(result: Expr): Boolean =
@@ -206,44 +210,75 @@ class Inferer(types: Types, premises: List[Expr])(using issuer: Issuer) extends 
     case IntervalType(r) => Left("index not constant")
     case _ => throw IllegalArgumentException()
 
+  private def inferBiIndex(str: Expr, index: Expr): Option[BiIndex] =
+    index match
+      case Const(k: Int) if k >= 0 => Some(BiIndex.FromLeft(k))
+      case Const(k: Int) if k < 0 => Some(BiIndex.FromRight(-k))
+      case StrLen(s) => Some(BiIndex.FromRight(0))
+      case Arith(SUB, StrLen(s), Const(k: Int)) if s == str && k >= 0 => Some(BiIndex.FromRight(k))
+      case _ =>
+        val inBounds = LE(0, index) :: LT(index, StrLen(str)) :: Nil
+        if SMTSolver.canProve(EQ(index, 0), premises)(using types) then
+          return Some(BiIndex.FromLeft(0))
+        val (lb1, ub1) = LPSolver.solve(index, inBounds ++ premises)
+        if ub1.isFin && lb1 == ub1 && validateLPSolverResult(EQ(index, lb1.asInt)) then
+          return Some(BiIndex.FromLeft(lb1.asInt))
+        if SMTSolver.canProve(EQ(index, StrLen(str)), premises)(using types) then
+          return Some(BiIndex.FromRight(0))
+        val (lb2, ub2) = LPSolver.solve(SUB(index, StrLen(str)), inBounds ++ premises)
+        if ub2.isFin && lb2 == ub2 && validateLPSolverResult(EQ(index, ADD(StrLen(str), lb2.asInt))) then
+          return Some(BiIndex.FromRight(lb2.asInt))
+        None
+
+  private def inferCNFIndex(str: Expr, cnf: List[ReLang], index: Expr): Option[Int] =
+    index.accept(this, ()) match
+      case HintType(Index(cnf1, pos)) if cnf1 == cnf =>
+        Some(pos)
+      case _ =>
+        for
+          bi <- inferBiIndex(str, index)
+          _ = logger.debug(s"$index : $bi")
+          i <- bi.toCNFIndex(cnf)
+        yield i
+
   override def visitStrSlice(node: StrSlice, ctx: Unit): Type =
     val t = node.str.accept(this, ctx)
-    val t1 = node.fromIndex.accept(this, ctx)
-    val t2 = node.untilIndex.accept(this, ctx)
-    (t, t1, t2) match
-      case (LangType(r), from, until) =>
-        val cnf = r.toCNF
-        getRelPos(cnf, from) match
-          case Right(fromPos) =>
-            getRelPos(cnf, until) match
-              case Right(untilPos) => LangType(CNFOps.substring(cnf, fromPos, untilPos))
-              case Left(reason) =>
-                issuer.report(OverApprox(reason, node.loc))
-                strType
-          case Left(reason) =>
-            issuer.report(OverApprox(reason, node.loc))
-            strType
-      case _ => strType
+    val r = t.asInstanceOf[LangType].reLang
+    val cnf = r.toCNF
+    val r1 =
+      for
+        i <- inferCNFIndex(node.str, cnf, node.fromIndex)
+        j <- inferCNFIndex(node.str, cnf, node.untilIndex)
+      yield LangType(CNFOps.substring(cnf, i, j))
+    r1.getOrElse(strType)
+
+  private def extractCharAt(str: Expr, index: Expr): Option[CharSet] =
+    premises.collectFirst {
+      case Cmp(EQ, StrAt(s, i), Const(c: String)) if s == str && i == index && c.length == 1 =>
+        CharSet.of(c.head)
+      case Not(Cmp(NE, StrAt(s, i), Const(c: String))) if s == str && i == index && c.length == 1 =>
+        CharSet.of(c.head)
+      case Not(Cmp(EQ, StrAt(s, i), Const(c: String))) if s == str && i == index && c.length == 1 =>
+        CharSet.complementOf(c.head)
+      case Cmp(NE, StrAt(s, i), Const(c: String)) if s == str && i == index && c.length == 1 =>
+        CharSet.complementOf(c.head)
+    }
 
   override def visitStrFind(node: StrFind, ctx: Unit): Type =
     val t = node.str.accept(this, ctx)
     val t1 = node.target.accept(this, ctx)
-    val t2 = node.fromIndex.accept(this, ctx)
-    (t, t1, t2) match
-      case (LangType(r), LangType(rt), from) =>
+    (t, t1) match
+      case (LangType(r), LangType(rt)) =>
         if rt.isChar then
           val cnf = r.toCNF
-          getRelPos(cnf, from) match
+          CNFOps.indexOf(cnf, rt.asChar) match
+            case Right(pos) => HintType(Index(cnf, pos))
             case Left(reason) =>
-              issuer.report(OverApprox(reason, node.fromIndex.loc))
-              intType
-            case Right(fromPos) =>
-              CNFOps.indexOf(cnf, rt.asChar, fromPos) match
-                case Right(pos) => HintType(Index(cnf, pos))
-                case Left(reason) =>
-                  if r.contains(rt.asChar) == True
-                  then HintType(Pred(Sort.Int, x => And(LE(0, x), LT(x, StrLen(node.str)))))
-                  else intType
+              r.contains(rt.asChar) match
+                case Ternary.True => HintType(Pred(Sort.Int, x => And(LE(0, x), LT(x, StrLen(node.str)))))
+                case Ternary.False => IntervalType(-1)
+                case Ternary.Maybe => HintType(Pred(Sort.Int, x => And(LE(-1, x), LT(x, StrLen(node.str)))))
+                case _ => assert(false)
         else
           issuer.report(OverApprox("pattern is not a constant char", node.loc))
           intType

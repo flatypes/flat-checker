@@ -8,6 +8,16 @@ import flat.checker.backend.{Index, Split}
 import scala.annotation.tailrec
 
 object CNFOps:
+  enum BiIndex:
+    case FromLeft(k: Int)
+    case FromRight(k: Int)
+
+    def toCNFIndex(cnf: List[ReLang]): Option[Int] =
+      this match
+        case FromLeft(k) => convertToRelative(cnf, k).toOption
+        case FromRight(k) =>
+          for i <- convertToRelative(cnf.reverse, k).toOption yield cnf.length - i
+
   /** Try to convert an absolute position into a relative position in `cnf`. */
   def convertToRelative(cnf: List[ReLang], k: Int): Either[String, Int] =
     var i = 0
@@ -37,7 +47,7 @@ object CNFOps:
   @tailrec
   def indexOf(cnf: List[ReLang], target: Char, fromPos: Int = 0): Either[String, Int] =
     require(fromPos >= 0)
-    if fromPos >= cnf.length then Right(cnf.length)
+    if fromPos >= cnf.length then Left("out of bounds")
     else if cnf(fromPos).isChar && cnf(fromPos).asChar == target then Right(fromPos)
     else if cnf(fromPos).contains(target) == Ternary.False then indexOf(cnf, target, fromPos + 1)
     else Left("position is ambiguous")

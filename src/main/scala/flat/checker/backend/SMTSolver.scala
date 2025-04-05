@@ -27,8 +27,8 @@ object SMTSolver:
       val s = encodeType(types(x))
       ctxBuf(x) = smt.mkConst(s, x)
     val ctx = ctxBuf.toMap
-    for e <- premises do slv.assertFormula(e.accept(Encoder, ctx))
-    slv.assertFormula(goal.accept(Encoder, ctx).notTerm)
+    for e <- premises do slv.assertFormula(encodeExpr(e, ctx))
+    slv.assertFormula(encodeExpr(goal, ctx).notTerm)
     val result = slv.checkSat()
     if result.isUnsat then Valid
     else if result.isSat then
@@ -36,6 +36,11 @@ object SMTSolver:
       val values = for x <- goal.collectVars yield x + " = " + slv.getValue(ctx(x)).toString
       Invalid(values.mkString("\n"))
     else Invalid("solver error: " + result.getUnknownExplanation.toString)
+
+  def canProve(lemma: Expr, premises: List[Expr])(using types: Types): Boolean =
+    prove(lemma, premises) match
+      case SolverResult.Valid => true
+      case _ => false
 
   private def encodeType(typ: Type): Sort = typ.toSort match
     case checker.Sort.Top => assert(false)
@@ -48,6 +53,8 @@ object SMTSolver:
     case checker.Sort.Fun(ts, t) => smt.mkFunctionSort(ts.map(encodeType(_)).toArray, encodeType(t))
 
   private type Ctx = Map[String, Term]
+
+  private def encodeExpr(expr: Expr, ctx: Ctx): Term = expr.accept(Encoder, ctx)
 
   private object Encoder extends ExprVisitor[Ctx, Term]:
     given Conversion[Int, Term] = smt.mkInteger
@@ -67,6 +74,8 @@ object SMTSolver:
     override def visitTupleExpr(node: TupleExpr, ctx: Ctx): Term =
       val terms = for elem <- node.elems yield elem.accept(this, ctx)
       smt.mkTuple(terms.toArray)
+
+    override def visitTypeTest(node: TypeTest, ctx: Ctx): Term = smt.mkConst(smt.getBooleanSort)
 
     override def visitAnd(node: And, ctx: Ctx): Term =
       val b1 = node.left.accept(this, ctx)
@@ -150,10 +159,9 @@ object SMTSolver:
     override def visitStrFind(node: StrFind, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
       val t = node.target.accept(this, ctx)
-      val i = node.fromIndex.accept(this, ctx)
       // If the index `i` is negative or greater than the length of string `s`,
       // or the substring `t` does not appear in `s` after index `i`, the result is -1.
-      smt.mkTerm(Kind.STRING_INDEXOF, s, t, i)
+      smt.mkTerm(Kind.STRING_INDEXOF, s, t, smt.mkInteger(0))
 
     override def visitStrSplit(node: StrSplit, ctx: Ctx): Term =
       throw UnsupportedOperationException("smt solver does not support string split")
