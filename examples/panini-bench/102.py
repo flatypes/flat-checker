@@ -6,5 +6,3 @@ def f102(s: Input):
     assert s[i] == "a"
     i += 1
   assert i == 2
-
-# needs loop invariant

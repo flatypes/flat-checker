@@ -1,6 +1,6 @@
 type Input = lang(r'[ab]')
 
-def f372(s: Input):
+def f372(s: Input) -> bool:
   if s == "a":
     return True
   elif s == "b":

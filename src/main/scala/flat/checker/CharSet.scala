@@ -11,6 +11,8 @@ final class CharSet(val polarity: Boolean, val chars: Set[Char]):
 
   def isEmpty: Boolean = polarity && chars.isEmpty
 
+  def nonEmpty: Boolean = !isEmpty
+
   def isFull: Boolean = !polarity && chars.isEmpty
 
   def isSingleton: Boolean = polarity && chars.size == 1
@@ -74,6 +76,7 @@ final class CharSet(val polarity: Boolean, val chars: Set[Char]):
   def prettyString: String =
     val raw =
       if isSingleton then chars.head.toString
+      else if isFull then "."
       else
         val part1 = (chars & CharSet.ALPHA_NUM.chars).toList.sorted match
           case Nil => ""

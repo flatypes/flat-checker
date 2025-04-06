@@ -99,7 +99,8 @@ enum ReLang:
 
   def nullable: Boolean =
     this match
-      case ReNone | ReEmpty => true
+      case ReNone => false
+      case ReEmpty => true
       case ReChars(_) => false
       case ReConcat(r1, r2) => r1.nullable && r2.nullable
       case ReUnion(r1, r2) => r1.nullable || r2.nullable
@@ -189,7 +190,7 @@ enum ReLang:
 
   override def toString: String =
     this match
-      case ReNone => "None"
+      case ReNone => "∅"
       case ReEmpty => "ε"
       case ReChars(cs) => cs.prettyString
       case ReConcat(r1, r2) => s"$r1$r2"
@@ -220,7 +221,7 @@ object ReLang:
 
   def mkUnion(regexes: ReLang*): ReLang =
     regexes.toList match
-      case Nil => assert(false)
+      case Nil => ReNone
       case r :: Nil => r
       case rs => rs.reduce(ReUnion.apply)
 

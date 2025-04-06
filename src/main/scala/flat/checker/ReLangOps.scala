@@ -2,6 +2,8 @@ package flat.checker
 
 import flat.checker.ReLang.*
 
+import scala.collection.mutable.ListBuffer
+
 object ReLangOps:
   def concat(r1: ReLang, r2: ReLang): ReLang = ReConcat(r1, r2)
 
@@ -22,6 +24,9 @@ object ReLangOps:
       case None => None
 
   def charAt(r: ReLang, fromIndex: Int, toIndex: Int): CharSet =
+    substring(r, fromIndex, toIndex).alphabet
+
+  def substring(r: ReLang, fromIndex: Int, toIndex: Int): ReLang =
     require(fromIndex >= 0)
     var i = 0
     var l: Option[ReLang] = Some(r)
@@ -30,18 +35,18 @@ object ReLangOps:
       i += 1
     i = 0
     if toIndex >= 0 then
-      var cs = CharSet.empty
+      val buf = ListBuffer.empty[CharSet]
       while i <= toIndex - fromIndex && l.isDefined do
-        cs |= l.get.first
+        buf += l.get.first
         l = l.get.derivative(CharSet.full)
         i += 1
-      cs
+      mkConcat(buf.map(ReChars.apply).toSeq *)
     else // toIndex < 0
       l = l.map(_.reverse)
       while i < -toIndex - 1 && l.isDefined do
         l = l.get.derivative(CharSet.full)
         i += 1
-      l.map(_.alphabet).getOrElse(CharSet.empty)
+      l.getOrElse(ReNone)
 
   def startsWith(r: ReLang, prefix: String): Ternary =
     var i = 0

@@ -42,6 +42,37 @@ object SMTSolver:
       case SolverResult.Valid => true
       case _ => false
 
+  class Interactive:
+    private val slv = Solver(smt)
+    slv.setLogic("ALL")
+    slv.setOption("produce-models", "true")
+    slv.setOption("tlimit-per", "3000")
+
+    private val ctxBuf = mutable.Map.empty[String, Term]
+
+    def addPremises(premises: List[Expr])(using types: Types): Unit =
+      val vars = premises.flatMap(_.collectVars).toSet
+      for x <- vars do
+        val s = encodeType(types(x))
+        ctxBuf(x) = smt.mkConst(s, x)
+      val ctx = ctxBuf.toMap
+      for e <- premises do slv.assertFormula(encodeExpr(e, ctx))
+
+    def canProve(lemma: Expr)(using types: Types): Boolean =
+      slv.push()
+      val vars = lemma.collectVars
+      for
+        x <- vars
+        if !ctxBuf.contains(x)
+      do
+        val s = encodeType(types(x))
+        ctxBuf(x) = smt.mkConst(s, x)
+      val ctx = ctxBuf.toMap
+      slv.assertFormula(encodeExpr(lemma, ctxBuf.toMap).notTerm)
+      val result = slv.checkSat()
+      slv.pop()
+      result.isUnsat
+
   private def encodeType(typ: Type): Sort = typ.toSort match
     case checker.Sort.Top => assert(false)
     case checker.Sort.Bot => assert(false)

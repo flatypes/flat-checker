@@ -5,6 +5,7 @@ import flat.checker.Bound.*
 import flat.checker.backend.core.*
 import optimus.algebra.{Int2Const, Expression as MPExpr}
 import optimus.optimization.*
+import optimus.optimization.enums.SolutionStatus.OPTIMAL
 import optimus.optimization.model.{MPBinaryVar, MPFloatVar, MPVar}
 
 import scala.collection.mutable

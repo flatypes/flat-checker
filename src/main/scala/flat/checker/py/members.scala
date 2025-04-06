@@ -24,7 +24,10 @@ final case class MemberInfo(required: Seq[Sort], optional: Seq[(Sort, Expr)], re
 
 val intMemberTable = Map(
   "__pos__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(n) => n }),
-  "__neg__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(n) => SUB(Const(0), n) }),
+  "__neg__" -> MemberInfo(Seq(), Seq(), Sort.Int, {
+    case Seq(Const(k: Int)) => Const(-k)
+    case Seq(n) => SUB(Const(0), n)
+  }),
   "__add__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Int, { case Seq(x, y) => ADD(x, y) }),
   "__sub__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Int, { case Seq(x, y) => SUB(x, y) }),
   "__eq__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => EQ(x, y) }),
@@ -58,9 +61,9 @@ val strMemberTable = Map(
   "__getitem_slice__" -> MemberInfo(Seq(Sort.Int), Seq(Sort.Int -> mkUnit), Sort.String,
     { case Seq(s, i, j) => StrSlice(s, i, if j == mkUnit then StrLen(s) else j) }),
   "find" -> MemberInfo(Seq(Sort.String), Seq(Sort.Int -> Const(0)), Sort.Int,
-    { case Seq(s, t, i) => if i == Const(0) then StrFind(s, t) else StrFind(StrSlice(s, i, StrLen(s)), t) }),
+    { case Seq(s, t, i) => if i == Const(0) then StrFind(s, t) else ADD(StrFind(StrSlice(s, i, StrLen(s)), t), i) }),
   "index" -> MemberInfo(Seq(Sort.String), Seq(Sort.Int -> Const(0)), Sort.Int,
-    { case Seq(s, t, i) => if i == Const(0) then StrFind(s, t) else StrFind(StrSlice(s, i, StrLen(s)), t) },
+    { case Seq(s, t, i) => if i == Const(0) then StrFind(s, t) else ADD(StrFind(StrSlice(s, i, StrLen(s)), t), i) },
     preCond = Some({ case Seq(s, t, i) => StrContains(if i == Const(0) then s else StrSlice(s, i, StrLen(s)), t) })),
   "startswith" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Bool, { case Seq(s, s1) => StrStartsWith(s, s1) }),
   "endswith" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Bool, { case Seq(s, s1) => StrEndsWith(s, s1) }),

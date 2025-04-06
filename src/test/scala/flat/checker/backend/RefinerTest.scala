@@ -6,6 +6,8 @@ import flat.checker.{Interval, ReLang}
 import org.scalatest.funsuite.AnyFunSuite
 
 class RefinerTest extends AnyFunSuite:
+  given Types = Types.from(Nil)
+
   test("refine by length interval"):
     val r1 = ReLang.fromPython("a?")
     assert(Refiner.refine(r1, LenIn(0)) equiv ReEmpty)
@@ -29,3 +31,10 @@ class RefinerTest extends AnyFunSuite:
     val r2 = ReLang.fromPython("b.|a*")
     assert(Refiner.refine(r2, NotContain('b')) equiv ReLang.fromPython("a*"))
     assert(Refiner.refine(r2, NotContain('a')) equiv ReLang.fromPython("b[^a]|"))
+
+  test("refine by char at"):
+    val r = ReLang.fromPython("(0|01)+")
+    assert(Refiner.refine(r, CharAt(1, true, '1')) equiv ReLang.fromPython("01(0|01)*"))
+    assert(Refiner.refine(r, CharAt(1, false, '1')) equiv ReLang.fromPython("0(0|01)+"))
+    val r1 = ReLang.fromPython("1?(0|01)*")
+    assert(Refiner.refine(r1, CharAt(-2, true, '1')) equiv ReLang.fromPython("1?(0|01)*010"))

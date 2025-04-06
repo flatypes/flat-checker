@@ -48,19 +48,19 @@ class LocalizationTest extends AnyFunSuite:
     val cnf = version1.toCNF
     // s[0:1]
     val r1 = CNFOps.substring(cnf,
-      CNFOps.convertToRelative(cnf, 0).toOption.get,
-      CNFOps.convertToRelative(cnf, 1).toOption.get)
+      CNFOps.convertToRelative(cnf, 0).get,
+      CNFOps.convertToRelative(cnf, 1).get)
     assert(r1.isNumber)
     // s[2:4]
     val r2 = CNFOps.substring(cnf,
-      CNFOps.convertToRelative(cnf, 2).toOption.get,
-      CNFOps.convertToRelative(cnf, 4).toOption.get)
+      CNFOps.convertToRelative(cnf, 2).get,
+      CNFOps.convertToRelative(cnf, 4).get)
     assert(r2.isNumber)
 
   test("slice from a constant index"):
     val cnf = version1.toCNF
     // s[2:]
-    val r = CNFOps.substring(cnf, CNFOps.convertToRelative(cnf, 2).toOption.get)
+    val r = CNFOps.substring(cnf, CNFOps.convertToRelative(cnf, 2).get)
     assert(r.isNumber)
 
   // [0-9]+ "." [0-9]+ "." [0-9]+
@@ -69,7 +69,7 @@ class LocalizationTest extends AnyFunSuite:
   test("failed to convert a constant index to relative position"):
     // s[2:]
     val result = CNFOps.convertToRelative(version2.toCNF, 2)
-    assert(result.isLeft)
+    assert(result.isEmpty)
 
   test("slice a range of relative positions"):
     val cnf = version2.toCNF

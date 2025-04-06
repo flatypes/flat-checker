@@ -1,6 +1,6 @@
 type Input = lang(r'c|ab')
 
-def f442(s: Input):
+def f442(s: Input) -> int:
   if s[0] == "a":
     if s[1] == "b":
       if len(s) == 2:

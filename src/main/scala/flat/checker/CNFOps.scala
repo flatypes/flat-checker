@@ -1,5 +1,6 @@
 package flat.checker
 
+import com.typesafe.scalalogging.LazyLogging
 import flat.checker
 import flat.checker.Bound.PosInf
 import flat.checker.ReLang.*
@@ -7,34 +8,39 @@ import flat.checker.backend.{Index, Split}
 
 import scala.annotation.tailrec
 
-object CNFOps:
+object CNFOps extends LazyLogging:
   enum BiIndex:
     case FromLeft(k: Int)
     case FromRight(k: Int)
 
+    def next: BiIndex = this match
+      case FromLeft(k) => FromLeft(k + 1)
+      case FromRight(k) =>
+        require(k > 0)
+        FromRight(k - 1)
+
     def toCNFIndex(cnf: List[ReLang]): Option[Int] =
       this match
-        case FromLeft(k) => convertToRelative(cnf, k).toOption
-        case FromRight(k) =>
-          for i <- convertToRelative(cnf.reverse, k).toOption yield cnf.length - i
+        case FromLeft(k) => convertToRelative(cnf, k)
+        case FromRight(k) => for i <- convertToRelative(cnf.reverse, k) yield cnf.length - i
 
   /** Try to convert an absolute position into a relative position in `cnf`. */
-  def convertToRelative(cnf: List[ReLang], k: Int): Either[String, Int] =
+  def convertToRelative(cnf: List[ReLang], k: Int): Option[Int] =
     var i = 0
     var acc = checker.Interval.fromInt(0)
-    while i < cnf.length && !acc.contains(k) do {
+    while i < cnf.length && !acc.contains(k) do
       acc += cnf(i).length
       i += 1
-    }
-    if i == cnf.length then Right(cnf.length) // end position
-    else if acc.isInt then Right(i)
-    else Left("index position is ambiguous")
+    if i == cnf.length then Some(cnf.length) // end position
+    else if acc.isInt then Some(i)
+    else None
 
   /** Try to shift a relative position with an absolute `offset`. */
   def shiftIndex(index: Index, offset: Int): Either[String, Index] =
     require(offset >= 0)
-    for delta <- convertToRelative(index.cnf.drop(index.pos), offset)
-      yield Index(index.cnf, index.pos + delta)
+    convertToRelative(index.cnf.drop(index.pos), offset) match
+      case Some(delta) => Right(Index(index.cnf, index.pos + delta))
+      case _ => Left("position is ambiguous")
 
   def charAt(cnf: List[ReLang], pos: Int): CharSet = cnf(pos).first
 

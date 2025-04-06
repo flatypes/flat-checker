@@ -116,7 +116,7 @@ class ExprChecker(out: ListBuffer[core.Stmt])(using issuer: Issuer, gCtx: GCtx, 
 
   private object CheckMode extends NodeVisitor[(core.Type, LCtx), core.Expr]:
     override def visitIfExp(node: IfExp, ctx: (core.Type, LCtx)): core.Expr =
-      val e = node.test.accept(this, ctx)
+      val e = node.test.accept(this, (core.boolType, ctx._2))
       val e1 = node.body.accept(this, ctx)
       val e2 = node.orElse.accept(this, ctx)
       core.Ite(e, e1, e2).copyLocation(node)

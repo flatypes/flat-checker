@@ -1,6 +1,6 @@
 type Input = lang(r'[^b]')
 
-def f432(s: Input):
+def f432(s: Input) -> bool:
   if s[0] == "b":
     raise Exception
   n = len(s)

@@ -6,7 +6,7 @@ import flat.checker.Bound.*
 import flat.checker.backend.SolverResult.{Invalid, Valid}
 import flat.checker.backend.core.*
 import flat.checker.backend.core.ArithOp.SUB
-import flat.checker.backend.core.CmpOp.{EQ, LE, NE}
+import flat.checker.backend.core.CmpOp.{EQ, LE, LT, NE}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -88,8 +88,13 @@ class Checker extends LazyLogging:
         val pSide = mkLAnd(collectSideGoals(cond))
         mkLAnd(pSide, Goal(cond, AssertionMayFail(cond.loc)), post)
       case IfStmt(b, s1, s2) =>
-        val pSide = mkLAnd(collectSideGoals(b))
-        mkLAnd(pSide, LImp(b, wlp(s1, post, pNext)), LImp(Not(b).copyLocation(b), wlp(s2, post, pNext)))
+        val conds = destruct(b)
+        val pTrue = conds.foldRight(wlp(s1, post, pNext)) { case (e, p) =>
+          val pSide = mkLAnd(collectSideGoals(e))
+          mkLAnd(pSide, LImp(e, p))
+        }
+        val pFalse = LImp(Not(b).copyLocation(b), wlp(s2, post, pNext))
+        mkLAnd(pTrue, pFalse)
       case whileStmt@While(b, s, userInv) =>
         val inv =
           if userInv.isEmpty then Analyzer.guessLoopInv(whileStmt, body).map(_.copyLocation(b)) else userInv
@@ -112,8 +117,8 @@ class Checker extends LazyLogging:
     else wlp(body.dropRight(1), wlp(body.last, post, body, pNext), pNext)
 
   private def collectSideGoals(expr: Expr): List[Formula] = expr.walkAndCollect {
-    case StrAt(str, index) => // 0 <= index <= |str|
-      Goal(And(LE(0, index), LE(index, StrLen(str))), IndexMayOutOfBounds(index.loc))
+    case StrAt(str, index) => // 0 <= index < |str|
+      Goal(And(LE(0, index), LT(index, StrLen(str))), IndexMayOutOfBounds(index.loc))
     case CharToCode(str) => // |str| == 1
       Goal(EQ(StrLen(str), 1), TypeMayMismatch("char (string of length 1)", "string", str.loc))
     case CharFromCode(int) => // 0 <= int <= 0x2FFFF
@@ -140,17 +145,28 @@ class Checker extends LazyLogging:
       case Goal(cond, err) =>
         logger.debug("")
         logger.debug("Goal: " + premises.mkString(" ∧ ") + " ⇒ " + goal.toString)
-        cond match
-          case TypeTest(e, t) =>
-            hasType(e, t, premises) match
-              case None => logger.debug("Goal proved")
-              case Some(_) =>
-                issuer.report(err)
-                logger.error("Goal failed")
-          case _ =>
-            prove(cond, premises) match
-              case Valid => logger.debug("Goal proved")
-              case Invalid(cm) =>
+        prove(cond, premises) match
+          case Valid => logger.debug("Goal proved")
+          case Invalid(cm) =>
+            premises.indexWhere {
+              case Or(_, _) => true
+              case _ => false
+            } match
+              case i if i >= 0 => // try split
+                val Or(e1, e2) = premises(i): @unchecked
+                // case 1
+                prove(cond, premises.updated(i, e1)) match
+                  case Valid =>
+                    prove(cond, Not(e1) :: premises.updated(i, e2)) match
+                      case Valid =>
+                        logger.debug("Goal proved")
+                      case Invalid(cm) =>
+                        issuer.report(err)
+                        logger.error("Goal failed")
+                  case Invalid(cm) =>
+                    issuer.report(err)
+                    logger.error("Goal failed")
+              case _ =>
                 issuer.report(err)
                 logger.error("Goal failed")
       case LAnd(goal1, goal2) =>
@@ -163,7 +179,7 @@ class Checker extends LazyLogging:
     typ match
       case LangType(r2) =>
         val inferer = Inferer(types, premises)
-        expr.accept(inferer, ()) match
+        inferer.infer(expr) match
           case LangType(r1) if ReLangSub.check(r1, r2) => None
           case actual =>
             logger.debug(s"cannot prove $actual <: $r2")
@@ -172,9 +188,10 @@ class Checker extends LazyLogging:
 
   private def destruct(premise: Expr): List[Expr] = premise match
     case And(e1, e2) => destruct(e1) ++ destruct(e2)
+    case Not(Or(e1, e2)) => destruct(Not(e1)) ++ destruct(Not(e2))
+    case Not(And(e1, e2)) => List(Or(Not(e1), Not(e2)))
     case _ => List(premise)
 
-  @tailrec
   private def prove(goal: Expr, premises: List[Expr])(using types: Types): SolverResult =
     // First try: consider only key expressions in goal
     trySolve(goal, premises, List(goal)) match
@@ -186,7 +203,15 @@ class Checker extends LazyLogging:
           case result =>
             goal match
               case Or(p, q) => // Third try: P or Q <=> not p => Q
-                prove(q, Not(p) :: premises)
+                logger.debug(s"try prove $q given ${Not(p)}")
+                prove(q, destruct(Not(p)) ++ premises)
+              case And(p, q) => // P and Q <=> P, Q
+                logger.debug(s"try prove sub goal $p")
+                prove(p, premises) match
+                  case SolverResult.Valid =>
+                    logger.debug(s"try prove sub goal $q")
+                    prove(q, premises)
+                  case other => other
               case _ => result
 
   private def trySolve(goal: Expr, premises: List[Expr], keyExprs: List[Expr])
@@ -195,20 +220,28 @@ class Checker extends LazyLogging:
       _.collect {
         case e if e.productPrefix.startsWith("Str") || e.productPrefix.startsWith("Char") => List(e)
         case e@Cmp(EQ | NE, Var(x), Const(_: String)) if types(x).toSort == Sort.String => List(e, Var(x))
+        case Cmp(EQ | NE, e@StrAt(s, Var(x)), Const(s1: String)) => List(e, Var(x))
+        case Not(Cmp(EQ | NE, e@StrAt(s, Var(x)), Const(s1: String))) => List(e, Var(x))
       }.flatten
     }
     val inferer = Inferer(types, premises)
     val hints =
       for
         e <- es
-        t = e.accept(inferer, ())
+        t = inferer.infer(e)
         c = encodeHasType(e, t)
         if c != Const(true)
       yield c
 
     if hints.nonEmpty then
       logger.debug("  hints: " + hints.mkString(", "))
-    SMTSolver.prove(goal, premises ++ hints)
+    goal match
+      case TypeTest(e, t) =>
+        hasType(e, t, premises) match
+          case None => Valid
+          case Some(actual) => Invalid("actual type: " + actual.toString)
+      case _ =>
+        SMTSolver.prove(goal, premises ++ hints)
 
   private def encodeHasType(value: Expr, typ: Type): Expr = typ match
     case HintType(Pred(_, p)) => p(value)

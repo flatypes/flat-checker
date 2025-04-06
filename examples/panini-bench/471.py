@@ -6,6 +6,8 @@ def f471(s: Input):
   assert s[0] == "0"
   i = 0
   while i < len(s)-1:
+    inv(0 <= i <= len(s) - 1)
+    inv(isinstance(s[i:], lang(r'1?(0|01)*')))
     if s[i] == "1":
       assert s[i+1] != "1"
     else:

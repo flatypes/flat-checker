@@ -5,6 +5,8 @@ def f401(s: Input):
   ca = 0
   cb = 0
   while i < len(s):
+    inv(0 <= i <= len(s))
+    inv(ca == i if 'a' in s else cb == i)
     if s[i] == "a":
       ca += 1
     if s[i] == "b":
