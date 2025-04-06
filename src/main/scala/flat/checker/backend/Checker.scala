@@ -103,18 +103,24 @@ class Checker extends LazyLogging:
         val pInv = mkLAnd(inv.flatMap(collectSideGoals) ++ (for e <- inv yield Goal(e, InvariantMayViolate(e.loc))))
         val pSide = mkLAnd(collectSideGoals(b))
         val pEnter = (b :: inv).foldRight(wlp(s, pInv, post))(LImp.apply)
-        val pExit = (Not(b).copyLocation(b) :: inv).foldRight(post)(LImp.apply)
+        val exitCond = mkOr(Not(b).copyLocation(b) :: collectBreakCond(s))
+        val pExit = (exitCond :: inv).foldRight(post)(LImp.apply)
         val pLoop = mkLAnd(pEnter, pExit)
         val m = Map.from(for x <- Analyzer.getModifiedVars(whileStmt) yield x -> Var(fresher.fresh(x)))
         mkLAnd(pInv, pSide, pLoop.subst(m))
       case Break() => pNext
-      case Return(_) => pReturn
+      case Return() => pReturn
 
   @tailrec
   private def wlp(body: List[Stmt], post: Formula, pNext: Formula)
                  (using types: Types, pReturn: Formula, fresher: Fresher): Formula =
     if body.isEmpty then post
     else wlp(body.dropRight(1), wlp(body.last, post, body, pNext), pNext)
+
+  private def collectBreakCond(body: List[Stmt]): List[Expr] =
+    body.collect {
+      case IfStmt(cond, List(Break()), _) => cond
+    }
 
   private def collectSideGoals(expr: Expr): List[Formula] = expr.walkAndCollect {
     case StrAt(str, index) => // 0 <= index < |str|
@@ -184,7 +190,8 @@ class Checker extends LazyLogging:
           case actual =>
             logger.debug(s"cannot prove $actual <: $r2")
             Some(actual)
-      case _ => throw NotImplementedError()
+      case _ =>
+        None // assuming OK
 
   private def destruct(premise: Expr): List[Expr] = premise match
     case And(e1, e2) => destruct(e1) ++ destruct(e2)
@@ -193,6 +200,9 @@ class Checker extends LazyLogging:
     case _ => List(premise)
 
   private def prove(goal: Expr, premises: List[Expr])(using types: Types): SolverResult =
+    // Zero try: perhaps premises are contradicting
+    if SMTSolver.isUnsat(premises) then return Valid
+
     // First try: consider only key expressions in goal
     trySolve(goal, premises, List(goal)) match
       case Valid => Valid

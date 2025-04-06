@@ -15,6 +15,22 @@ import flat.checker.backend.SolverResult.*
 object SMTSolver:
   private val smt = TermManager()
 
+  def isUnsat(premises: List[Expr])(using types: Types): Boolean =
+    val slv = Solver(smt)
+    slv.setLogic("ALL")
+    slv.setOption("produce-models", "true")
+    slv.setOption("tlimit-per", "3000")
+
+    val vars = premises.flatMap(_.collectVars).toSet
+    val ctxBuf = mutable.Map.empty[String, Term]
+    for x <- vars do
+      val s = encodeType(types(x))
+      ctxBuf(x) = smt.mkConst(s, x)
+    val ctx = ctxBuf.toMap
+    for e <- premises do slv.assertFormula(encodeExpr(e, ctx))
+    val result = slv.checkSat()
+    result.isUnsat
+
   def prove(goal: Expr, premises: List[Expr])(using types: Types): SolverResult =
     val slv = Solver(smt)
     slv.setLogic("ALL")

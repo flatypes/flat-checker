@@ -72,6 +72,8 @@ object Refiner extends LazyLogging:
         refiners += Contain(s1.head)
       case Not(StrContains(s, Const(s1: String))) if s == str && s1.length == 1 =>
         refiners += NotContain(s1.head)
+      case Cmp(EQ, StrFind(s, Const(s1: String)), Const(k: Int)) if s == str && s1.length == 1 && k >= 0 =>
+        refiners += CharAt(k, true, s1.head)
       case _ =>
     }
 

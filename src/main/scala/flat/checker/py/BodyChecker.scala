@@ -160,12 +160,14 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
     override def visitReturn(node: Return, env: (LCtx, LCtx)): LCtx =
       val (ctx, _) = env
       val e = node.value match
-        case Some(expr) => checkType(expr, returnType, ctx)
+        case Some(expr) =>
+          val e = checkType(expr, returnType, ctx)
+          out += core.Assign("return", e)
         case None =>
           if returnType != core.unitType then
             issuer.report(TypeError("missing return value", node.loc))
           core.mkUnit
-      out += core.Return(e)
+      out += core.Return()
       ctx
 
     override def visitExprStmt(node: ExprStmt, env: (LCtx, LCtx)): LCtx =

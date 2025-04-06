@@ -83,7 +83,7 @@ object core:
   final case class Assert(cond: Expr) extends Stmt:
     def accept[C, T](visitor: StmtVisitor[C, T], ctx: C): T = visitor.visitAssert(this, ctx)
 
-  final case class Return(value: Expr) extends Stmt:
+  final case class Return() extends Stmt:
     def accept[C, T](visitor: StmtVisitor[C, T], ctx: C): T = visitor.visitReturn(this, ctx)
 
   final case class IfStmt(cond: Expr, body: List[Stmt], elseBody: List[Stmt]) extends Stmt:
