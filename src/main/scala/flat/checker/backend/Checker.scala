@@ -5,11 +5,12 @@ import flat.checker.*
 import flat.checker.Bound.*
 import flat.checker.backend.SolverResult.{Invalid, Valid}
 import flat.checker.backend.core.*
-import flat.checker.backend.core.ArithOp.SUB
-import flat.checker.backend.core.CmpOp.{EQ, LE, LT, NE}
+import flat.checker.backend.core.ArithOp.*
+import flat.checker.backend.core.CmpOp.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.util.control.Breaks.{break, breakable}
 
 final class Types(store: Map[String, Type]):
   def apply(name: String): Type =
@@ -75,7 +76,7 @@ class Checker extends LazyLogging:
       s"$name@${k + 1}"
 
   /** Compute the weakest liberal pre of a statement `stmt` and a post condition `post`. */
-  private def wlp(stmt: Stmt, post: Formula, body: List[Stmt], pNext: Formula)
+  private def wlp(stmt: Stmt, post: Formula, body: List[Stmt], pInv: Formula)
                  (using types: Types, pReturn: Formula, fresher: Fresher): Formula =
     stmt match
       case Assign(x, e) =>
@@ -89,11 +90,11 @@ class Checker extends LazyLogging:
         mkLAnd(pSide, Goal(cond, AssertionMayFail(cond.loc)), post)
       case IfStmt(b, s1, s2) =>
         val conds = destruct(b)
-        val pTrue = conds.foldRight(wlp(s1, post, pNext)) { case (e, p) =>
+        val pTrue = conds.foldRight(wlp(s1, post, pInv)) { case (e, p) =>
           val pSide = mkLAnd(collectSideGoals(e))
           mkLAnd(pSide, LImp(e, p))
         }
-        val pFalse = LImp(Not(b).copyLocation(b), wlp(s2, post, pNext))
+        val pFalse = LImp(Not(b).copyLocation(b), wlp(s2, post, pInv))
         mkLAnd(pTrue, pFalse)
       case whileStmt@While(b, s, userInv) =>
         val inv =
@@ -102,20 +103,25 @@ class Checker extends LazyLogging:
           logger.debug(s"Guessing invariants: ${inv.mkString(", ")}")
         val pInv = mkLAnd(inv.flatMap(collectSideGoals) ++ (for e <- inv yield Goal(e, InvariantMayViolate(e.loc))))
         val pSide = mkLAnd(collectSideGoals(b))
-        val pEnter = (b :: inv).foldRight(wlp(s, pInv, post))(LImp.apply)
+        val pEnter = (b :: inv).foldRight(wlp(s, pInv, pInv))(LImp.apply)
         val exitCond = mkOr(Not(b).copyLocation(b) :: collectBreakCond(s))
         val pExit = (exitCond :: inv).foldRight(post)(LImp.apply)
         val pLoop = mkLAnd(pEnter, pExit)
         val m = Map.from(for x <- Analyzer.getModifiedVars(whileStmt) yield x -> Var(fresher.fresh(x)))
         mkLAnd(pInv, pSide, pLoop.subst(m))
-      case Break() => pNext
+      case Break() => pInv
       case Return() => pReturn
 
   @tailrec
-  private def wlp(body: List[Stmt], post: Formula, pNext: Formula)
+  private def wlp(body: List[Stmt], post: Formula, pInv: Formula)
                  (using types: Types, pReturn: Formula, fresher: Fresher): Formula =
-    if body.isEmpty then post
-    else wlp(body.dropRight(1), wlp(body.last, post, body, pNext), pNext)
+    if body.isEmpty then post else wlp(body.dropRight(1), wlp(body.last, post, body, pInv), pInv)
+
+  private def destruct(cond: Expr): List[Expr] = cond match
+    case And(e1, e2) => destruct(e1) ++ destruct(e2)
+    case Not(Or(e1, e2)) => destruct(Not(e1)) ++ destruct(Not(e2))
+    case Not(And(e1, e2)) => List(Or(Not(e1), Not(e2)))
+    case _ => List(cond)
 
   private def collectBreakCond(body: List[Stmt]): List[Expr] =
     body.collect {
@@ -124,11 +130,11 @@ class Checker extends LazyLogging:
 
   private def collectSideGoals(expr: Expr): List[Formula] = expr.walkAndCollect {
     case StrAt(str, index) => // 0 <= index < |str|
-      Goal(And(LE(0, index), LT(index, StrLen(str))), IndexMayOutOfBounds(index.loc))
+      Goal(And(GE(index, 0), LT(index, StrLen(str))), IndexMayOutOfBounds(index.loc))
     case CharToCode(str) => // |str| == 1
       Goal(EQ(StrLen(str), 1), TypeMayMismatch("char (string of length 1)", "string", str.loc))
     case CharFromCode(int) => // 0 <= int <= 0x2FFFF
-      Goal(And(LE(0, int), LE(int, 0x2FFFF)), IndexMayOutOfBounds(int.loc))
+      Goal(And(GE(int, 0), LE(int, 0x2FFFF)), IndexMayOutOfBounds(int.loc))
     case StrToInt(str) => // str in number
       HasType(str, LangType(ReLang.number), str.loc)
   }
@@ -149,32 +155,7 @@ class Checker extends LazyLogging:
         for actual <- hasType(e, t, premises) do
           issuer.report(TypeMayMismatch(t.toString, actual.toString, loc))
       case Goal(cond, err) =>
-        logger.debug("")
-        logger.debug("Goal: " + premises.mkString(" ∧ ") + " ⇒ " + goal.toString)
-        prove(cond, premises) match
-          case Valid => logger.debug("Goal proved")
-          case Invalid(cm) =>
-            premises.indexWhere {
-              case Or(_, _) => true
-              case _ => false
-            } match
-              case i if i >= 0 => // try split
-                val Or(e1, e2) = premises(i): @unchecked
-                // case 1
-                prove(cond, premises.updated(i, e1)) match
-                  case Valid =>
-                    prove(cond, Not(e1) :: premises.updated(i, e2)) match
-                      case Valid =>
-                        logger.debug("Goal proved")
-                      case Invalid(cm) =>
-                        issuer.report(err)
-                        logger.error("Goal failed")
-                  case Invalid(cm) =>
-                    issuer.report(err)
-                    logger.error("Goal failed")
-              case _ =>
-                issuer.report(err)
-                logger.error("Goal failed")
+        proveGoal(cond, premises, err)
       case LAnd(goal1, goal2) =>
         discharge(goal1, premises)
         discharge(goal2, premises)
@@ -193,39 +174,86 @@ class Checker extends LazyLogging:
       case _ =>
         None // assuming OK
 
-  private def destruct(premise: Expr): List[Expr] = premise match
-    case And(e1, e2) => destruct(e1) ++ destruct(e2)
-    case Not(Or(e1, e2)) => destruct(Not(e1)) ++ destruct(Not(e2))
-    case Not(And(e1, e2)) => List(Or(Not(e1), Not(e2)))
-    case _ => List(premise)
+  private def proveGoal(goal: Expr, premises: List[Expr], err: TypeError)(using types: Types): Unit =
+    val conds = premises.flatMap(simplifyCond)
+    logger.debug("")
+    logger.debug("Goal: " + conds.mkString(" ∧ ") + " ⇒ " + goal.toString)
 
-  private def prove(goal: Expr, premises: List[Expr])(using types: Types): SolverResult =
-    // Zero try: perhaps premises are contradicting
-    if SMTSolver.isUnsat(premises) then return Valid
+    val tasks = prepareTasks(goal, conds)
+    var failure = false
+    breakable:
+      for (subGoal, hypo) <- tasks do
+        if !proveSubGoal(subGoal, hypo) then
+          failure = true
+          break
 
-    // First try: consider only key expressions in goal
-    trySolve(goal, premises, List(goal)) match
-      case Valid => Valid
+    if failure then
+      logger.debug("Goal failed")
+      issuer.report(err)
+
+  private def prepareTasks(goal: Expr, premises: List[Expr])(using types: Types): List[(Expr, List[Expr])] =
+    simplifyCond(goal).flatMap {
+      case e@Or(_, _) =>
+        val disjuncts = destructOr(e)
+        prepareTasks(disjuncts.last, premises ++ disjuncts.dropRight(1).map(Not.apply).flatMap(simplifyCond))
+      case g =>
+        premises.zipWithIndex.collectFirst { case (e@Or(_, _), i) => i -> destructOr(e) } match {
+          case Some(i, es) =>
+            for e <- es yield
+              val ps = premises.take(i) ++ simplifyCond(e) ++ premises.drop(i + 1)
+              (g, ps)
+          case None => List((g, premises))
+        }
+    }
+
+  private def proveSubGoal(goal: Expr, premises: List[Expr])(using types: Types): Boolean =
+    logger.debug("Sub Goal: " + premises.mkString(" ∧ ") + " ⇒ " + goal.toString)
+    // Zero try: goal already in premises
+    if premises.contains(goal) then
+      logger.debug("Sub Goal proved trivially")
+      return true
+
+    // First try: prove without any hint
+    if SMTSolver.prove(goal, premises) == Valid then
+      logger.debug("Sub Goal proved without hints")
+      return true
+
+    // Second try: only consider key expressions in goal
+    solve(goal, premises, List(goal)) match
+      case Valid =>
+        logger.debug("Sub Goal proved")
+        return true
       case _ =>
-        // Second try: consider key expressions in all premises and goal
-        trySolve(goal, premises, goal :: premises) match
-          case Valid => Valid
-          case result =>
-            goal match
-              case Or(p, q) => // Third try: P or Q <=> not p => Q
-                logger.debug(s"try prove $q given ${Not(p)}")
-                prove(q, destruct(Not(p)) ++ premises)
-              case And(p, q) => // P and Q <=> P, Q
-                logger.debug(s"try prove sub goal $p")
-                prove(p, premises) match
-                  case SolverResult.Valid =>
-                    logger.debug(s"try prove sub goal $q")
-                    prove(q, premises)
-                  case other => other
-              case _ => result
 
-  private def trySolve(goal: Expr, premises: List[Expr], keyExprs: List[Expr])
-                      (using types: Types): SolverResult =
+    // Last try: consider key expressions in all premises and goal
+    solve(goal, premises, goal :: premises) match
+      case Valid =>
+        logger.debug("Sub Goal proved")
+        true
+      case Invalid(_) =>
+        logger.debug("Sub Goal failed")
+        false
+
+  private def simplifyCond(expr: Expr): List[Expr] =
+    expr match
+      case And(e1, e2) => simplifyCond(e1) ++ simplifyCond(e2)
+      case Not(And(e1, e2)) => List(Or(Not(e1), Not(e2)))
+      case Not(Or(e1, e2)) => simplifyCond(e1) ++ simplifyCond(e2)
+      case Not(Not(e)) => simplifyCond(e)
+      case Not(Cmp(op, e1, e2)) => List(Cmp(Analyzer.negateCmpOp(op), e1, e2))
+      case e => List(e)
+
+  private def destructOr(expr: Or): List[Expr] =
+    val es1 = expr.left match
+      case e@Or(_, _) => destructOr(e)
+      case e => List(e)
+    val es2 = expr.right match
+      case e@Or(_, _) => destructOr(e)
+      case e => List(e)
+    es1 ++ es2
+
+  private def solve(goal: Expr, premises: List[Expr], keyExprs: List[Expr])
+                   (using types: Types): SolverResult =
     val es = keyExprs.flatMap {
       _.collect {
         case e if e.productPrefix.startsWith("Str") || e.productPrefix.startsWith("Char") => List(e)

@@ -318,11 +318,23 @@ object core:
     case ADD
     case SUB
 
+    def unary_! : ArithOp = this match
+      case ADD => SUB
+      case SUB => ADD
+
     def apply(left: Expr, right: Expr): Arith = Arith(this, left, right)
 
     override def toString: String = this match
       case ADD => "+"
       case SUB => "-"
+
+  def mkArith(terms: List[(ArithOp, Expr)]): Expr = terms match
+    case Nil => Const(0)
+    case (ArithOp.ADD, e0) :: es =>
+      es.foldLeft(e0) { case (acc, (op, e)) => Arith(op, acc, e) }
+    case es =>
+      val e0: Expr = Const(0)
+      es.foldLeft(e0) { case (acc, (op, e)) => Arith(op, acc, e) }
 
   final case class StrConcat(left: Expr, right: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrConcat(this, ctx)

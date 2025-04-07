@@ -48,25 +48,12 @@ object Refiner extends LazyLogging:
     premises.foreach {
       case Cmp(op@(EQ | NE), StrAt(s, i), Const(s1: String)) if s == baseStr && s1.length == 1 =>
         val c = s1.head
-        for k <- decideIndex(i, baseStr, baseIndex, premises) do
-          refiners += CharAt(k, op == EQ, c)
-        val (lb, _) = RangeSolver.solve(SUB(i, baseIndex), premises)
-        val (_, ub) = RangeSolver.solve(SUB(SUB(i, baseIndex), StrLen(baseStr)), premises)
-        if lb == Fin(0) && ub == Fin(-1) then
-          refiners += (if op == EQ then Contain(c) else NotContain(c))
-      case Not(Cmp(op@(EQ | NE), StrAt(s, i), Const(s1: String))) if s == baseStr && s1.length == 1 =>
-        val c = s1.head
-        for k <- decideIndex(i, baseStr, baseIndex, premises) do
-          refiners += CharAt(k, op == NE, c)
-        val (lb, _) = RangeSolver.solve(SUB(i, baseIndex), premises)
-        val (_, ub) = RangeSolver.solve(SUB(SUB(i, baseIndex), StrLen(baseStr)), premises)
-        if lb == Fin(0) && ub == Fin(-1) then
-          refiners += (if op == NE then Contain(c) else NotContain(c))
+        decideIndex(i, baseStr, baseIndex, premises) match
+          case Some(k) => refiners += CharAt(k, op == EQ, c)
+          case None => refiners += Alpha(op == EQ, c)
       case Cmp(op@(EQ | NE), s, Const(s1: String)) if s == str && s1.length == 1 =>
         refiners += CharAt(0, op == EQ, s1.head)
-      case Not(Cmp(op@(EQ | NE), s, Const(s1: String))) if s == str && s1.length == 1 =>
-        refiners += CharAt(0, op == NE, s1.head)
-      case Not(Cmp(EQ, s, Const(s1: String))) if s == str && s1.length == 2 =>
+      case Cmp(NE, s, Const(s1: String)) if s == str && s1.length == 2 =>
         refiners += NotEqual(s1)
       case StrContains(s, Const(s1: String)) if s == str && s1.length == 1 =>
         refiners += Contain(s1.head)
@@ -204,6 +191,19 @@ final case class CharAt(index: Int, isEQ: Boolean, char: Char) extends ReLangRef
           accepted += ReConcat(rt, at)
           for (rt1, kt1) <- todo1 do todos += (ReConcat(rt, rt1) -> kt1)
         (mkUnion(accepted.toSeq *), todos.toList)
+
+final case class Alpha(contains: Boolean, char: Char) extends ReLangRefine:
+  private val cs = if contains then CharSet.of(char) else CharSet.complementOf(char)
+
+  def apply(base: ReLang): ReLang =
+    base match
+      case ReUnion(r1, r2) =>
+        val f1 = (r1.alphabet & cs).nonEmpty
+        val f2 = (r2.alphabet & cs).nonEmpty
+        if f1 && !f2 then r1
+        else if !f1 && f2 then r2
+        else base
+      case _ => base
 
 final case class NotEqual(string: String) extends ReLangRefine:
   require(string.length == 2)
