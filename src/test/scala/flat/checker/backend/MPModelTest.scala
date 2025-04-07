@@ -1,4 +1,4 @@
-package flat.checker.backend.linear
+package flat.checker.backend
 
 import optimus.algebra.Int2Const
 import optimus.optimization.*

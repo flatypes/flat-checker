@@ -1,4 +1,4 @@
-package flat.checker.backend.linear
+package flat.checker.backend
 
 import org.apache.commons.math.optimization.GoalType.{MAXIMIZE, MINIMIZE}
 import org.apache.commons.math.optimization.linear.*
