@@ -175,7 +175,7 @@ class Checker extends LazyLogging:
         None // assuming OK
 
   private def proveGoal(goal: Expr, premises: List[Expr], err: TypeError)(using types: Types): Unit =
-    val conds = premises.flatMap(simplifyCond)
+    val conds = premises.map(simplifyBool).flatMap(destructAnd)
     logger.debug("")
     logger.debug("Goal: " + conds.mkString(" ∧ ") + " ⇒ " + goal.toString)
 
@@ -192,16 +192,17 @@ class Checker extends LazyLogging:
       issuer.report(err)
 
   private def prepareTasks(goal: Expr, premises: List[Expr])(using types: Types): List[(Expr, List[Expr])] =
-    simplifyCond(goal).flatMap {
+    destructAnd(simplifyBool(goal)).flatMap {
       case e@Or(_, _) =>
         val disjuncts = destructOr(e)
-        prepareTasks(disjuncts.last, premises ++ disjuncts.dropRight(1).map(Not.apply).flatMap(simplifyCond))
+        val newPremises = disjuncts.dropRight(1).map(Not.apply).map(simplifyBool).flatMap(destructAnd)
+        prepareTasks(disjuncts.last, premises ++ newPremises)
       case g =>
         premises.zipWithIndex.collectFirst { case (e@Or(_, _), i) => i -> destructOr(e) } match {
           case Some(i, es) =>
             for e <- es yield
-              val ps = premises.take(i) ++ simplifyCond(e) ++ premises.drop(i + 1)
-              (g, ps)
+              val newPremises = destructAnd(simplifyBool(e))
+              (g, premises.take(i) ++ newPremises ++ premises.drop(i + 1))
           case None => List((g, premises))
         }
     }
@@ -234,23 +235,26 @@ class Checker extends LazyLogging:
         logger.debug("Sub Goal failed")
         false
 
-  private def simplifyCond(expr: Expr): List[Expr] =
+  private def simplifyBool(expr: Expr): Expr =
     expr match
-      case And(e1, e2) => simplifyCond(e1) ++ simplifyCond(e2)
-      case Not(And(e1, e2)) => List(Or(Not(e1), Not(e2)))
-      case Not(Or(e1, e2)) => simplifyCond(e1) ++ simplifyCond(e2)
-      case Not(Not(e)) => simplifyCond(e)
-      case Not(Cmp(op, e1, e2)) => List(Cmp(Analyzer.negateCmpOp(op), e1, e2))
+      case And(e1, e2) => And(simplifyBool(e1), simplifyBool(e2))
+      case Or(e1, e2) => Or(simplifyBool(e1), simplifyBool(e2))
+      case Not(And(e1, e2)) => Or(simplifyBool(Not(e1)), simplifyBool(Not(e2)))
+      case Not(Or(e1, e2)) => And(simplifyBool(Not(e1)), simplifyBool(Not(e2)))
+      case Not(Not(e)) => simplifyBool(e)
+      case Not(Cmp(op, e1, e2)) => Cmp(Analyzer.negateCmpOp(op), e1, e2)
+      case Ite(e, e1, e2) => Ite(simplifyBool(e), e1, e2)
+      case _ => expr
+
+  private def destructAnd(expr: Expr): List[Expr] =
+    expr match
+      case And(e1, e2) => destructAnd(e1) ++ destructAnd(e2)
       case e => List(e)
 
-  private def destructOr(expr: Or): List[Expr] =
-    val es1 = expr.left match
-      case e@Or(_, _) => destructOr(e)
+  private def destructOr(expr: Expr): List[Expr] =
+    expr match
+      case Or(e1, e2) => destructOr(e1) ++ destructOr(e2)
       case e => List(e)
-    val es2 = expr.right match
-      case e@Or(_, _) => destructOr(e)
-      case e => List(e)
-    es1 ++ es2
 
   private def solve(goal: Expr, premises: List[Expr], keyExprs: List[Expr])
                    (using types: Types): SolverResult =

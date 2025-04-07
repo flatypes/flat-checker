@@ -57,7 +57,8 @@ object Analyzer:
       })
       c2 <- getMostRecentValue(i, block, whileStmt)
     do
-      invBuf += And(Cmp(reverseCmpOp(expectedOp), Var(i), c2), Cmp(expectedOp, Var(i), ADD(c1, delta)))
+      invBuf += And(Cmp(reverseCmpOp(expectedOp), Var(i), c2),
+        Cmp(expectedOp, Var(i), linear.simplifyArith(ADD(c1, delta))))
     invBuf.toList
 
   private def accumulateDelta(i: String, stmt: Stmt): Option[Int] =
