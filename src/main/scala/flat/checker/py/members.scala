@@ -1,9 +1,7 @@
 package flat.checker.py
 
 import flat.checker.Sort
-import flat.checker.backend.core.*
-import flat.checker.backend.core.ArithOp.*
-import flat.checker.backend.core.CmpOp.*
+import flat.checker.core.*
 
 final case class MemberInfo(required: Seq[Sort], optional: Seq[(Sort, Expr)], returns: Sort,
                             builder: PartialFunction[Seq[Expr], Expr],
@@ -22,6 +20,9 @@ final case class MemberInfo(required: Seq[Sort], optional: Seq[(Sort, Expr)], re
     assert(preCond.get.isDefinedAt(es))
     preCond.get.apply(es)
 
+import flat.Ops.CmpOp.*
+import flat.checker.core.ArithOp.*
+
 val intMemberTable = Map(
   "__pos__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(n) => n }),
   "__neg__" -> MemberInfo(Seq(), Seq(), Sort.Int, {
@@ -37,7 +38,7 @@ val intMemberTable = Map(
   "__le__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => LE(x, y) }),
   "__ge__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.Bool, { case Seq(x, y) => GE(x, y) }),
   "__str__" -> MemberInfo(Seq(), Seq(), Sort.String, { case Seq(n) => StrFromInt(n) }),
-  "__chr__" -> MemberInfo(Seq(), Seq(), Sort.String, { case Seq(n) => CharFromCode(n) }),
+  "__chr__" -> MemberInfo(Seq(), Seq(), Sort.String, { case Seq(n) => StrFromCode(n) }),
 )
 
 val boolMemberTable = Map(
@@ -56,7 +57,7 @@ val strMemberTable = Map(
   "__reversed__" -> MemberInfo(Seq(), Seq(), Sort.String, { case Seq(s) => StrRev(s) }),
   "__contains__" -> MemberInfo(Seq(Sort.String), Seq(), Sort.Bool, { case Seq(s, s1) => StrContains(s, s1) }),
   "__int__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(s) => StrToInt(s) }),
-  "__ord__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(c) => CharToCode(c) }),
+  "__ord__" -> MemberInfo(Seq(), Seq(), Sort.Int, { case Seq(c) => StrToCode(c) }),
   "__getitem__" -> MemberInfo(Seq(Sort.Int), Seq(), Sort.String, { case Seq(s, i) => StrAt(s, i) }),
   "__getitem_slice__" -> MemberInfo(Seq(Sort.Int), Seq(Sort.Int -> mkUnit), Sort.String,
     { case Seq(s, i, j) => StrSlice(s, i, if j == mkUnit then StrLen(s) else j) }),

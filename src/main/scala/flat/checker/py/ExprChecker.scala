@@ -1,8 +1,8 @@
 package flat.checker.py
 
-import flat.checker.backend.core
 import flat.checker.py.ast.*
-import flat.checker.{Issuer, Location, Sort}
+import flat.checker.{Sort, core}
+import flat.{Issuer, Location}
 import org.apache.commons.text.StringEscapeUtils.unescapeJava
 
 import scala.collection.mutable.ListBuffer
@@ -15,18 +15,19 @@ class ExprChecker(out: ListBuffer[core.Stmt])(using issuer: Issuer, gCtx: GCtx, 
   def checkType(expr: Expr, expected: core.Type, ctx: LCtx): core.Expr = expr.accept(CheckMode, (expected, ctx))
 
   private val annotChecker = new AnnotChecker
+
   import annotChecker.*
 
   private object InferMode extends NodeVisitor[LCtx, (core.Type, core.Expr)]:
     override def visitConstant(node: Constant, ctx: LCtx): (core.Type, core.Expr) =
       node.value match
-        case v: Int => (core.intType, core.Const(v).copyLocation(node))
-        case v: Boolean => (core.boolType, core.Const(v).copyLocation(node))
+        case v: Int => (core.IntType, core.Const(v).copyLocation(node))
+        case v: Boolean => (core.BoolType, core.Const(v).copyLocation(node))
         case v: String => (core.strType, core.Const(unescapeJava(v)).copyLocation(node))
 
     override def visitTupleExpr(node: TupleExpr, ctx: LCtx): (core.Type, core.Expr) =
       val (ts, es) = (for value <- node.values yield value.accept(this, ctx)).unzip
-      (core.TupleType(ts), core.TupleExpr(es).copyLocation(node))
+      (core.TupleType(ts), core.TupleExpr(es.toList).copyLocation(node))
 
     override def visitName(node: Name, ctx: LCtx): (core.Type, core.Expr) =
       val x = node.id
@@ -80,7 +81,7 @@ class ExprChecker(out: ListBuffer[core.Stmt])(using issuer: Issuer, gCtx: GCtx, 
             case Seq(obj, annot) if f == "isinstance" =>
               val t = checkAnnot(annot, gCtx)
               val e = checkType(obj, t.toSort, ctx)
-              (core.boolType, core.TypeTest(e, t).copyLocation(node))
+              (core.BoolType, core.TypeTest(e, t).copyLocation(node))
             case other =>
               issuer.report(TypeError(s"function $f takes exactly one argument", node.loc))
               (core.NoType, core.NoExpr)
@@ -109,14 +110,14 @@ class ExprChecker(out: ListBuffer[core.Stmt])(using issuer: Issuer, gCtx: GCtx, 
       for (arg, s) <- args zip (required ++ optional.map(_._1)) yield arg.accept(CheckMode, (s, ctx))
 
     override def visitIfExp(node: IfExp, ctx: LCtx): (core.Type, core.Expr) =
-      val e = node.test.accept(CheckMode, (core.boolType, ctx))
+      val e = node.test.accept(CheckMode, (core.BoolType, ctx))
       val (t1, e1) = node.body.accept(this, ctx)
       val e2 = node.orElse.accept(CheckMode, (t1, ctx))
       (t1, core.Ite(e, e1, e2).copyLocation(node))
 
   private object CheckMode extends NodeVisitor[(core.Type, LCtx), core.Expr]:
     override def visitIfExp(node: IfExp, ctx: (core.Type, LCtx)): core.Expr =
-      val e = node.test.accept(this, (core.boolType, ctx._2))
+      val e = node.test.accept(this, (core.BoolType, ctx._2))
       val e1 = node.body.accept(this, ctx)
       val e2 = node.orElse.accept(this, ctx)
       core.Ite(e, e1, e2).copyLocation(node)

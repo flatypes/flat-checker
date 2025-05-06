@@ -1,7 +1,6 @@
 package flat.checker.py
 
-import flat.checker.Sort
-import flat.checker.backend.core
+import flat.checker.{Sort, core}
 
 extension (sort: Sort)
   def show: String = sort match

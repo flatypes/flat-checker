@@ -1,15 +1,17 @@
 package flat.checker.py
 
-import flat.checker.backend.core
-import flat.checker.backend.core.CmpOp.EQ
-import flat.checker.backend.core.{Ident, StrAt, StrLen}
+import flat.Issuer
+import flat.checker.core.{CmpOp, Ident, StrAt, StrLen}
 import flat.checker.py.ast.*
-import flat.checker.{Issuer, Sort}
+import flat.checker.{Sort, core}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 
 class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: VarManager):
+
+  import CmpOp.*
+
   def checkBody(body: Seq[LocalStmt], ctx: LCtx, com: LCtx)(using insideLoop: Boolean): (List[core.Stmt], LCtx) =
     val out = ListBuffer.empty[core.Stmt]
     val checker = Checker(out)
@@ -19,6 +21,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
   private class Checker(out: ListBuffer[core.Stmt])(using insideLoop: Boolean)
     extends NodeVisitor[(LCtx, LCtx), LCtx]:
     private val annotChecker = new AnnotChecker
+
     import annotChecker.*
 
     private val exprChecker = ExprChecker(out)
@@ -50,11 +53,12 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
             case Sort.String =>
               val id = vm.declare(core.strType)
               out += core.Assign(id, e)
-              out += core.Assert(EQ(StrLen(core.Var(id)), core.Const(values.length)).fillLocation(node.loc))
+              out += core.Assert(core.Cmp(EQ, StrLen(core.Var(id)), core.Const(values.length)).fillLocation(node.loc))
               var newCtx = ctx
               for i <- values.indices do
                 newCtx = checkAssign(values(i), StrAt(core.Var(id), core.Const(i)).fillLocation(values(i).loc),
-                  core.charType, (newCtx, com))
+                  // NOTE: to skip checking the binder has type char
+                  core.strType, (newCtx, com))
               return newCtx
             case _ =>
               issuer.report(Unsupported("tuple", node.target.loc))
@@ -116,7 +120,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
 
     override def visitAssert(node: Assert, env: (LCtx, LCtx)): LCtx =
       val (ctx, _) = env
-      val e = checkType(node.test, core.boolType, ctx)
+      val e = checkType(node.test, core.BoolType, ctx)
       out += core.Assert(e)
       ctx
 
@@ -126,7 +130,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
 
     override def visitIf(node: If, env: (LCtx, LCtx)): LCtx =
       val (ctx, com) = env
-      val e = checkType(node.test, core.boolType, ctx)
+      val e = checkType(node.test, core.BoolType, ctx)
       val (b1, ctx1) = checkBody(node.body, ctx, com)
       val delta1 = ctx1 -- ctx.keySet
       val (b2, ctx2) = checkBody(node.orElse, ctx, com ++ delta1)
@@ -135,7 +139,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
 
     override def visitWhile(node: While, env: (LCtx, LCtx)): LCtx =
       val (ctx, com) = env
-      val e = checkType(node.test, core.boolType, ctx)
+      val e = checkType(node.test, core.BoolType, ctx)
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, _) = checkBody(realBody, ctx, com)(using insideLoop = true)
       if node.body.nonEmpty && node.body.last.isInstanceOf[Break] then // this while loop is just an if-statement
@@ -143,7 +147,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
         if invNodes.nonEmpty then
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else
-        val inv = for expr <- invNodes yield checkType(expr, core.boolType, ctx)
+        val inv = for expr <- invNodes yield checkType(expr, core.BoolType, ctx)
         out += core.While(e, b, inv)
       ctx
 

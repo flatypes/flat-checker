@@ -1,8 +1,8 @@
 package flat.checker.py
 
-import flat.checker.Issuer
-import flat.checker.backend.core
-import flat.checker.backend.core.Ident
+import flat.Issuer
+import flat.checker.core
+import flat.checker.core.Ident
 import flat.checker.py.ast.*
 
 import scala.collection.mutable
@@ -39,6 +39,7 @@ final class Transpiler:
   given issuer: Issuer = new Issuer
 
   private val annotChecker = new AnnotChecker
+
   import annotChecker.checkAnnot
 
   def transpile(tree: List[TopStmt]): List[core.Program] =

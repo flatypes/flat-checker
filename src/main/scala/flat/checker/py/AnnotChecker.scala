@@ -1,9 +1,9 @@
 package flat.checker.py
 
-import flat.checker.Bound.{NegInf, PosInf}
-import flat.checker.backend.core
-import flat.checker.py.ast.*
 import flat.checker.*
+import flat.checker.py.ast.*
+import flat.regex.{REParser, RegExpr}
+import flat.{Issuer, Location}
 
 class AnnotChecker(using issuer: Issuer):
   def checkAnnot(annot: Expr, ctx: GCtx): core.Type = annot.accept(Visitor, ctx)
@@ -18,8 +18,8 @@ class AnnotChecker(using issuer: Issuer):
           core.NoType
         case None =>
           x match
-            case "int" => core.intType
-            case "bool" => core.boolType
+            case "int" => core.IntType
+            case "bool" => core.BoolType
             case "str" => core.strType
             case "Char" => core.charType
             case "Callable" => "Callable"
@@ -77,27 +77,10 @@ class AnnotChecker(using issuer: Issuer):
                   core.NoType
             case "Literal" =>
               node.index match
-                case Constant(v) => core.literalType(v)
+                case Constant(s: String) => core.literalType(s)
                 case _ =>
                   issuer.report(TypeError(
-                    "invalid argument for typing.Literal\n" + "expect a constant", node.index.loc))
-                  core.NoType
-            case "range" =>
-              node.index match
-                case Slice(lower, upper) if matchesRangeBound(lower) && matchesRangeBound(upper) =>
-                  val lb: Bound = lower match
-                    case None => NegInf
-                    case Some(Constant(n: Int)) => n
-                    case _ => assert(false)
-                  val ub: Bound = upper match
-                    case None => PosInf
-                    case Some(Constant(n: Int)) => n
-                    case _ => assert(false)
-                  core.IntervalType(Interval(lb, ub))
-                case _ =>
-                  issuer.report(TypeError(
-                    "invalid argument for flat.py.range\n" + "expect a range of two constant integers: range[lb:ub]",
-                    node.index.loc))
+                    "invalid argument for typing.Literal\n" + "expect a constant string", node.index.loc))
                   core.NoType
             case "lang" =>
               node.index match
@@ -150,9 +133,9 @@ class AnnotChecker(using issuer: Issuer):
       issuer.report(TypeError("expect a type", node.loc))
       core.NoType
 
-    def parseReExpr(input: CharSequence, loc: Location): ReLang =
-      RegexParser(input) match
+    def parseReExpr(input: CharSequence, loc: Location): RegExpr =
+      REParser.tryParse(input) match
         case Left(detail) =>
           issuer.report(SyntaxError(detail, loc))
-          ReLang.empty
+          RegExpr.RENone
         case Right(r) => r

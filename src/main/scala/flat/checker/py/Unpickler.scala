@@ -1,8 +1,8 @@
 package flat.checker.py
 
-import flat.checker.backend.core.Ident
+import flat.checker.core.Ident
 import flat.checker.py.ast.*
-import flat.checker.{Document, Issuer, Location, Position}
+import flat.{Document, Issuer, Location, Position}
 
 import scala.collection.mutable.ListBuffer
 import scala.sys.process.{ProcessLogger, stringSeqToProcess}
