@@ -15,7 +15,7 @@ import flat.checker.SolverResult.*
 object SMTSolver extends LazyLogging:
   private val smt = TermManager()
 
-  def prove(goal: Expr)(using pCtx: ProofCtx): SolverResult =
+  def prove(goal: Expr)(using pCtx: PrfCtx): SolverResult =
     val slv = Solver(smt)
     slv.setLogic("ALL")
     slv.setOption("produce-models", "true")
@@ -38,7 +38,7 @@ object SMTSolver extends LazyLogging:
       Invalid(values.mkString("\n"))
     else Invalid("solver error: " + result.getUnknownExplanation.toString)
 
-  def canProve(lemma: Expr)(using ctx: ProofCtx): Boolean =
+  def canProve(lemma: Expr)(using ctx: PrfCtx): Boolean =
     prove(lemma) match
       case SolverResult.Valid => true
       case _ => false

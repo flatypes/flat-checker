@@ -4,17 +4,16 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.checker.core.*
 import flat.regex.*
 
-class SuffixRefiner(using ctx: ProofCtx) extends LazyLogging:
+class SuffixRefiner(using ctx: PrfCtx) extends LazyLogging:
 
   import CmpOp.*
   import RegExpr.*
 
-  private val premises = ctx.assumptions
   private val types = ctx.types
 
   def refineSuffix(baseStr: Expr, baseIdx: Expr, r0: RegExpr): RegExpr =
     var r = r0
-    premises.foreach {
+    ctx.foreach {
       case Cmp(op@(EQ | NE), StrAt(es, ei), Const(s: String)) if es == baseStr && s.length == 1 =>
         for
           k <- Rewriter.tryGetConstDiff(ei, baseIdx)
@@ -27,13 +26,18 @@ class SuffixRefiner(using ctx: ProofCtx) extends LazyLogging:
     r
 
   private def extractSuffixLang(str: Expr): Option[(Expr, RegExpr)] =
-    premises.collectFirst {
+    ctx.collectFirst {
       case TypeTest(StrSlice(e1, ei, StrLen(e2)), LangType(r)) if e1 == str && e2 == str => (ei, r)
     }
 
   def refineBySomeCharNotEqual(re: RegExpr, c: Char): RegExpr = re match
     case REUnion(r1, r2) => mkUnion(List(r1, r2).filter(r => (REOps.alphabet(r) & CharSet(false, Set(c))).nonEmpty))
     case _ => re
+
+  def refineByEqual(re: RegExpr, s: String): RegExpr =
+    if s.isEmpty then
+      if re.nullable then RENull else RENone
+    else ???
 
   def refineByNotEqual(re: RegExpr, s: String): RegExpr = s.length match
     case 0 => RERefiner.refineByLen(re, (GT, 0))

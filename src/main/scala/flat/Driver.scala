@@ -3,16 +3,16 @@ package flat
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.core.Program
 import flat.checker.py.{Transpiler, Unpickler}
-import flat.checker.{Types, VCGen, VCProver}
+import flat.checker.{Prover, Types, VCGen}
 
 object Driver extends LazyLogging:
   def check(programs: List[Program]): Unit =
     for program <- programs do
       val vc = VCGen.generate(program)
-      logger.debug(s"VC: $vc")
       val types = Types.from(program.vars)
-      val prover = new VCProver(using types = types)
+      val prover = new Prover(using types = types)
       prover.prove(vc)
+      prover.issuer.ensureNoError()
     logger.info("Check OK")
 
   def checkPython(path: os.Path): Unit =

@@ -141,6 +141,8 @@ object core:
           }
       results.toList
 
+    def collectFirst[T](pf: PartialFunction[Expr, T]): Option[T] = collect(pf).headOption
+
     def collectVars: Set[String] = collect { case Var(x) => x }.toSet
 
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T
@@ -213,7 +215,9 @@ object core:
         case Some(e) => e
         case None => TypeTest(value.transform(pf), typ)
 
-    override def toString: String = s"$value is $typ"
+    override def toString: String = typ match
+      case LangType(r) => s"$value : $r"
+      case _ => s"$value : $typ"
 
   // builtin functions/operations
   final case class And(left: Expr, right: Expr) extends Expr:

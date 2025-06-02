@@ -5,13 +5,14 @@ import flat.checker.SolverResult.Valid
 import flat.checker.core.*
 import flat.util.tryAll
 
-class IndexSolver(using ctx: ProofCtx) extends LazyLogging:
+import scala.Function.unlift
+
+class IndexSolver(using ctx: PrfCtx) extends LazyLogging:
 
   import ArithOp.*
   import CmpOp.*
   import Direction.*
 
-  private val premises = ctx.assumptions
   private val types = ctx.types
 
   def solve(expr: Expr, str: Expr): AbsIndex =
@@ -32,10 +33,10 @@ class IndexSolver(using ctx: ProofCtx) extends LazyLogging:
     case _ => None
 
   private def inferIndexVar(variable: Var, str: Expr): AbsIndex =
-    val constraints = premises.flatMap {
+    val constraints = ctx.collect(unlift {
       case cond: Cmp => Rewriter.push(variable, cond)
       case _ => None
-    }
+    })
     logger.debug(s"infer $variable: constraints: $constraints")
 
     val eqs = constraints.flatMap {
