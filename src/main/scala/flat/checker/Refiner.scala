@@ -1,6 +1,7 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.Config
 import flat.checker.core.*
 import flat.regex.{CharSet, REOps, RERefiner, RegExpr}
 
@@ -14,14 +15,14 @@ object Refiner extends LazyLogging:
 
   private val m = mutable.HashMap.empty[Expr, RegExpr]
 
-  def refine(ctx: PrfCtx): PrfCtx =
+  def refine(ctx: PrfCtx)(using config: Config): PrfCtx =
     m.clear()
     ctx.foreach { cond => for e -> r <- refine(cond)(using ctx) do m(e) = r }
     if m.nonEmpty then
       for e -> r <- m do logger.debug(s"refine $e : $r")
     ctx ++ List.from(for e -> r <- m yield TypeTest(e, LangType(r)))
 
-  private def refine(assumption: Expr)(using ctx: PrfCtx): Option[(Expr, RegExpr)] =
+  private def refine(assumption: Expr)(using ctx: PrfCtx, config: Config): Option[(Expr, RegExpr)] =
     assumption match
       case Cmp(op, StrLen(Var(x)), Const(n: Int)) =>
         for r <- getNonEmptyLang(x) yield (Var(x) -> RERefiner.refineByLen(r, (op, n)))
@@ -51,7 +52,7 @@ object Refiner extends LazyLogging:
     s.head
 
   private def refineByCharAt(str: Expr, lang: RegExpr, idx: Expr, op: CmpOp, c: Char)
-                            (using ctx: PrfCtx): Option[(Expr, RegExpr)] =
+                            (using ctx: PrfCtx, config: Config): Option[(Expr, RegExpr)] =
     val solution = for
       (base, r) <- ctx.collectFirst {
         case TypeTest(StrSlice(e1, i, StrLen(e2)), LangType(r)) if e1 == str && e2 == str => (i, r)

@@ -1,6 +1,7 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.Config
 import flat.checker.core.*
 import flat.regex.*
 import flat.regex.RegExpr.*
@@ -8,7 +9,7 @@ import flat.util.tryAll
 
 import scala.collection.mutable.ListBuffer
 
-class HintSynth(using ctx: PrfCtx) extends LazyLogging:
+class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
 
   import ArithOp.*
   import CmpOp.*
@@ -19,6 +20,8 @@ class HintSynth(using ctx: PrfCtx) extends LazyLogging:
   private val types = ctx.types
 
   private val indexSolver = new IndexSolver
+
+  private val smtSolver = new SMTSolver
 
   def collectHints(seed: Expr): List[Expr] =
     val temps = seed.collect {
@@ -44,7 +47,7 @@ class HintSynth(using ctx: PrfCtx) extends LazyLogging:
       tryAll(
         () => for
           (ei, r) <- extractSuffixLang(expr.str)
-          if SMTSolver.canProve(mkAnd(GE(ei, 0), LT(ei, expr)))
+          if smtSolver.canProve(mkAnd(GE(ei, 0), LT(ei, expr)))
         yield
           val r1 = RERefiner.refineByLen(r, (GT, 0))
           val NatRange(lb, ub) = REOps.length(r1)
@@ -170,7 +173,7 @@ class HintSynth(using ctx: PrfCtx) extends LazyLogging:
       logger.debug(s"infer $es[$ei:$ej]")
       tryAll(
         () =>
-          if SMTSolver.canProve(GE(ei, StrLen(es))) then Some(RENull)
+          if smtSolver.canProve(GE(ei, StrLen(es))) then Some(RENull)
           else None,
         () => for
           (from, r) <- extractSuffixLang(es)

@@ -1,7 +1,6 @@
 package flat
 
-import flat.DiagnosticSeverity.{ERROR, FATAL}
-import flat.{Diagnostic, DiagnosticSeverity}
+import flat.DiagnosticSeverity.ERROR
 
 import java.io.PrintStream
 import scala.collection.mutable.ListBuffer

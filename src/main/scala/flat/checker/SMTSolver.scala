@@ -2,6 +2,8 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.core.*
+import flat.regex.RegExpr
+import flat.{Config, regex}
 import io.github.cvc5.{Sort as SMTSort, *}
 
 import scala.collection.mutable
@@ -12,20 +14,25 @@ enum SolverResult:
 
 import flat.checker.SolverResult.*
 
-object SMTSolver extends LazyLogging:
+class SMTSolver(using config: Config) extends LazyLogging:
   private val smt = TermManager()
 
   def prove(goal: Expr)(using pCtx: PrfCtx): SolverResult =
     val slv = Solver(smt)
     slv.setLogic("ALL")
     slv.setOption("produce-models", "true")
-    slv.setOption("tlimit-per", "3000")
+    slv.setOption("tlimit-per", config.smtTimeLimit.toString)
 
     val vars = (goal :: pCtx.assumptions).flatMap(_.collectVars).toSet
     val ctxBuf = mutable.Map.empty[String, Term]
     for x <- vars do
       val s = encodeType(pCtx.types(x))
       ctxBuf(x) = smt.mkConst(s, x)
+      if config.smtOnly then
+        pCtx.types(x) match
+          case LangType(r) => slv.assertFormula(smt.mkTerm(Kind.STRING_IN_REGEXP, ctxBuf(x), encodeRegExpr(r)))
+          case _ =>
+
     val ctx = ctxBuf.toMap
     for e <- pCtx.assumptions do slv.assertFormula(encodeExpr(e, ctx))
     slv.assertFormula(encodeExpr(goal, ctx).notTerm)
@@ -43,37 +50,6 @@ object SMTSolver extends LazyLogging:
       case SolverResult.Valid => true
       case _ => false
 
-  class Interactive(using types: Types):
-    private val slv = Solver(smt)
-    slv.setLogic("ALL")
-    slv.setOption("produce-models", "true")
-    slv.setOption("tlimit-per", "3000")
-
-    private val ctxBuf = mutable.Map.empty[String, Term]
-
-    def addPremises(premises: List[Expr]): Unit =
-      val vars = premises.flatMap(_.collectVars).toSet
-      for x <- vars do
-        val s = encodeType(types(x))
-        ctxBuf(x) = smt.mkConst(s, x)
-      val ctx = ctxBuf.toMap
-      for e <- premises do slv.assertFormula(encodeExpr(e, ctx))
-
-    def canProve(lemma: Expr): Boolean =
-      slv.push()
-      val vars = lemma.collectVars
-      for
-        x <- vars
-        if !ctxBuf.contains(x)
-      do
-        val s = encodeType(types(x))
-        ctxBuf(x) = smt.mkConst(s, x)
-      val ctx = ctxBuf.toMap
-      slv.assertFormula(encodeExpr(lemma, ctxBuf.toMap).notTerm)
-      val result = slv.checkSat()
-      slv.pop()
-      result.isUnsat
-
   private def encodeType(typ: Type): SMTSort = typ.toSort match
     case Sort.Top => assert(false)
     case Sort.Bot => assert(false)
@@ -83,6 +59,38 @@ object SMTSolver extends LazyLogging:
     case Sort.Tuple(ts) => smt.mkTupleSort(ts.map(encodeType(_)).toArray)
     case Sort.Array(t) => smt.mkArraySort(smt.getIntegerSort, encodeType(t))
     case Sort.Fun(ts, t) => smt.mkFunctionSort(ts.map(encodeType(_)).toArray, encodeType(t))
+
+  import RegExpr.*
+
+  private def encodeRegExpr(re: RegExpr): Term = re match
+    case RENone => smt.mkTerm(Kind.REGEXP_NONE)
+    case RENull => smt.mkTerm(Kind.STRING_TO_REGEXP, smt.mkString(""))
+    case REChar(cs) =>
+      if cs.isFull then smt.mkTerm(Kind.REGEXP_ALLCHAR)
+      else
+        val t =
+          if cs.chars.size == 1 then encodeRegExprChar(cs.chars.head)
+          else smt.mkTerm(Kind.REGEXP_UNION, cs.chars.map(encodeRegExprChar).toArray)
+        if cs.polarity then t else smt.mkTerm(Kind.REGEXP_DIFF, smt.mkTerm(Kind.REGEXP_ALLCHAR), t)
+    case REConcat(r1, r2) =>
+      val t1 = encodeRegExpr(r1)
+      val t2 = encodeRegExpr(r2)
+      smt.mkTerm(Kind.REGEXP_CONCAT, t1, t2)
+    case REUnion(r1, r2) =>
+      val t1 = encodeRegExpr(r1)
+      val t2 = encodeRegExpr(r2)
+      smt.mkTerm(Kind.REGEXP_UNION, t1, t2)
+    case RELoop(range, r) =>
+      val t = encodeRegExpr(r)
+      val m1 = range.lower
+      range.upper match
+        case Some(m2) => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m1, m2), t)
+        case None => // r^m1 r*
+          smt.mkTerm(Kind.REGEXP_CONCAT,
+            smt.mkTerm(smt.mkOp(Kind.REGEXP_REPEAT, m1), t), smt.mkTerm(Kind.REGEXP_STAR, t))
+
+  private inline def encodeRegExprChar(char: Char): Term =
+    smt.mkTerm(Kind.STRING_TO_REGEXP, smt.mkString(char.toString))
 
   private type Ctx = Map[String, Term]
 
@@ -107,7 +115,11 @@ object SMTSolver extends LazyLogging:
       val terms = for elem <- node.elems yield elem.accept(this, ctx)
       smt.mkTuple(terms.toArray)
 
-    override def visitTypeTest(node: TypeTest, ctx: Ctx): Term = smt.mkConst(smt.getBooleanSort)
+    override def visitTypeTest(node: TypeTest, ctx: Ctx): Term = node.typ match
+      case LangType(r) if config.smtOnly =>
+        val t = node.value.accept(this, ctx)
+        smt.mkTerm(Kind.STRING_IN_REGEXP, t, encodeRegExpr(r))
+      case _ => smt.mkConst(smt.getBooleanSort)
 
     override def visitAnd(node: And, ctx: Ctx): Term =
       val b1 = node.left.accept(this, ctx)

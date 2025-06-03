@@ -1,11 +1,10 @@
 package flat.checker
 
-import com.typesafe.scalalogging.LazyLogging
-import flat.Issuer
+import flat.Config
 import flat.checker.core.*
 
-class Prover(using types: Types) extends LazyLogging:
-  private final class Config(val withSMT: Boolean = false, val withHints: Boolean = false):
+class Prover(using types: Types, config: Config) extends VCPrf:
+  protected final class Config(val withSMT: Boolean = false, val withHints: Boolean = false):
     def |(that: Config): Config = Config(withSMT || that.withSMT, withHints || that.withHints)
 
     override def toString: String =
@@ -15,37 +14,7 @@ class Prover(using types: Types) extends LazyLogging:
         case (false, true) => "with hints"
         case (false, false) => "trivial"
 
-  import Formula.*
-
-  val issuer = new Issuer
-
-  def prove(goal: Formula)(using ctx: PrfCtx = PrfCtx.empty): Unit = goal match
-    case True =>
-    case HasType(e, t, _) =>
-      logger.debug("")
-      logger.debug(s"Goal: $ctx ⇒ $e : $t")
-      processTypeTest(e, t) match
-        case Right(config) =>
-          logger.debug(s"Proved $config")
-        case Left(actual) =>
-          issuer.report(TypeMayMismatch(t.toString, actual, e.loc))
-          logger.debug(s"Failed")
-    case Goal(e, err) =>
-      logger.debug("")
-      logger.debug(s"Goal: $ctx ⇒ $e")
-      process(e) match
-        case Right(config) =>
-          logger.debug(s"Proved $config")
-        case Left(_) =>
-          issuer.report(err)
-          logger.debug(s"Failed")
-    case LAnd(goal1, goal2) =>
-      prove(goal1)
-      prove(goal2)
-    case LImp(e, goal) =>
-      prove(goal)(using ctx + e)
-
-  private def process(conclusion: Expr)(using ctx: PrfCtx): Either[String, Config] =
+  protected def process(conclusion: Expr)(using ctx: PrfCtx): Either[String, Config] =
     if ctx.canTriviallyProve(conclusion) then
       return Right(Config())
 
@@ -115,22 +84,24 @@ class Prover(using types: Types) extends LazyLogging:
     case _ =>
       throw UnsupportedOperationException(s"check $expr : $typ")
 
+  private val smtSolver = new SMTSolver
+
   private def processProp(conclusion: Expr)(using ctx: PrfCtx): Either[String, Config] =
     // First try: without any hints
     if ctx.canTriviallyProve(conclusion) then
       return Right(Config())
-    if SMTSolver.canProve(conclusion) then
+    if smtSolver.canProve(conclusion) then
       return Right(Config(withSMT = true))
 
     // Second try: with refinement
     val ctx1 = Refiner.refine(ctx)
     if ctx1.canTriviallyProve(conclusion) then
       return Right(Config(withHints = true))
-    if SMTSolver.canProve(conclusion)(using ctx1) then
+    if smtSolver.canProve(conclusion)(using ctx1) then
       return Right(Config(withHints = true, withSMT = true))
 
     // Last try: with hints
-    val seeds = collectSeeds(conclusion)
+    val seeds = collectSeeds(conclusion).distinct
     val synth = HintSynth(using ctx1)
     val hints = seeds.flatMap(synth.collectHints).distinct
     if hints.nonEmpty then
@@ -138,7 +109,7 @@ class Prover(using types: Types) extends LazyLogging:
       logger.debug("hints: " + hints.mkString(" ∧ "))
       if ctx2.canTriviallyProve(conclusion) then
         return Right(Config(withHints = true))
-      if SMTSolver.canProve(conclusion)(using ctx2) then
+      if smtSolver.canProve(conclusion)(using ctx2) then
         return Right(Config(withHints = true, withSMT = true))
 
     // Otherwise: not proved

@@ -1,19 +1,21 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.Config
 import flat.checker.SolverResult.Valid
 import flat.checker.core.*
 import flat.util.tryAll
 
 import scala.Function.unlift
 
-class IndexSolver(using ctx: PrfCtx) extends LazyLogging:
+class IndexSolver(using ctx: PrfCtx, config: Config) extends LazyLogging:
 
   import ArithOp.*
   import CmpOp.*
   import Direction.*
 
   private val types = ctx.types
+  private val smtSolver = new SMTSolver
 
   def solve(expr: Expr, str: Expr): AbsIndex =
     evalIndex(expr, str) match
@@ -81,5 +83,5 @@ class IndexSolver(using ctx: PrfCtx) extends LazyLogging:
     logger.debug(s"lb: $lb  ub: $ub")
     // check soundness
     val lemma = mkAnd(GE(variable, lb.toExpr), LE(variable, ub.toExpr))
-    assert(SMTSolver.prove(lemma) == Valid, "index solver unsound")
+    assert(smtSolver.prove(lemma) == Valid, "index solver unsound")
     if lb == ub then lb else IndexRange(lb, ub)
