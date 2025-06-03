@@ -15,7 +15,7 @@ class PrfCtx private(hypotheses: List[Expr])(using val types: Types) extends Laz
 
   def exists(p: Expr => Boolean): Boolean = hypotheses.exists(p)
 
-  def exists(pf: PartialFunction[Expr, Unit]): Boolean = exists(x => pf.lift(x).isDefined)
+  def exists(pf: PartialFunction[Expr, Boolean]): Boolean = exists(x => pf.lift(x).getOrElse(false))
 
   def collectFirst[T](pf: PartialFunction[Expr, T]): Option[T] = hypotheses.collectFirst(pf)
 
@@ -47,18 +47,21 @@ class PrfCtx private(hypotheses: List[Expr])(using val types: Types) extends Laz
       (ctx1, ctx2)
   }
 
-  def getLang(value: Expr): Option[RegExpr] = hypotheses.reverse.collectFirst {
-    case TypeTest(e, LangType(r)) if e == value => r
-  }
-
-  def getLang(name: String): RegExpr = getLang(Var(name)).getOrElse(types(name).asInstanceOf[LangType].re)
+  def getLang(value: Expr): RegExpr =
+    hypotheses.reverse.collectFirst {
+      case TypeTest(e, LangType(r)) if e == value => r
+    }.getOrElse {
+      value match
+        case Var(x) => types(x).asInstanceOf[LangType].re
+        case _ => throw IllegalArgumentException(s"regex not found: $value")
+    }
 
   def +(cond: Expr): PrfCtx = PrfCtx(hypotheses ++ destructAnd(simplifyCond(cond)))
 
   def ++(conds: List[Expr]): PrfCtx = PrfCtx(hypotheses ++ conds.map(simplifyCond).flatMap(destructAnd))
 
   def canTriviallyProve(conclusion: Expr): Boolean =
-    contains(conclusion) || contains(Const(false)) || exists { case TypeTest(_, LangType(RENone)) => () }
+    contains(conclusion) || contains(Const(false)) || exists { case TypeTest(_, LangType(RENone)) => true }
 
   override def toString: String = hypotheses.mkString(" ∧ ")
 

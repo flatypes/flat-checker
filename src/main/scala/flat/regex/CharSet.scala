@@ -52,6 +52,10 @@ final class CharSet(val polarity: Boolean, val chars: Set[Char]):
     else if polarity then /* !other.polarity */ (chars & other.chars).isEmpty
     else /* !polarity && other.polarity */ false
 
+  def --(other: CharSet): CharSet =
+    require(polarity && other.polarity)
+    CharSet(true, chars -- other.chars)
+
   def --(exclude: Set[Char]): CharSet =
     if polarity then CharSet(true, chars -- exclude)
     else CharSet(false, chars | exclude)

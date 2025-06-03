@@ -98,12 +98,3 @@ object Rewriter:
       if baseTerms.length == 1
       ns <- forallIntConst(otherTerms)
     yield ns.sum
-
-  def destructIte(expr: Expr, cond: Expr): Option[(Expr, Expr)] =
-    val e1 = expr.transform {
-      case Ite(e, e1, _) if e == cond => e1
-    }
-    val e2 = expr.transform {
-      case Ite(e, _, e2) if e == cond => e2
-    }
-    if e1 != expr then Some((e1, e2)) else None
