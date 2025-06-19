@@ -64,7 +64,7 @@ object RERefiner:
       for
         (rl, rr) <- cuts
         r = refineByLen(rl, constraint)
-        if constraint != RENone
+        if r != RENone
       yield mkConcat(r, rc, rr)
 
   def refineByNotFound(r: RegExpr, c: Char): RegExpr =

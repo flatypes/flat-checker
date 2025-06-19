@@ -1,12 +1,14 @@
 package flat
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.*
 import flat.checker.py.{Transpiler, Unpickler}
-import flat.checker.{Prover, SMTProver, Types, VCGen}
+
+import java.io.File
 
 final case class Config(inputs: Seq[String] = Seq.empty,
                         smtOnly: Boolean = false, smtTimeLimit: Int = 3000,
-                        fastExit: Boolean = false)
+                        fastExit: Boolean = false, extractTo: Option[File] = None)
 
 object Driver extends LazyLogging:
   def run(using config: Config): Unit =
@@ -29,7 +31,10 @@ object Driver extends LazyLogging:
     for program <- programs do
       val vc = VCGen.generate(program)
       val types = Types.from(program.vars)
-      val prover = if config.smtOnly then SMTProver(using types = types) else Prover(using types = types)
+      val prover =
+        if config.extractTo.isDefined then VCExtract(path)(using types = types)
+        else if config.smtOnly then SMTProver(using types = types)
+        else Prover(using types = types)
       prover.prove(vc)
       if config.fastExit then prover.issuer.ensureNoError()
       else prover.issuer.print()

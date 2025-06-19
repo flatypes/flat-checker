@@ -2,6 +2,8 @@ package flat
 
 import scopt.OParser
 
+import java.io.File
+
 object CLI:
   private val builder = OParser.builder[Config]
 
@@ -23,6 +25,11 @@ object CLI:
       opt[Unit]("fast-exit")
         .action { (_, c) => c.copy(fastExit = true) }
         .text("immediately exit upon the first error occurred"),
+      // option --smt-extract
+      opt[File]("extract-only")
+        .action { (f, c) => c.copy(extractTo = Some(f)) }
+        .valueName("<folder>")
+        .text("do not solve but only extract proof obligations as SMT queries"),
       help('h', "help").text("print this usage text"),
       arg[Seq[String]]("<file>...")
         .unbounded()

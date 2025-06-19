@@ -17,7 +17,7 @@ import flat.checker.SolverResult.*
 class SMTSolver(using config: Config) extends LazyLogging:
   private val smt = TermManager()
 
-  def prove(goal: Expr)(using pCtx: PrfCtx): SolverResult =
+  def create(goal: Expr)(using pCtx: PrfCtx): (Solver, Map[String, Term]) =
     val slv = Solver(smt)
     slv.setLogic("ALL")
     slv.setOption("produce-models", "true")
@@ -28,7 +28,7 @@ class SMTSolver(using config: Config) extends LazyLogging:
     for x <- vars do
       val s = encodeType(pCtx.types(x))
       ctxBuf(x) = smt.mkConst(s, x)
-      if config.smtOnly then
+      if config.extractTo.isDefined || config.smtOnly then
         pCtx.types(x) match
           case LangType(r) => slv.assertFormula(smt.mkTerm(Kind.STRING_IN_REGEXP, ctxBuf(x), encodeRegExpr(r)))
           case _ =>
@@ -36,6 +36,10 @@ class SMTSolver(using config: Config) extends LazyLogging:
     val ctx = ctxBuf.toMap
     for e <- pCtx.assumptions do slv.assertFormula(encodeExpr(e, ctx))
     slv.assertFormula(encodeExpr(goal, ctx).notTerm)
+    (slv, ctx)
+
+  def prove(goal: Expr)(using pCtx: PrfCtx): SolverResult =
+    val (slv, ctx) = create(goal)
     val result = slv.checkSat()
     if result.isUnsat then Valid
     else if result.isSat then
@@ -115,11 +119,31 @@ class SMTSolver(using config: Config) extends LazyLogging:
       val terms = for elem <- node.elems yield elem.accept(this, ctx)
       smt.mkTuple(terms.toArray)
 
-    override def visitTypeTest(node: TypeTest, ctx: Ctx): Term = node.typ match
-      case LangType(r) if config.smtOnly =>
-        val t = node.value.accept(this, ctx)
-        smt.mkTerm(Kind.STRING_IN_REGEXP, t, encodeRegExpr(r))
-      case _ => smt.mkConst(smt.getBooleanSort)
+    override def visitTypeTest(node: TypeTest, ctx: Ctx): Term =
+      if config.extractTo.isDefined || config.smtOnly then
+        node.typ match
+          case LangType(r) =>
+            val t = node.value.accept(this, ctx)
+            smt.mkTerm(Kind.STRING_IN_REGEXP, t, encodeRegExpr(r))
+          case TupleType(ts) if ts.forall(_.isInstanceOf[LangType]) =>
+            val rs = ts.map(_.asInstanceOf[LangType].re)
+            node.value match
+              case TupleExpr(es) if es.length == ts.length =>
+                val tests = for i <- rs.indices yield
+                  val ei = es(i).accept(this, ctx)
+                  smt.mkTerm(Kind.STRING_IN_REGEXP, ei, encodeRegExpr(rs(i)))
+                tests.reduce(_.andTerm(_))
+              case _ =>
+                val t = node.value.accept(this, ctx)
+                val dt = t.getSort.getDatatype
+                val tests = for i <- rs.indices yield
+                  val ti = smt.mkTerm(Kind.APPLY_SELECTOR, dt.getConstructor(0).getSelector(i).getTerm, t)
+                  smt.mkTerm(Kind.STRING_IN_REGEXP, ti, encodeRegExpr(rs(i)))
+                tests.reduce(_.andTerm(_))
+          case _ =>
+            throw UnsupportedOperationException(node.toString)
+      else
+        smt.mkConst(smt.getBooleanSort)
 
     override def visitAnd(node: And, ctx: Ctx): Term =
       val b1 = node.left.accept(this, ctx)
