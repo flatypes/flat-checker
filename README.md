@@ -2,7 +2,12 @@
 
 Type checking regular language types.
 
-## Dependencies
+## Build (Via Docker)
+
+Simply run `docker build . -t flat-checker:dev` to build a Docker image.
+If succeeds, launch it by `docker run -it flat-checker:dev`.
+
+## Build (From Source)
 
 For building this Scala project, you need [sbt](https://www.scala-sbt.org) (in this project: version `1.10.0`).
 
@@ -12,9 +17,8 @@ folder.
 But you need to compile a shared library on your local machine and if necessary, add it to your Java library path so
 that JVM can correctly load it.
 For example, on macOS (M1 and later), you may need to copy `libcvc5jni.dylib` to `~/Library/Java/Extensions/lib/`.
+Also, you should copy the `cvc5.jar` from the CVC5 folder into the `lib/` folder of this project.
 See [here](https://cvc5.github.io/docs/cvc5-1.2.0/api/java/java.html) for more details on building the Java bindings.
-
-## Build
 
 In the project root folder:
 
