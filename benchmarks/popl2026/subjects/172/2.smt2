@@ -1,0 +1,11 @@
+; Input: /Users/paul/Workspace/flat-checker/examples/panini-bench/172.py
+(set-logic ALL)
+(declare-const s String)
+(declare-const i@1 Int)
+(assert (let ((_let_1 (re.diff re.allchar (str.to_re "a")))) (str.in_re s (re.++ ((_ re.^ 0) _let_1) (re.* _let_1)))))
+(assert (< i@1 (str.len s)))
+(assert (>= i@1 0))
+(assert (<= i@1 (str.len s)))
+(assert (not (and (>= i@1 0) (< i@1 (str.len s)))))
+(check-sat)
+(exit)
