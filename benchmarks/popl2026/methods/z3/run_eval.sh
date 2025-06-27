@@ -11,7 +11,7 @@ results_table="$results_dir/results.csv"
 
 mkdir -p $results_dir
 
-echo "subject,goal,time_ms,status" | tee $results_table
+echo "subject,goal,time_ms,status,result" | tee $results_table
 
 find "$subjects_dir" -mindepth 2 -maxdepth 2 -type f -name "*.smt2" | sort -n | while read -r filepath; do
   filename=$(basename "$filepath")

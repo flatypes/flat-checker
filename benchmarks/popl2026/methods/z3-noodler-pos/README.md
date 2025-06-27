@@ -10,20 +10,17 @@ curl -o pldi-artifact.zip https://zenodo.org/records/15230216/files/pldi-artifac
 
 To ensure the integrity of the download you can compare its MD5 checksum with the reference `4961b33ce02accfe1ce01e14ec1cf0e5`.
 
-## 2. Unzip the artifact
+## 2. Unzip the artifact and load the pre-built Docker container
 
 ```shell
 unzip pldi-artifact.zip -d artifact
-```
-
-## 3. Load the pre-built Docker container
-
-```shell
 cd artifact
 docker load -i position-constraints-artifact.tar
 ```
 
-## 4. Run the evaluation
+## 3. Run the evaluation
+
+This should take about 1 minute.
 
 ```shell
 docker run --entrypoint /benchmark/methods/z3-noodler-pos/run_eval.sh -v $(realpath ../../../):/benchmark pldi-artifact:latest

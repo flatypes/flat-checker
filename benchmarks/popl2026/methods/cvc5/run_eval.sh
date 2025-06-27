@@ -11,7 +11,7 @@ results_table="$results_dir/results.csv"
 
 mkdir -p $results_dir
 
-echo "subject,goal,time_ms,status" | tee $results_table
+echo "subject,goal,time_ms,status,result" | tee $results_table
 
 exec 2> error.log
 

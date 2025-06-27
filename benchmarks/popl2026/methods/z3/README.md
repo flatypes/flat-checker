@@ -10,6 +10,8 @@ docker build . -t z3:4.15.1
 
 ## 2. Run the evaluation
 
+This should take about 5 minutes.
+
 ```shell
 docker run --entrypoint /benchmark/methods/z3/run_eval.sh -v $(realpath ../../):/benchmark z3:4.15.1
 ```
