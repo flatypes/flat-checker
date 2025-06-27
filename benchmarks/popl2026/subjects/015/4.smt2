@@ -1,4 +1,4 @@
-; Input: /Users/paul/Workspace/flat-checker/examples/panini-bench/015.py
+; Input: /benchmark/subjects/015.py
 (set-logic ALL)
 (declare-const s String)
 (assert (str.in_re s re.allchar))

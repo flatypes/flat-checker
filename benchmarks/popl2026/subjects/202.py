@@ -6,6 +6,4 @@ def f202(s: Input):
     if s[i] != "a":
       break
     i += 1
-  assert i == len(s)-2
-
-# This is indeed wrong, f202('b'), i = 0
+  assert i == len(s)-1

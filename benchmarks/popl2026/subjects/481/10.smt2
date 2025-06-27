@@ -1,4 +1,4 @@
-; Input: /Users/paul/Workspace/flat-checker/examples/panini-bench/481.py
+; Input: /benchmark/subjects/481.py
 (set-logic ALL)
 (declare-const s String)
 (declare-const i@1 Int)

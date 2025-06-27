@@ -7,3 +7,4 @@ def f263(s: Input):
     assert s[0] == "a"
   else:
     assert len(s) == 1
+

@@ -15,6 +15,6 @@ def f240(s: Input):
   while i < len(s):
     inv(first_b <= i <= len(s))
     if s[i] != "b":
-      break;
+      break
     i += 1
   assert i == len(s)

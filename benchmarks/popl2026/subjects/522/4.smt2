@@ -1,4 +1,4 @@
-; Input: /Users/paul/Workspace/flat-checker/examples/panini-bench/522.py
+; Input: /benchmark/subjects/522.py
 (set-logic ALL)
 (declare-const i@1 Int)
 (assert (< i@1 2))

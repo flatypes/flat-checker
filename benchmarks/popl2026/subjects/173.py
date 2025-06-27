@@ -7,3 +7,4 @@ def f173(s: Input):
       break
     i += 1
   assert i == len(s)
+

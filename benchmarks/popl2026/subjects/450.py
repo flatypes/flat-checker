@@ -9,4 +9,4 @@ def f450(s: Input):
     assert s[i+1] != "a"
     assert s[i+1] != "b"
     assert s[i+2] == "b"
-    i += 3  # NOTE: original version is problematic
+    i += 3
