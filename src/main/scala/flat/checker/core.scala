@@ -87,6 +87,9 @@ object core:
   final case class Break() extends Stmt:
     def accept[C, T](visitor: StmtVisitor[C, T], ctx: C): T = visitor.visitBreak(this, ctx)
 
+  final case class ShowType(value: Expr) extends Stmt:
+    def accept[C, T](visitor: StmtVisitor[C, T], ctx: C): T = visitor.visitShowType(this, ctx)
+
   trait StmtVisitor[C, T]:
     def visitStmt(node: Stmt, ctx: C): T =
       throw UnsupportedOperationException("visit " + node.getClass.getCanonicalName)
@@ -102,6 +105,8 @@ object core:
     def visitWhile(node: While, ctx: C): T = visitStmt(node, ctx)
 
     def visitBreak(node: Break, ctx: C): T = visitStmt(node, ctx)
+
+    def visitShowType(node: ShowType, ctx: C): T = visitStmt(node, ctx)
 
   sealed trait Expr extends Node, Locational, Product:
     def walk(f: Expr => Unit): Unit =

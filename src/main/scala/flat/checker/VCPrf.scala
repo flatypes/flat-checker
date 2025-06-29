@@ -17,6 +17,7 @@ trait VCPrf(path: os.Path)(using types: Types) extends LazyLogging:
   def prove(goal: Formula)(using ctx: PrfCtx = PrfCtx.empty): Unit = goal match
     case True =>
     case g: HasType => proveHasType(g)
+    case g: InferType => inferType(g)
     case g: Goal => proveSubGoal(g)
     case LAnd(goal1, goal2) => prove(goal1); prove(goal2)
     case LImp(e, goal) => prove(goal)(using ctx + e)
@@ -68,6 +69,9 @@ trait VCPrf(path: os.Path)(using types: Types) extends LazyLogging:
           "success" -> ujson.Bool(false),
           "time (ms)" -> ujson.Num(elapsed),
         )
+
+  protected def inferType(goal: InferType)(using ctx: PrfCtx): Unit =
+    throw UnsupportedOperationException("infer type")
 
   final case class Setting(withSMT: Boolean = false, withHints: Boolean = false):
     def |(that: Setting): Setting = Setting(withSMT || that.withSMT, withHints || that.withHints)

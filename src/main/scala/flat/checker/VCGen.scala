@@ -11,6 +11,7 @@ import scala.collection.mutable
 enum Formula:
   case True
   case HasType(value: Expr, typ: Type, loc: Location)
+  case InferType(value: Expr, loc: Location)
   case Goal(boolExpr: Expr, err: TypeError)
   case LAnd(left: Formula, right: Formula)
   case LImp(premise: Expr, conclusion: Formula)
@@ -18,6 +19,7 @@ enum Formula:
   def subst(mappings: Map[String, Expr]): Formula = this match
     case True => True
     case HasType(e, t, loc) => HasType(e.subst(mappings), t, loc)
+    case InferType(e, loc) => InferType(e.subst(mappings), loc)
     case Goal(e, err) => Goal(e.subst(mappings), err)
     case LAnd(phi1, phi2) => LAnd(phi1.subst(mappings), phi2.subst(mappings))
     case LImp(e, phi) => LImp(e.subst(mappings), phi.subst(mappings))
@@ -25,6 +27,7 @@ enum Formula:
   override def toString: String = this match
     case True => "⊤"
     case HasType(e, t, _) => s"($e : $t)"
+    case InferType(e, _) => s"($e : ?)"
     case Goal(e, _) => s"$e"
     case LAnd(phi1, phi2) => s"($phi1 ∧ $phi2)"
     case LImp(e, phi) => s"$e ⇒ $phi"
@@ -110,6 +113,9 @@ object VCGen extends LazyLogging:
         mkLAnd(pInv, mkLAnd(sides.map(Goal(_, _))), pLoop.subst(m))
       case Break() => pInv
       case Return() => pReturn
+      case ShowType(e) =>
+        val sides = collectSideGoals(e)
+        mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(sides.map(_._1), InferType(e, e.loc)), post)
 
   @tailrec
   private def wlp(body: List[Stmt], post: Formula, pInv: Formula)
