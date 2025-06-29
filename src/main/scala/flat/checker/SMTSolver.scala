@@ -2,7 +2,7 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.core.*
-import flat.regex.RegExpr
+import flat.regex.{NatRange, RegExpr}
 import flat.{Config, regex}
 import io.github.cvc5.{Sort as SMTSort, *}
 
@@ -72,9 +72,9 @@ class SMTSolver(using config: Config) extends LazyLogging:
     case REChar(cs) =>
       if cs.isFull then smt.mkTerm(Kind.REGEXP_ALLCHAR)
       else
-        val t =
-          if cs.chars.size == 1 then encodeRegExprChar(cs.chars.head)
-          else smt.mkTerm(Kind.REGEXP_UNION, cs.chars.map(encodeRegExprChar).toArray)
+        val t = cs.chars.map(encodeRegExprChar).reduce(smt.mkTerm(Kind.REGEXP_UNION, _, _))
+        //          if cs.chars.size == 1 then encodeRegExprChar(cs.chars.head)
+        //          else smt.mkTerm(Kind.REGEXP_UNION, .toArray)
         if cs.polarity then t else smt.mkTerm(Kind.REGEXP_DIFF, smt.mkTerm(Kind.REGEXP_ALLCHAR), t)
     case REConcat(r1, r2) =>
       val t1 = encodeRegExpr(r1)
@@ -86,10 +86,13 @@ class SMTSolver(using config: Config) extends LazyLogging:
       smt.mkTerm(Kind.REGEXP_UNION, t1, t2)
     case RELoop(range, r) =>
       val t = encodeRegExpr(r)
-      val m1 = range.lower
-      range.upper match
-        case Some(m2) => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m1, m2), t)
-        case None => // r^m1 r*
+      range match
+        case NatRange(0, None) => smt.mkTerm(Kind.REGEXP_STAR, t)
+        case NatRange(1, None) => smt.mkTerm(Kind.REGEXP_PLUS, t)
+        case NatRange(0, Some(1)) => smt.mkTerm(Kind.REGEXP_OPT, t)
+        case NatRange(m, Some(m1)) if m1 == m => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m), t)
+        case NatRange(m1, Some(m2)) => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m1, m2), t)
+        case NatRange(m1, None) => // r^m1 r*
           smt.mkTerm(Kind.REGEXP_CONCAT,
             smt.mkTerm(smt.mkOp(Kind.REGEXP_REPEAT, m1), t), smt.mkTerm(Kind.REGEXP_STAR, t))
 

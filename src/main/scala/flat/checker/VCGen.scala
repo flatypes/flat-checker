@@ -136,6 +136,8 @@ object VCGen extends LazyLogging:
   private def collectSideGoals(expr: Expr): List[(Expr, TypeError)] = expr.walkAndCollect {
     case StrAt(str, index) => // 0 <= index < |str|
       (And(GE(index, 0), LT(index, StrLen(str))), IndexMayOutOfBounds(index.loc))
+    case StrSlice(_, fromIndex, untilIndex) => // both indices are non-negative
+      (And(GE(fromIndex, 0), GE(untilIndex, 0)), IndexMayOutOfBounds(expr.loc))
     //    case StrToCode(str) => // |str| == 1
     //      Goal(EQ(StrLen(str), 1), TypeMayMismatch("char (string of length 1)", "string", str.loc))
     //    case StrFromCode(int) => // 0 <= int <= 0x2FFFF
