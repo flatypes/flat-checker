@@ -9,4 +9,4 @@ def f451(s: Input):
     assert a == "a"
     assert b == "b"
     assert x != "a" and x != "b"
-    i += 3  # NOTE: original version is problematic
+    i += 3

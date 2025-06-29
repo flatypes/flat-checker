@@ -3,20 +3,10 @@ package flat.checker
 import flat.Config
 import flat.checker.core.*
 
-class Prover(using types: Types, config: Config) extends VCPrf:
-  protected final class Config(val withSMT: Boolean = false, val withHints: Boolean = false):
-    def |(that: Config): Config = Config(withSMT || that.withSMT, withHints || that.withHints)
-
-    override def toString: String =
-      (withSMT, withHints) match
-        case (true, true) => "with SMT + hints"
-        case (true, false) => "with SMT"
-        case (false, true) => "with hints"
-        case (false, false) => "trivial"
-
-  protected def process(conclusion: Expr)(using ctx: PrfCtx): Either[String, Config] =
+class Prover(path: os.Path)(using types: Types, config: Config) extends VCPrf(path):
+  protected def process(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
     if ctx.canTriviallyProve(conclusion) then
-      return Right(Config())
+      return Right(Setting())
 
     conclusion match
       case And(e1, e2) =>
@@ -32,7 +22,7 @@ class Prover(using types: Types, config: Config) extends VCPrf:
             for config1 <- process(e1)(using ctx1); config2 <- process(e2)(using ctx2) yield config1 | config2
           case None => processAtomic(e)
 
-  private def processAtomic(conclusion: Expr)(using ctx: PrfCtx): Either[String, Config] =
+  private def processAtomic(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
     logger.debug(s"SubGoal: $ctx ⇒ $conclusion")
     val result = conclusion match
       case TypeTest(e, t) => processTypeTest(e, t)
@@ -53,16 +43,16 @@ class Prover(using types: Types, config: Config) extends VCPrf:
       case Right(_) => logger.debug("SubGoal proved")
     result1
 
-  private def processTypeTest(expr: Expr, expected: Type)(using ctx: PrfCtx): Either[String, Config] =
+  private def processTypeTest(expr: Expr, expected: Type)(using ctx: PrfCtx): Either[String, Setting] =
     if ctx.canTriviallyProve(Const(false)) then
-      return Right(Config())
+      return Right(Setting())
 
     val ctx1 = Refiner.refine(ctx)
     if ctx1.canTriviallyProve(Const(false)) then
-      return Right(Config(withHints = true))
+      return Right(Setting(withHints = true))
 
     checkType(expr, expected)(using ctx1) match
-      case Right(_) => Right(Config(withHints = true))
+      case Right(_) => Right(Setting(withHints = true))
       case Left(actual) => Left(actual.toString)
 
   private def checkType(expr: Expr, typ: Type)(using ctx: PrfCtx): Either[Type, Unit] = typ match
@@ -86,19 +76,19 @@ class Prover(using types: Types, config: Config) extends VCPrf:
 
   private val smtSolver = new SMTSolver
 
-  private def processProp(conclusion: Expr)(using ctx: PrfCtx): Either[String, Config] =
+  private def processProp(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
     // First try: without any hints
     if ctx.canTriviallyProve(conclusion) then
-      return Right(Config())
+      return Right(Setting())
     if smtSolver.canProve(conclusion) then
-      return Right(Config(withSMT = true))
+      return Right(Setting(withSMT = true))
 
     // Second try: with refinement
     val ctx1 = Refiner.refine(ctx)
     if ctx1.canTriviallyProve(conclusion) then
-      return Right(Config(withHints = true))
+      return Right(Setting(withHints = true))
     if smtSolver.canProve(conclusion)(using ctx1) then
-      return Right(Config(withHints = true, withSMT = true))
+      return Right(Setting(withHints = true, withSMT = true))
 
     // Last try: with hints
     val seeds = collectSeeds(conclusion).distinct
@@ -108,9 +98,9 @@ class Prover(using types: Types, config: Config) extends VCPrf:
       val ctx2 = ctx1 ++ hints
       logger.debug("hints: " + hints.mkString(" ∧ "))
       if ctx2.canTriviallyProve(conclusion) then
-        return Right(Config(withHints = true))
+        return Right(Setting(withHints = true))
       if smtSolver.canProve(conclusion)(using ctx2) then
-        return Right(Config(withHints = true, withSMT = true))
+        return Right(Setting(withHints = true, withSMT = true))
 
     // Otherwise: not proved
     Left("")

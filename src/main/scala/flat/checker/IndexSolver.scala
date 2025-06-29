@@ -24,7 +24,9 @@ class IndexSolver(using ctx: PrfCtx, config: Config) extends LazyLogging:
         case x@Var(_) => inferIndexVar(x, str)
         case Arith(ADD, x@Var(_), Const(k: Int)) => inferIndexVar(x, str) + k
         case Arith(SUB, x@Var(_), Const(k: Int)) => inferIndexVar(x, str) - k
-        case _ => throw UnsupportedOperationException()
+        case Arith(ADD, StrFind(es, Const(s: String)), Const(k: Int)) if es == str && s.length == 1 =>
+          IndexOf(str, s.head, k)
+        case _ => throw UnsupportedOperationException(expr.toString)
 
   private def evalIndex(expr: Expr, str: Expr): Option[Index] = expr match
     case Const(n: Int) if n >= 0 => Some(IndexAt(str, L, n))
