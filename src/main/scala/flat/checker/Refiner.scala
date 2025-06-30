@@ -35,8 +35,8 @@ object Refiner extends LazyLogging:
       case Cmp(op, StrFind(Var(x), Const(s: String)), Const(n: Int)) if s.length == 1 =>
         val c = ensureChar(s)
         for r <- getNonEmptyLang(x) yield Var(x) -> RERefiner.refineByIndexOf(r, c, (op, n))
-      case Cmp(EQ, Var(x), Const("")) =>
-        for r <- getNonEmptyLang(x) yield Var(x) -> refineByIsNull(r)
+      case Cmp(EQ, Var(x), Const(s: String)) =>
+        for r <- getNonEmptyLang(x) yield Var(x) -> refineByEqual(r, s)
       case Cmp(NE, Var(x), Const(s: String)) =>
         for r <- getNonEmptyLang(x) yield Var(x) -> refineByNotEqual(r, s)
       case _ => None
@@ -78,6 +78,9 @@ object Refiner extends LazyLogging:
 
   private def refineByIsNull(re: RegExpr): RegExpr =
     if re.nullable then RENull else RENone
+
+  private def refineByEqual(re: RegExpr, s: String): RegExpr =
+    if REOps.canParse(re, s) then RegExpr.fromString(s) else RENone
 
   private def refineByNotEqual(re: RegExpr, s: String): RegExpr = s.length match
     case 0 => RERefiner.refineByLen(re, (GT, 0))

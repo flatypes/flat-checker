@@ -1,11 +1,11 @@
 type Input = lang(r'a*[^a]')
 
+
 def f202(s: Input):
   i = 0
   while i < len(s):
+    inv(0 <= i < len(s))
     if s[i] != "a":
       break
     i += 1
-  assert i == len(s)-2
-
-# This is indeed wrong, f202('b'), i = 0
+  assert i == len(s) - 1

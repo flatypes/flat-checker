@@ -25,3 +25,13 @@ object util:
   def renderSubscript(k: Int): String =
     require(k >= 0)
     k.toString.map(c => unicodeSubscripts(c - '0'))
+
+  private val mxBean =
+    java.lang.management.ManagementFactory.getPlatformMXBean(classOf[java.lang.management.ThreadMXBean])
+
+  /** Time an action and return the time elapsed in ms. */
+  def time[R](f: => R): (Double, R) =
+    val t0 = mxBean.getCurrentThreadCpuTime
+    val r = f
+    val t1 = mxBean.getCurrentThreadCpuTime
+    ((t1 - t0) / 1.0e6, r)

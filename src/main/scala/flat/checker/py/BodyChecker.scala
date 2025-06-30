@@ -181,7 +181,13 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
 
     override def visitExprStmt(node: ExprStmt, env: (LCtx, LCtx)): LCtx =
       val (ctx, _) = env
-      val (t, e) = inferType(node.expr, ctx)
-      val freshId = vm.declare(t)
-      out += core.Assign(freshId, e)
-      ctx
+      node.expr match
+        case Call(Name("show_type"), Seq(arg)) =>
+          val e = checkType(arg, core.strType, ctx)
+          out += core.ShowType(e)
+          ctx
+        case _ =>
+          val (t, e) = inferType(node.expr, ctx)
+          val freshId = vm.declare(t)
+          out += core.Assign(freshId, e)
+          ctx

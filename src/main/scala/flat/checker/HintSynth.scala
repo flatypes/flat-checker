@@ -76,6 +76,13 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
             val ((_, r2), _) = REOps.splitAtIndexOf(r.reverse, c)
             val k2 = REOps.length(r2).lower
             hints += LT(ei, SUB(StrLen(es), k2))
+        case Cmp(NE, StrAt(es, ei@Var(_)), Const(s: String)) if s.length == 1 =>
+          val r = inferLang(es)
+          val c = s.head
+          r match
+            case REConcat(RELoop(_, REChar(cs)), r1) if cs.isSingletonOf(c) =>
+              for k1 <- REOps.length(r1).upper do hints += GE(ei, SUB(StrLen(es), k1))
+            case _ =>
         case Cmp(LE, e1, StrFind(es, Const(s: String))) if e1 == expr && s.length == 1 =>
           val r = inferLang(es)
           val c = s.head
@@ -195,6 +202,17 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
           r1,
       ).getOrElse {
         val r = inferLang(es)
+        ej match
+          case Arith(ADD, StrFind(StrSlice(e1, e2, e3), Const(s: String)), e4)
+            if e1 == es && e2 == ei && e3 == StrLen(es) && s.length == 1 && e4 == ei =>
+            indexSolver.solve(ei, es) match
+              case i1: Index =>
+                val r1 = slice(r, i1)
+                val ((r2, _), _) = REOps.splitAtIndexOf(r1, s.head)
+                return r2
+              case _ =>
+          case _ =>
+
         (indexSolver.solve(ei, es), indexSolver.solve(ej, es)) match
           case (i1: Index, i2: Index) =>
             val r1 = slice(r, i1, i2)
