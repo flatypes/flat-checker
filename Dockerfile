@@ -5,7 +5,7 @@ SHELL ["/bin/bash", "-c"]
 
 # Install SDKMAN, and then install `java` and `sbt`.
 RUN apt-get update
-RUN apt-get -y install curl bash unzip zip
+RUN apt-get -y install curl bash unzip zip jq
 RUN curl -s "https://get.sdkman.io" | bash
 # FUN FACTS:
 # 1) the `sdk` command is not a binary but a bash script loaded into memory
