@@ -1,0 +1,50 @@
+[
+  {
+    "file": "/benchmark/subjects/232.py",
+    "success": true,
+    "goals": [
+      {
+        "goal": 1,
+        "success": true,
+        "time (ms)": 32.330885,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 2,
+        "success": true,
+        "time (ms)": 10.101889,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 3,
+        "success": true,
+        "time (ms)": 13.258887,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 4,
+        "success": true,
+        "time (ms)": 2.955357,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 5,
+        "success": true,
+        "time (ms)": 29.932079,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 6,
+        "success": true,
+        "time (ms)": 4.270027,
+        "use SMT": true,
+        "use lemmas": false
+      }
+    ]
+  }
+]

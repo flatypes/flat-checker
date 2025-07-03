@@ -1,0 +1,11 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/042.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 2) ⇒ false
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 50.571403 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 2) ⇒ (((|s| - 1) ≥ 0) && ((|s| - 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 21.301108 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 2) ⇒ (((|s| - 2) ≥ 0) && ((|s| - 2) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 10.149186 ms)

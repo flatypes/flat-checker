@@ -1,0 +1,43 @@
+[
+  {
+    "file": "/benchmark/subjects/108.py",
+    "success": true,
+    "goals": [
+      {
+        "goal": 1,
+        "success": true,
+        "time (ms)": 37.683761,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 2,
+        "success": true,
+        "time (ms)": 10.525473,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 3,
+        "success": true,
+        "time (ms)": 9.116465,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 4,
+        "success": true,
+        "time (ms)": 12.762879,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 5,
+        "success": true,
+        "time (ms)": 6.253477,
+        "use SMT": false,
+        "use lemmas": true
+      }
+    ]
+  }
+]

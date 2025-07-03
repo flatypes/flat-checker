@@ -1,0 +1,20 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/422.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 47.582394 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (s[0] ≠ "b") ∧ (s[0] ≠ "c") ⇒ false
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 14.8119 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (s[0] ≠ "b") ∧ (s[0] ≠ "c") ⇒ (|s| = 1)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 5.107793 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (s[0] ≠ "b") ∧ (s[0] = "c") ⇒ (|s| = 1)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 6.950913 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (s[0] = "b") ⇒ (|s| = 1)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 6.143548 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "a") ⇒ (|s| = 1)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 5.784401 ms)

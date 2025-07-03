@@ -1,0 +1,99 @@
+[
+  {
+    "file": "/benchmark/subjects/500.py",
+    "success": true,
+    "goals": [
+      {
+        "goal": 1,
+        "success": true,
+        "time (ms)": 42.313722,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 2,
+        "success": true,
+        "time (ms)": 3.020235,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 3,
+        "success": true,
+        "time (ms)": 0.058911,
+        "use SMT": false,
+        "use lemmas": false
+      },
+      {
+        "goal": 4,
+        "success": true,
+        "time (ms)": 37.341416,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 5,
+        "success": true,
+        "time (ms)": 479.510572,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 6,
+        "success": true,
+        "time (ms)": 6.564463,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 7,
+        "success": true,
+        "time (ms)": 0.040523,
+        "use SMT": false,
+        "use lemmas": false
+      },
+      {
+        "goal": 8,
+        "success": true,
+        "time (ms)": 53.389997,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 9,
+        "success": true,
+        "time (ms)": 9100.710573,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 10,
+        "success": true,
+        "time (ms)": 9.047815,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 11,
+        "success": true,
+        "time (ms)": 0.032404,
+        "use SMT": false,
+        "use lemmas": false
+      },
+      {
+        "goal": 12,
+        "success": true,
+        "time (ms)": 27.448404,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 13,
+        "success": true,
+        "time (ms)": 21164.57777,
+        "use SMT": true,
+        "use lemmas": true
+      }
+    ]
+  }
+]

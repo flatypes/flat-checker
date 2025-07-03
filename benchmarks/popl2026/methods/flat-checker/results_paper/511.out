@@ -1,0 +1,5 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/511.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s ≠ "abc") ∧ (s ≠ "ab") ∧ (s ≠ "a") ∧ (s ≠ "ac") ∧ (s ≠ "bc") ∧ (s ≠ "b") ∧ (s ≠ "c") ⇒ (s = "")
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 71.778111 ms)

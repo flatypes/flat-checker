@@ -1,0 +1,29 @@
+[
+  {
+    "file": "/benchmark/subjects/044.py",
+    "success": true,
+    "goals": [
+      {
+        "goal": 1,
+        "success": true,
+        "time (ms)": 41.658126,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 2,
+        "success": true,
+        "time (ms)": 8.640468,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 3,
+        "success": true,
+        "time (ms)": 6.752473,
+        "use SMT": true,
+        "use lemmas": true
+      }
+    ]
+  }
+]

@@ -1,0 +1,32 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/223.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 ≤ (|s| - 1)))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 39.896786 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ (|s| - 1)) ⇒ ((i₁ ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.912791 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (|s| ≥ 0) ⇒ s[i₁:].contains("a")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 40.040653 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ (|s| - 1)) ⇒ ((i₁ ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.254371 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (|s| ≥ 0) ⇒ ((s[i₁:].find("a") + i₁) = i₁)
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 27.889528 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ (|s| - 1)) ⇒ (((i₁ + 1) ≥ 0) && ((i₁ + 1) ≤ (|s| - 1)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.730715 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≥ (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ (|s| - 1)) ⇒ ((i₁ ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.337389 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≥ (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (|s| ≥ 0) ⇒ s[i₁:].contains("b")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 17.776952 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≥ (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ (|s| - 1)) ⇒ ((i₁ ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.211374 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≥ (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ (|s| - 1)) ∧ (i₁ ≥ 0) ∧ (|s| ≥ 0) ⇒ ((s[i₁:].find("b") + i₁) = i₁)
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 24.177697 ms)

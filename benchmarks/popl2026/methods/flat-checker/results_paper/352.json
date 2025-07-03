@@ -1,0 +1,141 @@
+[
+  {
+    "file": "/benchmark/subjects/352.py",
+    "success": true,
+    "goals": [
+      {
+        "goal": 1,
+        "success": true,
+        "time (ms)": 0.437494,
+        "use SMT": false,
+        "use lemmas": false
+      },
+      {
+        "goal": 2,
+        "success": true,
+        "time (ms)": 24.118728,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 3,
+        "success": true,
+        "time (ms)": 3.593207,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 4,
+        "success": true,
+        "time (ms)": 0.010976,
+        "use SMT": false,
+        "use lemmas": false
+      },
+      {
+        "goal": 5,
+        "success": true,
+        "time (ms)": 4.167313,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 6,
+        "success": true,
+        "time (ms)": 3.870535,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 7,
+        "success": true,
+        "time (ms)": 3.549767,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 8,
+        "success": true,
+        "time (ms)": 2.033157,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 9,
+        "success": true,
+        "time (ms)": 1.86715,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 10,
+        "success": true,
+        "time (ms)": 35.577285,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 11,
+        "success": true,
+        "time (ms)": 14.055325,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 12,
+        "success": true,
+        "time (ms)": 0.012252,
+        "use SMT": false,
+        "use lemmas": false
+      },
+      {
+        "goal": 13,
+        "success": true,
+        "time (ms)": 3.091594,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 14,
+        "success": true,
+        "time (ms)": 2.764384,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 15,
+        "success": true,
+        "time (ms)": 3.245934,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 16,
+        "success": true,
+        "time (ms)": 11.448059,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 17,
+        "success": true,
+        "time (ms)": 13.17103,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 18,
+        "success": true,
+        "time (ms)": 8.641838,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 19,
+        "success": true,
+        "time (ms)": 7.511965,
+        "use SMT": true,
+        "use lemmas": true
+      }
+    ]
+  }
+]

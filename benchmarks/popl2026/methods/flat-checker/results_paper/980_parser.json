@@ -1,0 +1,36 @@
+[
+  {
+    "file": "/benchmark/subjects/980_parser.py",
+    "success": true,
+    "goals": [
+      {
+        "goal": 1,
+        "success": true,
+        "time (ms)": 38.127645,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 2,
+        "success": true,
+        "time (ms)": 26.156811,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 3,
+        "success": true,
+        "time (ms)": 16.045488,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 4,
+        "success": true,
+        "time (ms)": 19.547481,
+        "use SMT": false,
+        "use lemmas": true
+      }
+    ]
+  }
+]

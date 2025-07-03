@@ -1,0 +1,14 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/055.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 41.694309 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ "A" : LangType(.)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 9.318856 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.04408 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ s[0] : LangType(.)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 0.875699 ms)

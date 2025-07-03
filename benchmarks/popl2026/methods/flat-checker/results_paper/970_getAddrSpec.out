@@ -1,0 +1,8 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/970_getAddrSpec.py
+- [ERROR] Type Error: /benchmark/subjects/970_getAddrSpec.py
+5 |  return email[b:email.index('>',b)]
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |         type mismatch
+  |         expected: tuple[]
+  |         actual:   str
