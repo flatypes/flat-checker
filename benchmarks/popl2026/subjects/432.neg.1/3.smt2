@@ -1,0 +1,10 @@
+; Input: /benchmark/subjects/432.neg.1.py
+(set-logic ALL)
+(declare-const s String)
+(assert (let ((_let_1 (str.to_re "b"))) (let ((_let_2 (re.diff re.allchar _let_1))) (str.in_re s (re.union (re.++ (re.++ _let_2 re.allchar) (re.* re.allchar)) (re.* (re.++ _let_1 (re.* _let_2))))))))
+(assert (= (str.at s 0) "b"))
+(assert (>= 0 0))
+(assert (< 0 (str.len s)))
+(assert (let ((_let_1 (str.len s))) (let ((_let_2 (- _let_1 1))) (not (and (>= _let_2 0) (< _let_2 _let_1))))))
+(check-sat)
+(exit)

@@ -1,0 +1,10 @@
+; Input: /benchmark/subjects/014.neg.1.py
+(set-logic ALL)
+(declare-const s String)
+(assert (str.in_re s (re.opt (re.++ (re.++ re.allchar re.allchar) (re.* re.allchar)))))
+(assert (distinct (str.len s) 1))
+(assert (>= 0 0))
+(assert (>= 1 0))
+(assert (not (str.in_re (str.substr s 0 (- 1 0)) (re.opt (re.++ (re.++ re.allchar re.allchar) (re.* re.allchar))))))
+(check-sat)
+(exit)

@@ -1,0 +1,3 @@
+
+def f270(s: Input):
+  assert s == "a" or s == "ab"

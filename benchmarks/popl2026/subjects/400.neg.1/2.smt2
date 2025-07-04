@@ -1,0 +1,7 @@
+; Input: /benchmark/subjects/400.neg.1.py
+(set-logic ALL)
+(declare-const s String)
+(assert (let ((_let_1 (str.to_re "b"))) (let ((_let_2 (str.to_re "a"))) (str.in_re s (re.++ (re.union (re.union (re.diff re.allchar (re.union _let_2 _let_1)) (re.++ (re.++ _let_2 (re.* _let_2)) (re.diff re.allchar _let_2))) (re.++ (re.++ _let_1 (re.* _let_1)) (re.diff re.allchar _let_1))) (re.* re.allchar))))))
+(assert (not (ite (not (str.contains s "a")) (= 0 0) true)))
+(check-sat)
+(exit)

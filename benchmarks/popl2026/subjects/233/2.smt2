@@ -1,9 +1,0 @@
-; Input: /benchmark/subjects/233.py
-(set-logic ALL)
-(declare-const s String)
-(assert (str.in_re s (re.++ (str.to_re "a") (re.* (str.to_re "b")))))
-(assert (>= 0 0))
-(assert (>= (str.len s) 0))
-(assert (not (str.contains (str.substr s 0 (- (str.len s) 0)) "a")))
-(check-sat)
-(exit)

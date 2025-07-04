@@ -1,0 +1,7 @@
+; Input: /benchmark/subjects/450.neg.1.py
+(set-logic ALL)
+(declare-const s String)
+(assert (let ((_let_1 (str.to_re "b"))) (let ((_let_2 (str.to_re "a"))) (let ((_let_3 (re.union _let_2 _let_1))) (let ((_let_4 (re.diff re.allchar _let_3))) (let ((_let_5 (re.* (re.++ _let_3 (re.* _let_4))))) (let ((_let_6 (re.++ (re.diff re.allchar _let_2) (re.* re.allchar)))) (str.in_re s (re.union _let_6 (re.++ _let_2 (re.union (re.++ (re.++ _let_4 (re.* (re.++ (re.++ _let_1 _let_2) _let_4))) (re.union (re.++ _let_1 (re.union _let_6 (re.++ _let_2 _let_5))) (re.* (re.++ (re.diff re.allchar _let_1) (re.* _let_1))))) _let_5)))))))))))
+(assert (let ((_let_1 (str.to_re "b"))) (let ((_let_2 (str.to_re "a"))) (let ((_let_3 (re.union _let_2 _let_1))) (let ((_let_4 (re.diff re.allchar _let_3))) (let ((_let_5 (re.* (re.++ _let_3 (re.* _let_4))))) (let ((_let_6 (re.++ (re.diff re.allchar _let_2) (re.* re.allchar)))) (not (str.in_re (str.substr s 0 (- (str.len s) 0)) (re.union _let_6 (re.++ _let_2 (re.union (re.++ (re.++ _let_4 (re.* (re.++ (re.++ _let_1 _let_2) _let_4))) (re.union (re.++ _let_1 (re.union _let_6 (re.++ _let_2 _let_5))) (re.* (re.++ (re.diff re.allchar _let_1) (re.* _let_1))))) _let_5))))))))))))
+(check-sat)
+(exit)

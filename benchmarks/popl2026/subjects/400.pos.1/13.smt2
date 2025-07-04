@@ -1,0 +1,13 @@
+; Input: /benchmark/subjects/400.pos.1.py
+(set-logic ALL)
+(declare-const s String)
+(declare-const i@2 Int)
+(assert (str.in_re s (re.union (re.* (str.to_re "a")) (re.* (str.to_re "b")))))
+(assert (let ((_let_1 (str.len s))) (or (>= i@2 _let_1) (and (distinct (str.at s i@2) "a") (and (>= i@2 0) (< i@2 _let_1))))))
+(assert (<= 0 i@2))
+(assert (<= i@2 (str.len s)))
+(assert (ite (not (str.contains s "a")) (= i@2 0) true))
+(assert (distinct i@2 0))
+(assert (not (= i@2 (str.len s))))
+(check-sat)
+(exit)

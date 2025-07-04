@@ -1,0 +1,13 @@
+; Input: /benchmark/subjects/990_lsb_check.pos.1.py
+(set-logic ALL)
+(declare-const s String)
+(declare-const i@1 Int)
+(assert (str.in_re s (re.++ (re.* (str.to_re "0")) (str.to_re "1"))))
+(assert (>= i@1 (- (str.len s) 1)))
+(assert (>= i@1 0))
+(assert (<= i@1 (- (str.len s) 1)))
+(assert (>= i@1 0))
+(assert (< i@1 (str.len s)))
+(assert (not (= (str.at s i@1) "1")))
+(check-sat)
+(exit)

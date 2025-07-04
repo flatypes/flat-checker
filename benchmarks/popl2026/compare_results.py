@@ -35,19 +35,33 @@ for file_path in all_result_files:
             if not row.get("subject") or not row.get("goal"):
                 continue
 
-            key = (row["subject"], row["goal"])
+            key = (row["subject"], int(row["goal"]))
             results[key][method_name] = row.get(result_col, "")
 
 # Sort methods for consistent column order
 sorted_methods = sorted(method_names)
 
 os.makedirs("results", exist_ok=True)
-with open("results/comparison.csv", "w", newline='') as out_f:
+with open("results/comparison.pos.csv", "w", newline='') as out_f:
     writer = csv.writer(out_f)
     writer.writerow(["subject", "goal"] + sorted_methods)
 
     for (subject, goal), method_data in sorted(results.items()):
+        if not ".pos" in subject:
+            continue
         row = [subject, goal]
         for method in sorted_methods:
-            row.append(method_data.get(method, ""))
+            row.append(method_data.get(method, "error"))
+        writer.writerow(row)
+
+with open("results/comparison.neg.csv", "w", newline='') as out_f:
+    writer = csv.writer(out_f)
+    writer.writerow(["subject", "goal"] + sorted_methods)
+
+    for (subject, goal), method_data in sorted(results.items()):
+        if not ".neg" in subject:
+            continue
+        row = [subject, goal]
+        for method in sorted_methods:
+            row.append(method_data.get(method, "error"))
         writer.writerow(row)

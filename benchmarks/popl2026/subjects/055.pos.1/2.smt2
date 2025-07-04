@@ -1,0 +1,10 @@
+; Input: /benchmark/subjects/055.pos.1.py
+(set-logic ALL)
+(declare-const s String)
+(assert (str.in_re s (re.++ re.allchar (re.* re.allchar))))
+(assert (= (str.at s 0) "a"))
+(assert (>= 0 0))
+(assert (< 0 (str.len s)))
+(assert (not (str.in_re "A" re.allchar)))
+(check-sat)
+(exit)

@@ -1,0 +1,13 @@
+; Input: /benchmark/subjects/145.neg.1.py
+(set-logic ALL)
+(declare-const s String)
+(declare-const f@1 Bool)
+(declare-const i@1 Int)
+(assert (str.in_re s (re.* (re.diff re.allchar (str.to_re "a")))))
+(assert (< i@1 (str.len s)))
+(assert (<= 0 i@1))
+(assert (<= i@1 (str.len s)))
+(assert (or f@1 (not (str.contains (str.substr s 0 (- i@1 0)) "a"))))
+(assert (not (or (or f@1 (= (str.at s i@1) "a")) (not (str.contains (str.substr s 0 (- (+ i@1 1) 0)) "a")))))
+(check-sat)
+(exit)
