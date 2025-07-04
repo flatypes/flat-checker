@@ -1,0 +1,6 @@
+method,num_goals,num_sat,num_unsat,num_timeouts,time_total_sec,time_total_with_timeouts_sec,time_avg_sec,time_stdev_sec
+z3,948,5,854,89,9.262,276.953,0.011,0.004
+z3-noodler-pos,948,11,936,1,25.122,28.13,0.027,0.026
+flat-checker,941,2,939,0,48.878,48.878,0.052,0.777
+ostrich2,948,5,918,25,871.068,952.443,0.944,0.343
+cvc5,948,4,892,52,12.396,168.869,0.014,0.026
