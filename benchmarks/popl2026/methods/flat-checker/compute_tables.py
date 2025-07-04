@@ -1,40 +1,118 @@
-import pandas as pd
+import csv
+import math
+from collections import defaultdict
 
-categories = pd.read_csv("../../subjects/categories.csv")      # subject,category
-results = pd.read_csv("results/results.csv")            # subject,time_ms,status,success
-results_vc = pd.read_csv("results/results_vc.csv")      # subject,goal,time_ms,success
+def read_csv_dict(filepath):
+    with open(filepath, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
 
-# Merge categories with results and results_vc
-results_merged = pd.merge(results, categories, on='subject', how='left')
-results_vc_merged = pd.merge(results_vc, categories, on='subject', how='left')
+def write_csv_dict(filepath, fieldnames, rows):
+    with open(filepath, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
-# Group by category
-grouped_results = results_merged.groupby('category')
-grouped_vc = results_vc_merged.groupby('category')
+def mean(values):
+    return sum(values) / len(values) if values else 0.0
 
-agg = pd.DataFrame({
-    'num_subjects': grouped_results['subject'].nunique(),
-    'num_goals': grouped_vc.size(),               # total rows (goals) per category
-    'success_rate': grouped_results['success'].mean(),  # mean() gives fraction of true successes
-    'avg_time_ms': grouped_results['time_ms'].mean(),
-    'avg_time_stdev': grouped_results['time_ms'].std()
-}).fillna(0)
+def stdev(values):
+    n = len(values)
+    if n < 2:
+        return 0.0
+    avg = mean(values)
+    variance = sum((x - avg) ** 2 for x in values) / (n - 1)
+    return math.sqrt(variance)
 
-# Compute total row
-total_num_subjects = categories['subject'].nunique()
+# Load data
+categories = read_csv_dict("../../subjects/categories.csv")    # subject,category
+results = read_csv_dict("results/results.csv")                # subject,time_ms,status,success
+results_vc = read_csv_dict("results/results_vc.csv")          # subject,goal,time_ms,success
+invariants = read_csv_dict("invariants.csv")          # subject,inv
+
+# Build lookups
+subject_to_category = {row['subject']: row['category'] for row in categories}
+subject_to_inv = {row['subject']: int(row['inv']) for row in invariants}
+
+# Grouping data by category
+cat_subjects = defaultdict(set)
+cat_goals_count = defaultdict(int)
+cat_success_values = defaultdict(list)
+cat_time_values = defaultdict(list)
+cat_inv_counts = defaultdict(int)
+
+# Process results
+for row in results:
+    subject = row['subject']
+    category = subject_to_category.get(subject)
+    if not category:
+        continue
+
+    cat_subjects[category].add(subject)
+    # success column assumed convertible to bool or int
+    success = row['success'].lower() in ('true', '1', 'yes')
+    cat_success_values[category].append(success)
+
+    try:
+        time_ms = float(row['time_ms'])
+        cat_time_values[category].append(time_ms)
+    except ValueError:
+        pass
+
+# Process results_vc for goals count
+for row in results_vc:
+    subject = row['subject']
+    category = subject_to_category.get(subject)
+    if not category:
+        continue
+    cat_goals_count[category] += 1
+
+# Aggregate num_inv per category by summing per-subject invariants
+for subject, inv in subject_to_inv.items():
+    category = subject_to_category.get(subject)
+    if category:
+        cat_inv_counts[category] += inv
+
+# Build output rows
+rows = []
+for category in sorted(cat_subjects.keys()):
+    subjects = cat_subjects[category]
+    num_subjects = len(subjects)
+    num_goals = cat_goals_count.get(category, 0)
+    num_inv = cat_inv_counts.get(category, 0)
+    success_rate = mean(cat_success_values[category]) if cat_success_values[category] else 0.0
+    avg_time_ms = mean(cat_time_values[category]) if cat_time_values[category] else 0.0
+    avg_time_stdev = stdev(cat_time_values[category]) if cat_time_values[category] else 0.0
+
+    rows.append({
+        'category': category,
+        'num_subjects': num_subjects,
+        'num_goals': num_goals,
+        'num_inv': num_inv,
+        'success_rate': success_rate,
+        'avg_time_ms': avg_time_ms,
+        'avg_time_stdev': avg_time_stdev
+    })
+
+# Compute totals
+all_subjects = set(row['subject'] for row in categories)
+total_num_subjects = len(all_subjects)
 total_num_goals = len(results_vc)
-total_success_rate = results['success'].mean()
-total_avg_time = results['time_ms'].mean()
-total_avg_stdev = results['time_ms'].std()
+total_num_inv = sum(subject_to_inv.values())
+total_success_rate = mean([r['success'].lower() in ('true', '1', 'yes') for r in results])
+total_times = [float(r['time_ms']) for r in results if r['time_ms']]
+total_avg_time = mean(total_times) if total_times else 0.0
+total_avg_stdev = stdev(total_times) if total_times else 0.0
 
-total_row = pd.DataFrame({
-    'num_subjects': [total_num_subjects],
-    'num_goals': [total_num_goals],
-    'success_rate': [total_success_rate],
-    'avg_time_ms': [total_avg_time],
-    'avg_time_stdev': [total_avg_stdev]
-}, index=['total'])
+rows.append({
+    'category': 'total',
+    'num_subjects': total_num_subjects,
+    'num_goals': total_num_goals,
+    'num_inv': total_num_inv,
+    'success_rate': total_success_rate,
+    'avg_time_ms': total_avg_time,
+    'avg_time_stdev': total_avg_stdev
+})
 
-output = pd.concat([agg, total_row])
-output = output.reset_index()
-output.to_csv("results/results_by_category.csv", index=False)
+# Write output
+fieldnames = ['category', 'num_subjects', 'num_goals', 'num_inv', 'success_rate', 'avg_time_ms', 'avg_time_stdev']
+write_csv_dict("results/results_by_category.csv", fieldnames, rows)
