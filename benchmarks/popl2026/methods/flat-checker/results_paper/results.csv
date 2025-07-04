@@ -203,4 +203,3 @@ subject,time_ms,status,success
 971_getAddrSpec,841,0,true
 980_parser,884,0,true
 990_lsb_check,838,0,true
-cgidecode,568,0,false
