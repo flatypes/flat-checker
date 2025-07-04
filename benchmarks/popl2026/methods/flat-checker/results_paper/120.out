@@ -2,7 +2,7 @@ INFO  flat.Driver$:
 INFO  flat.Driver$: Checking: /benchmark/subjects/120.py
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
-INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 41.492326 ms)
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 42.027152 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 19.17047 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 19.183093 ms)

@@ -6,6 +6,6 @@
 (assert (>= i@1 (str.len s)))
 (assert (>= i@1 0))
 (assert (<= i@1 (str.len s)))
-(assert (not (and (>= (- 3) 0) (>= (str.len s) 0))))
+(assert (let ((_let_1 (str.len s))) (not (and (>= (- _let_1 3) 0) (>= _let_1 0)))))
 (check-sat)
 (exit)

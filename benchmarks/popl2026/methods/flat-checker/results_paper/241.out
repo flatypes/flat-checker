@@ -2,49 +2,49 @@ INFO  flat.Driver$:
 INFO  flat.Driver$: Checking: /benchmark/subjects/241.py
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") < 0) ⇒ ((0 ≥ 0) && (0 ≤ |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 24.723093 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.60059 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") < 0) ∧ (i₂ < |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ⇒ ((i₂ ≥ 0) && (i₂ < |s|))
-INFO  flat.checker.VCPrf: Proved trivial (time: 0.042461 ms)
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.0955 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") < 0) ∧ (i₂ < |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ∧ (i₂ ≥ 0) ∧ (i₂ < |s|) ⇒ (s[i₂] = "a")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 22.033788 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 20.498376 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") < 0) ∧ (i₂ < |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ⇒ (((i₂ + 1) ≥ 0) && ((i₂ + 1) ≤ |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 5.056702 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.45418 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") < 0) ∧ (i₂ ≥ |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ⇒ ((|s| ≤ i₂) && (i₂ ≤ |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 2.295976 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.460154 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") < 0) ∧ (i₂ ≥ |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ∧ (i₁ < |s|) ∧ (|s| ≤ i₁) ∧ (i₁ ≤ |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 2.662312 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.266429 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") < 0) ∧ (i₂ ≥ |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ∧ (i₁ < |s|) ∧ (|s| ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (s[i₁] = "b")
-INFO  flat.checker.VCPrf: Proved with SMT (time: 2.432738 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.426122 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") < 0) ∧ (i₂ ≥ |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ∧ (i₁ < |s|) ∧ (|s| ≤ i₁) ∧ (i₁ ≤ |s|) ⇒ ((|s| ≤ (i₁ + 1)) && ((i₁ + 1) ≤ |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 5.520982 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.187278 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") ≥ 0) ⇒ ((0 ≥ 0) && (0 ≤ s.find("b")))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 3.451486 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.354646 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") ≥ 0) ∧ (i₂ < s.find("b")) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ s.find("b")) ⇒ ((i₂ ≥ 0) && (i₂ < |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 2.909263 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.74617 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") ≥ 0) ∧ (i₂ < s.find("b")) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ s.find("b")) ∧ (i₂ ≥ 0) ∧ (i₂ < |s|) ⇒ (s[i₂] = "a")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 64.656024 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 58.665688 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") ≥ 0) ∧ (i₂ < s.find("b")) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ s.find("b")) ⇒ (((i₂ + 1) ≥ 0) && ((i₂ + 1) ≤ s.find("b")))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 6.937766 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 12.986146 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") ≥ 0) ∧ (i₂ ≥ s.find("b")) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ s.find("b")) ⇒ ((s.find("b") ≤ i₂) && (i₂ ≤ |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 4.571311 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 37.924594 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") ≥ 0) ∧ (i₂ ≥ s.find("b")) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ s.find("b")) ∧ (i₁ < |s|) ∧ (s.find("b") ≤ i₁) ∧ (i₁ ≤ |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 3.6536 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 9.658663 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") ≥ 0) ∧ (i₂ ≥ s.find("b")) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ s.find("b")) ∧ (i₁ < |s|) ∧ (s.find("b") ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (s[i₁] = "b")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 33.774344 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 37.579786 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") ≥ 0) ∧ (i₂ ≥ s.find("b")) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ s.find("b")) ∧ (i₁ < |s|) ∧ (s.find("b") ≤ i₁) ∧ (i₁ ≤ |s|) ⇒ ((s.find("b") ≤ (i₁ + 1)) && ((i₁ + 1) ≤ |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 5.336619 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.210348 ms)

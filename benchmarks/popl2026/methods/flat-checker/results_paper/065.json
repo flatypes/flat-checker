@@ -6,28 +6,28 @@
       {
         "goal": 1,
         "success": true,
-        "time (ms)": 37.414165,
+        "time (ms)": 36.718142,
         "use SMT": true,
         "use lemmas": true
       },
       {
         "goal": 2,
         "success": true,
-        "time (ms)": 4.047482,
+        "time (ms)": 3.939947,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 3,
         "success": true,
-        "time (ms)": 2.241148,
+        "time (ms)": 2.071881,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 4,
         "success": true,
-        "time (ms)": 4.605324,
+        "time (ms)": 4.875783,
         "use SMT": true,
         "use lemmas": false
       }
