@@ -2,10 +2,10 @@ INFO  flat.Driver$:
 INFO  flat.Driver$: Checking: /benchmark/subjects/053.py
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (|s| = 1) ⇒ "" : LangType((ε|.))
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 14.969912 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 15.409829 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (|s| ≠ 1) ⇒ ((0 ≥ 0) && (0 < |s|))
-INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 33.446794 ms)
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 33.963195 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (|s| ≠ 1) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ s[0] : LangType((ε|.))
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 5.636994 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 5.408853 ms)

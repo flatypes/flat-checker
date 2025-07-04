@@ -3,6 +3,8 @@
 (declare-const s String)
 (assert (str.in_re s (str.to_re "a")))
 (assert (distinct (str.at s 0) "a"))
+(assert (>= 0 0))
+(assert (< 0 (str.len s)))
 (assert (not false))
 (check-sat)
 (exit)

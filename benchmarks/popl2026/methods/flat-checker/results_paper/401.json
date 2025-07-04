@@ -6,98 +6,98 @@
       {
         "goal": 1,
         "success": true,
-        "time (ms)": 23.613074,
+        "time (ms)": 22.793725,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 2,
         "success": true,
-        "time (ms)": 5.235643,
+        "time (ms)": 5.507681,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 3,
         "success": true,
-        "time (ms)": 3.304413,
+        "time (ms)": 2.647012,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 4,
         "success": true,
-        "time (ms)": 0.047546,
+        "time (ms)": 0.036359,
         "use SMT": false,
         "use lemmas": false
       },
       {
         "goal": 5,
         "success": true,
-        "time (ms)": 5.177167,
+        "time (ms)": 4.961665,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 6,
         "success": true,
-        "time (ms)": 5.464949,
+        "time (ms)": 5.40476,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 7,
         "success": true,
-        "time (ms)": 6.126862,
+        "time (ms)": 6.096842,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 8,
         "success": true,
-        "time (ms)": 8.675677,
+        "time (ms)": 8.595923,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 9,
         "success": true,
-        "time (ms)": 0.044871,
+        "time (ms)": 0.037948,
         "use SMT": false,
         "use lemmas": false
       },
       {
         "goal": 10,
         "success": true,
-        "time (ms)": 5.337057,
+        "time (ms)": 5.546086,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 11,
         "success": true,
-        "time (ms)": 79.493326,
+        "time (ms)": 78.353482,
         "use SMT": true,
         "use lemmas": true
       },
       {
         "goal": 12,
         "success": true,
-        "time (ms)": 6.134267,
+        "time (ms)": 5.634045,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 13,
         "success": true,
-        "time (ms)": 76.370737,
+        "time (ms)": 77.68039,
         "use SMT": true,
         "use lemmas": true
       },
       {
         "goal": 14,
         "success": true,
-        "time (ms)": 3.289022,
+        "time (ms)": 3.384868,
         "use SMT": true,
         "use lemmas": false
       }

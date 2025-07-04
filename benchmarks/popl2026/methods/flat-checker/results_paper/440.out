@@ -2,4 +2,4 @@ INFO  flat.Driver$:
 INFO  flat.Driver$: Checking: /benchmark/subjects/440.py
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal:  ⇒ ((s = "ab") || (s = "c"))
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 54.543129 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 46.917677 ms)

@@ -1,7 +1,7 @@
 ; Input: /benchmark/subjects/540.py
 (set-logic ALL)
 (declare-const s String)
-(assert (let ((_let_1 (str.to_re "b"))) (let ((_let_2 (str.to_re "a"))) (let ((_let_3 (re.union (re.diff re.allchar _let_2) (re.++ (re.++ _let_2 _let_1) _let_1)))) (str.in_re s (re.++ ((_ re.^ 0) _let_3) (re.* _let_3)))))))
+(assert (let ((_let_1 (str.to_re "b"))) (let ((_let_2 (str.to_re "a"))) (str.in_re s (re.* (re.union (re.diff re.allchar _let_2) (re.++ (re.++ _let_2 _let_1) _let_1)))))))
 (assert (not (and (<= 0 0) (<= 0 (str.len s)))))
 (check-sat)
 (exit)

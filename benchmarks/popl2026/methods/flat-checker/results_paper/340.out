@@ -2,25 +2,25 @@ INFO  flat.Driver$:
 INFO  flat.Driver$: Checking: /benchmark/subjects/340.py
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≤ 0) && (0 < (|s| + 3)))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 23.477754 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.247833 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal:  ⇒ s[0:] : (a.b)*
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 13.479133 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 13.956757 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a.b)* ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 2.747981 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.808129 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a.b)* ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (s[i₁] = "a")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 46.637496 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 70.229135 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a.b)* ⇒ (((i₁ + 2) ≥ 0) && ((i₁ + 2) < |s|))
-INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 18.783194 ms)
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 21.962189 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a.b)* ∧ ((i₁ + 2) ≥ 0) ∧ ((i₁ + 2) < |s|) ⇒ (s[(i₁ + 2)] = "b")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 27.671975 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 36.21818 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a.b)* ⇒ ((0 ≤ (i₁ + 3)) && ((i₁ + 3) < (|s| + 3)))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 4.206289 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.307633 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a.b)* ⇒ s[(i₁ + 3):] : (a.b)*
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 4.31873 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 5.104387 ms)

@@ -2,7 +2,7 @@
 (set-logic ALL)
 (declare-const s String)
 (declare-const i@1 Int)
-(assert (let ((_let_1 (str.to_re "a"))) (str.in_re s (re.union (str.to_re "b") (re.++ ((_ re.^ 0) _let_1) (re.* _let_1))))))
+(assert (str.in_re s (re.union (str.to_re "b") (re.* (str.to_re "a")))))
 (assert (< i@1 (str.len s)))
 (assert (>= i@1 0))
 (assert (<= i@1 (str.len s)))

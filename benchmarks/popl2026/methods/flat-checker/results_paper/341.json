@@ -6,77 +6,77 @@
       {
         "goal": 1,
         "success": true,
-        "time (ms)": 23.26795,
+        "time (ms)": 47.567128,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 2,
         "success": true,
-        "time (ms)": 13.567296,
+        "time (ms)": 14.033695,
         "use SMT": false,
         "use lemmas": true
       },
       {
         "goal": 3,
         "success": true,
-        "time (ms)": 5.007474,
+        "time (ms)": 5.544022,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 4,
         "success": true,
-        "time (ms)": 42.766207,
+        "time (ms)": 40.120664,
         "use SMT": false,
         "use lemmas": true
       },
       {
         "goal": 5,
         "success": true,
-        "time (ms)": 6.538805,
+        "time (ms)": 6.022052,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 6,
         "success": true,
-        "time (ms)": 27.202174,
+        "time (ms)": 25.594308,
         "use SMT": true,
         "use lemmas": true
       },
       {
         "goal": 7,
         "success": true,
-        "time (ms)": 26.184026,
+        "time (ms)": 24.825973,
         "use SMT": true,
         "use lemmas": true
       },
       {
         "goal": 8,
         "success": true,
-        "time (ms)": 31.121997,
+        "time (ms)": 34.879285,
         "use SMT": false,
         "use lemmas": true
       },
       {
         "goal": 9,
         "success": true,
-        "time (ms)": 27.047803,
+        "time (ms)": 31.15838,
         "use SMT": false,
         "use lemmas": true
       },
       {
         "goal": 10,
         "success": true,
-        "time (ms)": 4.506561,
+        "time (ms)": 5.747606,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 11,
         "success": true,
-        "time (ms)": 3.863549,
+        "time (ms)": 4.827154,
         "use SMT": false,
         "use lemmas": true
       }

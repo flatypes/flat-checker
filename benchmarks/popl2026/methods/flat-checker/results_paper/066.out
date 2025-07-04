@@ -2,10 +2,10 @@ INFO  flat.Driver$:
 INFO  flat.Driver$: Checking: /benchmark/subjects/066.py
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (|s| > 3) ⇒ false
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 33.22486 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 31.634855 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (|s| ≤ 3) ⇒ ((0 ≥ 0) && (3 ≥ 0))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 3.903803 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.566659 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (|s| ≤ 3) ∧ (0 ≥ 0) ∧ (3 ≥ 0) ⇒ s[0:3] : LangType(...)
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 14.713949 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 13.642454 ms)

@@ -2,22 +2,22 @@ INFO  flat.Driver$:
 INFO  flat.Driver$: Checking: /benchmark/subjects/203.py
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && ((|s| - 1) ≥ 0))
-INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 38.583859 ms)
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 39.231347 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 ≤ |s[0:(|s| - 1)]|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 3.680027 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.078701 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ < |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ⇒ ((i₁ ≥ 0) && (i₁ < |s[0:(|s| - 1)]|))
-INFO  flat.checker.VCPrf: Proved trivial (time: 0.042619 ms)
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.044409 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ < |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ < |s[0:(|s| - 1)]|) ⇒ (s[0:(|s| - 1)][i₁] = "a")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 64.065764 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 124.483784 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ < |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ⇒ (((i₁ + 1) ≥ 0) && ((i₁ + 1) ≤ |s[0:(|s| - 1)]|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 4.942913 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 37.001288 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ ≥ |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ⇒ (((|s| - 1) ≥ 0) && ((|s| - 1) < |s|))
-INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 22.351906 ms)
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 93.932729 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₁ ≥ |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ⇒ (s[(|s| - 1)] ≠ "a")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 26.738486 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 63.808516 ms)

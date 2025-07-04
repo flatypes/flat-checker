@@ -1,11 +1,7 @@
 ; Input: /benchmark/subjects/233.py
 (set-logic ALL)
 (declare-const s String)
-(declare-const i@1 Int)
-(assert (let ((_let_1 (str.to_re "b"))) (str.in_re s (re.++ (str.to_re "a") (re.++ ((_ re.^ 0) _let_1) (re.* _let_1))))))
-(assert (< i@1 (str.len s)))
-(assert (<= 1 i@1))
-(assert (<= i@1 (str.len s)))
-(assert (not (= (+ (str.indexof (str.substr s i@1 (- (str.len s) i@1)) "b" 0) i@1) i@1)))
+(assert (str.in_re s (re.++ (str.to_re "a") (re.* (str.to_re "b")))))
+(assert (let ((_let_1 (+ 0 1))) (not (and (<= 1 _let_1) (<= _let_1 (str.len s))))))
 (check-sat)
 (exit)

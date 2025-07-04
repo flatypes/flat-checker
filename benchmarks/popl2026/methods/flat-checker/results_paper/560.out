@@ -2,13 +2,13 @@ INFO  flat.Driver$:
 INFO  flat.Driver$: Checking: /benchmark/subjects/560.py
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal:  ⇒ s.contains("b")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 34.256201 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 34.254398 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") = 1) ⇒ ((0 ≥ 0) && (0 < |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 5.539989 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.457615 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") = 1) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 35.266379 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 33.975145 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (s.find("b") ≠ 1) ⇒ (s.find("b") = 0)
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 7.942779 ms)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 7.720712 ms)

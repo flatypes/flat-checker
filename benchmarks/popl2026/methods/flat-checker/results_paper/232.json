@@ -6,42 +6,42 @@
       {
         "goal": 1,
         "success": true,
-        "time (ms)": 32.330885,
+        "time (ms)": 33.47316,
         "use SMT": false,
         "use lemmas": true
       },
       {
         "goal": 2,
         "success": true,
-        "time (ms)": 10.101889,
+        "time (ms)": 11.392077,
         "use SMT": false,
         "use lemmas": true
       },
       {
         "goal": 3,
         "success": true,
-        "time (ms)": 13.258887,
+        "time (ms)": 12.044386,
         "use SMT": true,
         "use lemmas": true
       },
       {
         "goal": 4,
         "success": true,
-        "time (ms)": 2.955357,
+        "time (ms)": 3.069361,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 5,
         "success": true,
-        "time (ms)": 29.932079,
+        "time (ms)": 36.857613,
         "use SMT": false,
         "use lemmas": true
       },
       {
         "goal": 6,
         "success": true,
-        "time (ms)": 4.270027,
+        "time (ms)": 4.933746,
         "use SMT": true,
         "use lemmas": false
       }

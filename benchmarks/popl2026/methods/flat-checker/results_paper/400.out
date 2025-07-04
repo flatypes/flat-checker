@@ -2,19 +2,19 @@ INFO  flat.Driver$:
 INFO  flat.Driver$: Checking: /benchmark/subjects/400.py
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 ≤ |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 23.211795 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.035697 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₂ < |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ⇒ ((i₂ ≥ 0) && (i₂ < |s|))
-INFO  flat.checker.VCPrf: Proved trivial (time: 0.301973 ms)
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.265745 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₂ < |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ∧ (s[i₂] ≠ "a") ∧ (i₂ ≥ 0) ∧ (i₂ < |s|) ⇒ ((i₂ ≥ 0) && (i₂ ≤ |s|))
-INFO  flat.checker.VCPrf: Proved trivial (time: 0.169674 ms)
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.073491 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: (i₂ < |s|) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ∧ (s[i₂] = "a") ∧ (i₂ ≥ 0) ∧ (i₂ < |s|) ⇒ (((i₂ + 1) ≥ 0) && ((i₂ + 1) ≤ |s|))
-INFO  flat.checker.VCPrf: Proved with SMT (time: 6.819336 ms)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 7.069904 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: ((i₂ ≥ |s|) || ((s[i₂] ≠ "a") && ((i₂ ≥ 0) && (i₂ < |s|)))) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ∧ (i₂ = 0) ∧ (i₁ < |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
-INFO  flat.checker.VCPrf: Failed (time: 42.154585 ms)
+INFO  flat.checker.VCPrf: Failed (time: 45.289548 ms)
 INFO  flat.checker.VCPrf: 
 INFO  flat.checker.VCPrf: Goal: ((i₂ ≥ |s|) || ((s[i₂] ≠ "a") && ((i₂ ≥ 0) && (i₂ < |s|)))) ∧ (i₂ ≥ 0) ∧ (i₂ ≤ |s|) ∧ (i₂ = 0) ∧ ((i₁ ≥ |s|) || ((s[i₁] ≠ "b") && ((i₁ ≥ 0) && (i₁ < |s|)))) ⇒ (i₁ = |s|)
 Exception in thread "main" java.lang.AssertionError: assertion failed: index solver unsound

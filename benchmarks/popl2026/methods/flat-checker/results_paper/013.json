@@ -6,14 +6,14 @@
       {
         "goal": 1,
         "success": true,
-        "time (ms)": 23.179247,
+        "time (ms)": 23.582524,
         "use SMT": true,
         "use lemmas": false
       },
       {
         "goal": 2,
         "success": true,
-        "time (ms)": 26.238175,
+        "time (ms)": 27.528533,
         "use SMT": true,
         "use lemmas": true
       }

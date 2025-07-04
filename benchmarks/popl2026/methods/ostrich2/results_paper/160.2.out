@@ -7,8 +7,8 @@ For more information, see https://github.com/uuverifiers/ostrich
 
 Warning: exit is only supported in incremental mode (option +incremental), ignoring it
 Preprocessing ...
+Constructing countermodel ...
 
-unknown
-Cancelled or timeout
+unsat
 
-3086ms
+591ms
