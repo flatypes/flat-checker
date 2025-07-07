@@ -1,8 +1,0 @@
-INFO  flat.Driver$: 
-INFO  flat.Driver$: Checking: /benchmark/subjects/190.py
-INFO  flat.checker.VCPrf: 
-INFO  flat.checker.VCPrf: Goal:  ⇒ s.contains("a")
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 34.610153 ms)
-INFO  flat.checker.VCPrf: 
-INFO  flat.checker.VCPrf: Goal:  ⇒ (s.find("a") = (|s| - 1))
-INFO  flat.checker.VCPrf: Proved with lemmas (time: 29.131095 ms)

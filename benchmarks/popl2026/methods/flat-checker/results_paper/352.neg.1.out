@@ -1,0 +1,83 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/352.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ⇒ (|s| = 2)
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.428926 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 22.586729 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ⇒ ((1 ≥ 0) && (1 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.101131 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ∧ (|s| = 3) ⇒ (|s| = 3)
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.047689 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ∧ (|s| = 3) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.349074 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ∧ (|s| = 3) ⇒ ((1 ≥ 0) && (1 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.504892 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ∧ (|s| = 3) ⇒ ((2 ≥ 0) && (2 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.049979 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ∧ (|s| = 3) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Proved with SMT (time: 1.848689 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ∧ (|s| = 3) ⇒ (s[2] = "b")
+INFO  flat.checker.VCPrf: Proved with SMT (time: 1.79541 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ∧ (|s| ≠ 3) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 34.881493 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 2) ∧ (|s| ≠ 3) ⇒ (s[1] = "b")
+INFO  flat.checker.VCPrf: Failed (time: 13.707333 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 2) ∧ (|s| = 3) ⇒ (|s| = 3)
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.018715 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 2) ∧ (|s| = 3) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.884587 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 2) ∧ (|s| = 3) ⇒ ((1 ≥ 0) && (1 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.789801 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 2) ∧ (|s| = 3) ⇒ ((2 ≥ 0) && (2 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.626811 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 2) ∧ (|s| = 3) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 11.619423 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 2) ∧ (|s| = 3) ⇒ (s[2] = "b")
+INFO  flat.checker.VCPrf: Failed (time: 13.331812 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 2) ∧ (|s| ≠ 3) ⇒ ("" = "a")
+INFO  flat.checker.VCPrf: Failed (time: 9.924142 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 2) ∧ (|s| ≠ 3) ⇒ ("" = "b")
+INFO  flat.checker.VCPrf: Failed (time: 8.641299 ms)
+-- [ERROR] Type Error: /benchmark/subjects/352.neg.1.py
+10 |  assert a == "a"
+   |         ^^^^^^^^
+   |         assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/352.neg.1.py
+11 |  assert b == "b"
+   |         ^^^^^^^^
+   |         assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/352.neg.1.py
+10 |  assert a == "a"
+   |         ^^^^^^^^
+   |         assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/352.neg.1.py
+11 |  assert b == "b"
+   |         ^^^^^^^^
+   |         assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/352.neg.1.py
+10 |  assert a == "a"
+   |         ^^^^^^^^
+   |         assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/352.neg.1.py
+11 |  assert b == "b"
+   |         ^^^^^^^^
+   |         assertion may fail

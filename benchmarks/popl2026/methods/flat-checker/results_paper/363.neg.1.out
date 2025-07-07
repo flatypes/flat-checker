@@ -1,0 +1,40 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/363.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ s.contains("a")
+INFO  flat.checker.VCPrf: Failed (time: 33.433171 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (s.find("a") = 0)
+INFO  flat.checker.VCPrf: Failed (time: 22.301981 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((|s| - 1) ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Failed (time: 7.229116 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((|s| - 1) ≥ 0) ∧ (|s| ≥ 0) ⇒ s[(|s| - 1):].contains("b")
+INFO  flat.checker.VCPrf: Failed (time: 21.21618 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((|s| - 1) ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Failed (time: 4.635929 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((|s| - 1) ≥ 0) ∧ (|s| ≥ 0) ⇒ ((s[(|s| - 1):].find("b") + (|s| - 1)) = (|s| - 1))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 23.160876 ms)
+- [ERROR] Type Error: /benchmark/subjects/363.neg.1.py
+4 |  assert s.index("a") == 0
+  |         ^^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/363.neg.1.py
+4 |  assert s.index("a") == 0
+  |         ^^^^^^^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/363.neg.1.py
+5 |  assert s.index("b", len(s)-1) == len(s)-1
+  |         ^^^^^^^^^^^^^^^^^^^^^^
+  |         index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/363.neg.1.py
+5 |  assert s.index("b", len(s)-1) == len(s)-1
+  |         ^^^^^^^^^^^^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/363.neg.1.py
+5 |  assert s.index("b", len(s)-1) == len(s)-1
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |         index may be out of bounds

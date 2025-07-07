@@ -1,0 +1,52 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/233.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.703609 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (|s| ≥ 0) ⇒ s[0:].contains("a")
+INFO  flat.checker.VCPrf: Failed (time: 32.053377 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.022219 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (|s| ≥ 0) ⇒ ((s[0:].find("a") + 0) = 0)
+INFO  flat.checker.VCPrf: Failed (time: 20.881492 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((1 ≤ (0 + 1)) && ((0 + 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Failed (time: 6.044004 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (1 ≤ i₁) ∧ (i₁ ≤ |s|) ⇒ ((i₁ ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.533315 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (1 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ∧ (|s| ≥ 0) ⇒ s[i₁:].contains("b")
+INFO  flat.checker.VCPrf: Failed (time: 27.632059 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (1 ≤ i₁) ∧ (i₁ ≤ |s|) ⇒ ((i₁ ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.346527 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (1 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ∧ (|s| ≥ 0) ⇒ ((s[i₁:].find("b") + i₁) = i₁)
+INFO  flat.checker.VCPrf: Failed (time: 35.800354 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (1 ≤ i₁) ∧ (i₁ ≤ |s|) ⇒ ((1 ≤ (i₁ + 1)) && ((i₁ + 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.614825 ms)
+- [ERROR] Type Error: /benchmark/subjects/233.neg.1.py
+5 |  assert s.index("a",i) == i
+  |         ^^^^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/233.neg.1.py
+5 |  assert s.index("a",i) == i
+  |         ^^^^^^^^^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/233.neg.1.py
+8 |    inv(1 <= i <= len(s))
+  |        ^^^^^^^^^^^^^^^^
+  |        invariant may violate
+- [ERROR] Type Error: /benchmark/subjects/233.neg.1.py
+9 |    assert s.index("b", i) == i
+  |           ^^^^^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/233.neg.1.py
+9 |    assert s.index("b", i) == i
+  |           ^^^^^^^^^^^^^^^^^^^^
+  |           assertion may fail

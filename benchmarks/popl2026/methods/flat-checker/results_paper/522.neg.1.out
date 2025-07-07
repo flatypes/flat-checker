@@ -1,0 +1,22 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/522.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 ≤ 2))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 21.129292 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < 2) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ 2) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 22.523891 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < 2) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ 2) ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (s[i₁] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 30.145391 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < 2) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ 2) ⇒ (((i₁ + 1) ≥ 0) && ((i₁ + 1) ≤ 2))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.861476 ms)
+- [ERROR] Type Error: /benchmark/subjects/522.neg.1.py
+6 |    assert s[i] == "a"
+  |             ^
+  |             index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/522.neg.1.py
+6 |    assert s[i] == "a"
+  |           ^^^^^^^^^^^
+  |           assertion may fail

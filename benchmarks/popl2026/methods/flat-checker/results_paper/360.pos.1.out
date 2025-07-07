@@ -1,0 +1,14 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/360.pos.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 41.004057 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 18.954393 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((|s| - 1) ≥ 0) && ((|s| - 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 8.079435 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ⇒ (s[(|s| - 1)] = "b")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 11.527133 ms)

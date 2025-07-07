@@ -1,0 +1,22 @@
+[
+  {
+    "file": "/benchmark/subjects/121.pos.1.py",
+    "success": true,
+    "goals": [
+      {
+        "goal": 1,
+        "success": true,
+        "time (ms)": 22.670101,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 2,
+        "success": true,
+        "time (ms)": 30.895271,
+        "use SMT": false,
+        "use lemmas": true
+      }
+    ]
+  }
+]

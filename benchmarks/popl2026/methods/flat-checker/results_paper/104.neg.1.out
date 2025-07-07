@@ -1,0 +1,25 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/104.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((|s| ≤ |s|) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 22.505627 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ > 0) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ⇒ (((i₁ - 1) ≥ 0) && ((i₁ - 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.871892 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ > 0) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ∧ ((i₁ - 1) ≥ 0) ∧ ((i₁ - 1) < |s|) ⇒ (s[(i₁ - 1)] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 50.885775 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ > 0) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ⇒ (((i₁ - 1) ≤ |s|) && ((i₁ - 1) ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.584412 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≤ 0) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ⇒ (|s| = 2)
+INFO  flat.checker.VCPrf: Failed (time: 6.007282 ms)
+- [ERROR] Type Error: /benchmark/subjects/104.neg.1.py
+6 |    assert s[i-1] == "a"
+  |           ^^^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/104.neg.1.py
+8 |  assert len(s) == 2
+  |         ^^^^^^^^^^^
+  |         assertion may fail

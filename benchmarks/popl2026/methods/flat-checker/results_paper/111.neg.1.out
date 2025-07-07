@@ -1,0 +1,18 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/111.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((|s| ≤ |s|) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 22.59057 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ > 0) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ⇒ (((i₁ - 1) ≥ 0) && ((i₁ - 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.436783 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ > 0) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ∧ ((i₁ - 1) ≥ 0) ∧ ((i₁ - 1) < |s|) ⇒ (s[(i₁ - 1)] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 48.467615 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ > 0) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ⇒ (((i₁ - 1) ≤ |s|) && ((i₁ - 1) ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.03759 ms)
+- [ERROR] Type Error: /benchmark/subjects/111.neg.1.py
+6 |    assert s[i-1] == "a"
+  |           ^^^^^^^^^^^^^
+  |           assertion may fail

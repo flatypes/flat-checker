@@ -1,0 +1,23 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/490.pos.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 22.205161 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.243698 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.022076 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ ((s[i₁] = "0") || (s[i₁] = "1"))
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 57.029382 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s|) ⇒ (((i₁ + 1) ≥ 0) && ((i₁ + 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.260484 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≥ |s|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s|) ⇒ (((|s| - 3) ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 10.072871 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≥ |s|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s|) ∧ ((|s| - 3) ≥ 0) ∧ (|s| ≥ 0) ⇒ (s[(|s| - 3):] = "011")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 23.807737 ms)

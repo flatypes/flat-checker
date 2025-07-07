@@ -1,0 +1,55 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/085.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 1) ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 48.61738 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 1) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 10.117823 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 1) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 18.284356 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 1) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 7.729577 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 1) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ s[0] : LangType((a..*|([^a]a*)*))
+INFO  flat.checker.VCPrf: Failed (time: 5.653561 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 1) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.798615 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 1) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 15.345152 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 1) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.786825 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| = 1) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ s[0] : LangType((a..*|([^a]a*)*))
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 0.896184 ms)
+- [ERROR] Type Error: /benchmark/subjects/085.neg.1.py
+5 |    raise Exception
+  |    ^^^^^^^^^^^^^^^
+  |    assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/085.neg.1.py
+6 |  assert s[0] == 'a'
+  |           ^
+  |           index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/085.neg.1.py
+6 |  assert s[0] == 'a'
+  |         ^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/085.neg.1.py
+7 |  return s[0]
+  |           ^
+  |           index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/085.neg.1.py
+7 |  return s[0]
+  |         ^^^^
+  |         type may mismatch
+  |         expected: LangType((a..*|([^a]a*)*))
+  |         actual:   LangType(.)
+- [ERROR] Type Error: /benchmark/subjects/085.neg.1.py
+6 |  assert s[0] == 'a'
+  |         ^^^^^^^^^^^
+  |         assertion may fail

@@ -1,0 +1,41 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/500.pos.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≤ 0) && (0 ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 36.700271 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₃ < |s|) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ⇒ ((i₃ ≥ 0) && (i₃ < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.682163 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₃ < |s|) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ (s[i₃] ≠ "a") ∧ (i₃ ≥ 0) ∧ (i₃ < |s|) ⇒ ((0 ≤ i₃) && (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.042666 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₃ < |s|) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ (s[i₃] = "a") ∧ (i₃ ≥ 0) ∧ (i₃ < |s|) ⇒ ((0 ≤ (i₃ + 1)) && ((i₃ + 1) ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 34.559863 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₃ ≥ |s|) || ((s[i₃] ≠ "a") && ((i₃ ≥ 0) && (i₃ < |s|)))) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ⇒ (((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₃) && (i₃ ≤ (if s.contains("c") then s.find("c") else |s|)))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 467.62991 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₃ ≥ |s|) || ((s[i₃] ≠ "a") && ((i₃ ≥ 0) && (i₃ < |s|)))) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ (i₂ < |s|) ∧ ((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₂) ∧ (i₂ ≤ (if s.contains("c") then s.find("c") else |s|)) ⇒ ((i₂ ≥ 0) && (i₂ < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.618571 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₃ ≥ |s|) || ((s[i₃] ≠ "a") && ((i₃ ≥ 0) && (i₃ < |s|)))) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ (i₂ < |s|) ∧ ((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₂) ∧ (i₂ ≤ (if s.contains("c") then s.find("c") else |s|)) ∧ (s[i₂] ≠ "b") ∧ (i₂ ≥ 0) ∧ (i₂ < |s|) ⇒ (((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₂) && (i₂ ≤ (if s.contains("c") then s.find("c") else |s|)))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.032071 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₃ ≥ |s|) || ((s[i₃] ≠ "a") && ((i₃ ≥ 0) && (i₃ < |s|)))) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ (i₂ < |s|) ∧ ((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₂) ∧ (i₂ ≤ (if s.contains("c") then s.find("c") else |s|)) ∧ (s[i₂] = "b") ∧ (i₂ ≥ 0) ∧ (i₂ < |s|) ⇒ (((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ (i₂ + 1)) && ((i₂ + 1) ≤ (if s.contains("c") then s.find("c") else |s|)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 49.662769 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₃ ≥ |s|) || ((s[i₃] ≠ "a") && ((i₃ ≥ 0) && (i₃ < |s|)))) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ ((i₂ ≥ |s|) || ((s[i₂] ≠ "b") && ((i₂ ≥ 0) && (i₂ < |s|)))) ∧ ((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₂) ∧ (i₂ ≤ (if s.contains("c") then s.find("c") else |s|)) ⇒ (((if s.contains("c") then s.find("c") else |s|) ≤ i₂) && (i₂ ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 7947.356809 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₃ ≥ |s|) || ((s[i₃] ≠ "a") && ((i₃ ≥ 0) && (i₃ < |s|)))) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ ((i₂ ≥ |s|) || ((s[i₂] ≠ "b") && ((i₂ ≥ 0) && (i₂ < |s|)))) ∧ ((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₂) ∧ (i₂ ≤ (if s.contains("c") then s.find("c") else |s|)) ∧ (i₁ < |s|) ∧ ((if s.contains("c") then s.find("c") else |s|) ≤ i₁) ∧ (i₁ ≤ |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 9.228799 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₃ ≥ |s|) || ((s[i₃] ≠ "a") && ((i₃ ≥ 0) && (i₃ < |s|)))) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ ((i₂ ≥ |s|) || ((s[i₂] ≠ "b") && ((i₂ ≥ 0) && (i₂ < |s|)))) ∧ ((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₂) ∧ (i₂ ≤ (if s.contains("c") then s.find("c") else |s|)) ∧ (i₁ < |s|) ∧ ((if s.contains("c") then s.find("c") else |s|) ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (s[i₁] ≠ "c") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (((if s.contains("c") then s.find("c") else |s|) ≤ i₁) && (i₁ ≤ |s|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.031977 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₃ ≥ |s|) || ((s[i₃] ≠ "a") && ((i₃ ≥ 0) && (i₃ < |s|)))) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ ((i₂ ≥ |s|) || ((s[i₂] ≠ "b") && ((i₂ ≥ 0) && (i₂ < |s|)))) ∧ ((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₂) ∧ (i₂ ≤ (if s.contains("c") then s.find("c") else |s|)) ∧ (i₁ < |s|) ∧ ((if s.contains("c") then s.find("c") else |s|) ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (s[i₁] = "c") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (((if s.contains("c") then s.find("c") else |s|) ≤ (i₁ + 1)) && ((i₁ + 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 27.154486 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₃ ≥ |s|) || ((s[i₃] ≠ "a") && ((i₃ ≥ 0) && (i₃ < |s|)))) ∧ (0 ≤ i₃) ∧ (i₃ ≤ (if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|))) ∧ ((i₂ ≥ |s|) || ((s[i₂] ≠ "b") && ((i₂ ≥ 0) && (i₂ < |s|)))) ∧ ((if s.contains("b") then s.find("b") else (if s.contains("c") then s.find("c") else |s|)) ≤ i₂) ∧ (i₂ ≤ (if s.contains("c") then s.find("c") else |s|)) ∧ ((i₁ ≥ |s|) || ((s[i₁] ≠ "c") && ((i₁ ≥ 0) && (i₁ < |s|)))) ∧ ((if s.contains("c") then s.find("c") else |s|) ≤ i₁) ∧ (i₁ ≤ |s|) ⇒ (i₁ = |s|)
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 20880.261865 ms)

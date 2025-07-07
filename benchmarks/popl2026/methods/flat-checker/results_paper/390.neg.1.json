@@ -1,0 +1,13 @@
+[
+  {
+    "file": "/benchmark/subjects/390.neg.1.py",
+    "success": false,
+    "goals": [
+      {
+        "goal": 1,
+        "success": false,
+        "time (ms)": 47.609602
+      }
+    ]
+  }
+]

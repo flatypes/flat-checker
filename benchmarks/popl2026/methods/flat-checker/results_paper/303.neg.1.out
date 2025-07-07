@@ -1,0 +1,30 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/303.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ s.contains("a")
+INFO  flat.checker.VCPrf: Failed (time: 33.637943 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (s.find("a") = 0)
+INFO  flat.checker.VCPrf: Failed (time: 22.810342 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ s.contains("b")
+INFO  flat.checker.VCPrf: Failed (time: 4.773715 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (s.find("b") = 1)
+INFO  flat.checker.VCPrf: Failed (time: 12.226674 ms)
+- [ERROR] Type Error: /benchmark/subjects/303.neg.1.py
+4 |  assert s.index("a") == 0
+  |         ^^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/303.neg.1.py
+4 |  assert s.index("a") == 0
+  |         ^^^^^^^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/303.neg.1.py
+5 |  assert s.index("b") == 1
+  |         ^^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/303.neg.1.py
+5 |  assert s.index("b") == 1
+  |         ^^^^^^^^^^^^^^^^^
+  |         assertion may fail

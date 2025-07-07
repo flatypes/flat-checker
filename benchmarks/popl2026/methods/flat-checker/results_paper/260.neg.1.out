@@ -1,0 +1,9 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/260.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((s = "b") || (s = "ab"))
+INFO  flat.checker.VCPrf: Failed (time: 50.148526 ms)
+- [ERROR] Type Error: /benchmark/subjects/260.neg.1.py
+4 |  assert s == "b" or s == "ab"
+  |         ^^^^^^^^^^^^^^^^^^^^^
+  |         assertion may fail

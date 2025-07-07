@@ -1,0 +1,21 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/067.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (|s| ≤ 3)
+INFO  flat.checker.VCPrf: Failed (time: 36.919416 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (3 ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.811911 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (3 ≥ 0) ⇒ s[0:3] : LangType((.(.(...*)?)?)?)
+INFO  flat.checker.VCPrf: Failed (time: 16.186447 ms)
+- [ERROR] Type Error: /benchmark/subjects/067.neg.1.py
+4 |  assert len(s) <= 3
+  |         ^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/067.neg.1.py
+5 |  return s[0:3]
+  |         ^^^^^^
+  |         type may mismatch
+  |         expected: LangType((.(.(...*)?)?)?)
+  |         actual:   LangType(...)

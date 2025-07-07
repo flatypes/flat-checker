@@ -1,0 +1,23 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/042.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 2) ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 47.298319 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 2) ⇒ (((|s| - 1) ≥ 0) && ((|s| - 1) < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 7.625242 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 2) ⇒ (((|s| - 2) ≥ 0) && ((|s| - 2) < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 6.246894 ms)
+- [ERROR] Type Error: /benchmark/subjects/042.neg.1.py
+6 |    raise Exception
+  |    ^^^^^^^^^^^^^^^
+  |    assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/042.neg.1.py
+8 |    c1 = s[n-1]
+  |           ^^^
+  |           index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/042.neg.1.py
+9 |    c2 = s[n-2]
+  |           ^^^
+  |           index may be out of bounds

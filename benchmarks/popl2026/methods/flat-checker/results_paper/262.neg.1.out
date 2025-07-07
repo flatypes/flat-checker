@@ -1,0 +1,40 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/262.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ s.contains("b")
+INFO  flat.checker.VCPrf: Failed (time: 32.741546 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s.find("b") = 1) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 6.037895 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s.find("b") = 1) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 48.882488 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s.find("b") = 1) ⇒ (|s| = 2)
+INFO  flat.checker.VCPrf: Failed (time: 20.156224 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s.find("b") ≠ 1) ⇒ (s.find("b") = 0)
+INFO  flat.checker.VCPrf: Failed (time: 15.372104 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s.find("b") ≠ 1) ⇒ (|s| = 1)
+INFO  flat.checker.VCPrf: Failed (time: 14.182373 ms)
+- [ERROR] Type Error: /benchmark/subjects/262.neg.1.py
+4 |  bi = s.index("b")
+  |       ^^^^^^^^^^^^
+  |       assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/262.neg.1.py
+6 |    assert s[0] == "a"
+  |           ^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/262.neg.1.py
+7 |    assert len(s) == 2
+  |           ^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/262.neg.1.py
+9 |    assert bi == 0
+  |           ^^^^^^^
+  |           assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/262.neg.1.py
+10 |    assert len(s) == 1
+   |           ^^^^^^^^^^^
+   |           assertion may fail

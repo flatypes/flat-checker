@@ -1,0 +1,36 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/230.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 36.744953 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 20.628948 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((1 ≥ 1) && (1 ≤ |s|))
+INFO  flat.checker.VCPrf: Failed (time: 5.814264 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (i₁ ≥ 1) ∧ (i₁ ≤ |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.260708 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (i₁ ≥ 1) ∧ (i₁ ≤ |s|) ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (s[i₁] = "b")
+INFO  flat.checker.VCPrf: Failed (time: 28.538504 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (i₁ ≥ 1) ∧ (i₁ ≤ |s|) ⇒ (((i₁ + 1) ≥ 1) && ((i₁ + 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.609068 ms)
+- [ERROR] Type Error: /benchmark/subjects/230.neg.1.py
+4 |  assert s[0] == "a"
+  |           ^
+  |           index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/230.neg.1.py
+4 |  assert s[0] == "a"
+  |         ^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/230.neg.1.py
+6 |  while i < len(s):
+  |        ^^^^^^^^^^
+  |        invariant may violate
+- [ERROR] Type Error: /benchmark/subjects/230.neg.1.py
+7 |    assert s[i] == "b"
+  |           ^^^^^^^^^^^
+  |           assertion may fail

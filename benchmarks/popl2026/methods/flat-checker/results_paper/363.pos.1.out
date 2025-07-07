@@ -1,0 +1,20 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/363.pos.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ s.contains("a")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 34.452099 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (s.find("a") = 0)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 10.436091 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((|s| - 1) ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 11.76377 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((|s| - 1) ≥ 0) ∧ (|s| ≥ 0) ⇒ s[(|s| - 1):].contains("b")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 24.149239 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((|s| - 1) ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 8.05728 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((|s| - 1) ≥ 0) ∧ (|s| ≥ 0) ⇒ ((s[(|s| - 1):].find("b") + (|s| - 1)) = (|s| - 1))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 21.920047 ms)

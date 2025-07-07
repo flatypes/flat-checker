@@ -1,0 +1,28 @@
+[
+  {
+    "file": "/benchmark/subjects/980_parser.neg.1.py",
+    "success": false,
+    "goals": [
+      {
+        "goal": 1,
+        "success": false,
+        "time (ms)": 36.173549
+      },
+      {
+        "goal": 2,
+        "success": false,
+        "time (ms)": 33.419277
+      },
+      {
+        "goal": 3,
+        "success": false,
+        "time (ms)": 19.263245
+      },
+      {
+        "goal": 4,
+        "success": false,
+        "time (ms)": 27.816865
+      }
+    ]
+  }
+]

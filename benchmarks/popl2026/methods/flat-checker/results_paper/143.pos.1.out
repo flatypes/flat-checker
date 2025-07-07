@@ -1,0 +1,20 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/143.pos.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≤ |s|) && (|s| ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.180784 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (!s[|s|:].contains("a"))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 1.770588 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ > 0) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (!s[i₁:].contains("a")) ⇒ (((i₁ - 1) ≥ 0) && ((i₁ - 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.194046 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ > 0) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (!s[i₁:].contains("a")) ∧ (s[(i₁ - 1)] ≠ "a") ∧ ((i₁ - 1) ≥ 0) ∧ ((i₁ - 1) < |s|) ⇒ ((0 ≤ (i₁ - 1)) && ((i₁ - 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 6.594009 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ > 0) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (!s[i₁:].contains("a")) ∧ (s[(i₁ - 1)] ≠ "a") ∧ ((i₁ - 1) ≥ 0) ∧ ((i₁ - 1) < |s|) ⇒ (!s[(i₁ - 1):].contains("a"))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 35.256844 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≤ 0) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (!s[i₁:].contains("a")) ⇒ false
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 37.895821 ms)

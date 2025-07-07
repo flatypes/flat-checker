@@ -1,0 +1,31 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/094.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ⇒ ((0 ≥ 0) && (1 ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.219866 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ⇒ (s[0:1] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 42.341618 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ⇒ (|s| = 1)
+INFO  flat.checker.VCPrf: Failed (time: 8.651141 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ⇒ s[0:1] : LangType(([^a]|a.).*)
+INFO  flat.checker.VCPrf: Failed (time: 8.127484 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 0) ⇒ s : LangType(([^a]|a.).*)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 0.345585 ms)
+- [ERROR] Type Error: /benchmark/subjects/094.neg.1.py
+6 |    assert t == "a"
+  |           ^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/094.neg.1.py
+7 |    assert len(s) == 1
+  |           ^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/094.neg.1.py
+8 |    return t
+  |           ^
+  |           type may mismatch
+  |           expected: LangType(([^a]|a.).*)
+  |           actual:   LangType(([^a]|a))

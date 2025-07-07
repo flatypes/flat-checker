@@ -1,0 +1,37 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/182.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 36.8253 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 32.089292 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ ((1 ≥ 0) && (1 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 20.284213 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (s[1] = "a") ∧ (1 ≥ 0) ∧ (1 < |s|) ⇒ (|s| = 2)
+INFO  flat.checker.VCPrf: Failed (time: 29.856919 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (s[1] ≠ "a") ∧ (1 ≥ 0) ∧ (1 < |s|) ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 27.587674 ms)
+- [ERROR] Type Error: /benchmark/subjects/182.neg.1.py
+4 |  if s[0] == "a":
+  |       ^
+  |       index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/182.neg.1.py
+5 |    raise Exception
+  |    ^^^^^^^^^^^^^^^
+  |    assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/182.neg.1.py
+6 |  elif s[1] == "a":
+  |         ^
+  |         index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/182.neg.1.py
+7 |    assert len(s) == 2
+  |           ^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/182.neg.1.py
+9 |    raise Exception
+  |    ^^^^^^^^^^^^^^^
+  |    assertion may fail

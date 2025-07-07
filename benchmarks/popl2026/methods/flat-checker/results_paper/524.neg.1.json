@@ -1,0 +1,46 @@
+[
+  {
+    "file": "/benchmark/subjects/524.neg.1.py",
+    "success": false,
+    "goals": [
+      {
+        "goal": 1,
+        "success": true,
+        "time (ms)": 22.146211,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 2,
+        "success": true,
+        "time (ms)": 31.306137,
+        "use SMT": false,
+        "use lemmas": true
+      },
+      {
+        "goal": 3,
+        "success": true,
+        "time (ms)": 11.401345,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 4,
+        "success": true,
+        "time (ms)": 11.607298,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 5,
+        "success": false,
+        "time (ms)": 12.984321
+      },
+      {
+        "goal": 6,
+        "success": false,
+        "time (ms)": 8.683134
+      }
+    ]
+  }
+]

@@ -1,0 +1,19 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/125.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s = "") ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 40.217382 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s ≠ "") ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.850557 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s ≠ "") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 26.086336 ms)
+- [ERROR] Type Error: /benchmark/subjects/125.neg.1.py
+5 |    raise Exception
+  |    ^^^^^^^^^^^^^^^
+  |    assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/125.neg.1.py
+7 |    assert s[0] == "a"
+  |           ^^^^^^^^^^^
+  |           assertion may fail

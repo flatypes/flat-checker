@@ -1,0 +1,39 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/203.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && ((|s| - 1) ≥ 0))
+INFO  flat.checker.VCPrf: Failed (time: 36.569334 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 ≤ |s[0:(|s| - 1)]|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.90782 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ⇒ ((i₁ ≥ 0) && (i₁ < |s[0:(|s| - 1)]|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.429257 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ < |s[0:(|s| - 1)]|) ⇒ (s[0:(|s| - 1)][i₁] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 65.866723 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ⇒ (((i₁ + 1) ≥ 0) && ((i₁ + 1) ≤ |s[0:(|s| - 1)]|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.561901 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≥ |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ⇒ (((|s| - 1) ≥ 0) && ((|s| - 1) < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 17.536182 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≥ |s[0:(|s| - 1)]|) ∧ (i₁ ≥ 0) ∧ (i₁ ≤ |s[0:(|s| - 1)]|) ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ⇒ (s[(|s| - 1)] ≠ "a")
+INFO  flat.checker.VCPrf: Failed (time: 27.835478 ms)
+- [ERROR] Type Error: /benchmark/subjects/203.neg.1.py
+4 |  t = s[0:len(s)-1]
+  |      ^^^^^^^^^^^^^
+  |      index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/203.neg.1.py
+7 |    assert t[i] == "a"
+  |           ^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/203.neg.1.py
+9 |  assert s[len(s)-1] != "a"
+  |           ^^^^^^^^
+  |           index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/203.neg.1.py
+9 |  assert s[len(s)-1] != "a"
+  |         ^^^^^^^^^^^^^^^^^^
+  |         assertion may fail

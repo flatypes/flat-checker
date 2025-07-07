@@ -1,0 +1,16 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/120.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 37.019791 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 24.160526 ms)
+- [ERROR] Type Error: /benchmark/subjects/120.neg.1.py
+4 |  assert s[0] == "a"
+  |           ^
+  |           index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/120.neg.1.py
+4 |  assert s[0] == "a"
+  |         ^^^^^^^^^^^
+  |         assertion may fail

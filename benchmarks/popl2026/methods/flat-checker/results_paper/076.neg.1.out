@@ -1,0 +1,9 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/076.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && ((|s| - 2) ≥ 0))
+INFO  flat.checker.VCPrf: Failed (time: 41.716833 ms)
+- [ERROR] Type Error: /benchmark/subjects/076.neg.1.py
+5 |  return s[:len(s)-2]
+  |         ^^^^^^^^^^^^
+  |         index may be out of bounds

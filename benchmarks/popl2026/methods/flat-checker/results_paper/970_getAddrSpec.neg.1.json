@@ -1,0 +1,46 @@
+[
+  {
+    "file": "/benchmark/subjects/970_getAddrSpec.neg.1.py",
+    "success": false,
+    "goals": [
+      {
+        "goal": 1,
+        "success": false,
+        "time (ms)": 32.183697
+      },
+      {
+        "goal": 2,
+        "success": true,
+        "time (ms)": 5.58995,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 3,
+        "success": false,
+        "time (ms)": 44.041388
+      },
+      {
+        "goal": 4,
+        "success": true,
+        "time (ms)": 21.663437,
+        "use SMT": true,
+        "use lemmas": true
+      },
+      {
+        "goal": 5,
+        "success": true,
+        "time (ms)": 3.808151,
+        "use SMT": true,
+        "use lemmas": false
+      },
+      {
+        "goal": 6,
+        "success": true,
+        "time (ms)": 15.318622,
+        "use SMT": false,
+        "use lemmas": true
+      }
+    ]
+  }
+]

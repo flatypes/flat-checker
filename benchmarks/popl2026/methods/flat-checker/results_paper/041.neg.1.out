@@ -1,0 +1,32 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/041.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (|s| ≤ 2)
+INFO  flat.checker.VCPrf: Failed (time: 39.951339 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 7.664859 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((1 ≥ 0) && (1 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 6.112683 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (0 < |s|) ∧ (1 ≥ 0) ∧ (1 < |s|) ⇒ (s[0] ++ s[1]) : LangType((.(...*)?)?)
+INFO  flat.checker.VCPrf: Failed (time: 13.47023 ms)
+- [ERROR] Type Error: /benchmark/subjects/041.neg.1.py
+4 |  assert len(s) <= 2
+  |         ^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/041.neg.1.py
+5 |  return s[0] + s[1]
+  |           ^
+  |           index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/041.neg.1.py
+5 |  return s[0] + s[1]
+  |                  ^
+  |                  index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/041.neg.1.py
+5 |  return s[0] + s[1]
+  |         ^^^^^^^^^^^
+  |         type may mismatch
+  |         expected: LangType((.(...*)?)?)
+  |         actual:   LangType(..)

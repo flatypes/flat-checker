@@ -1,0 +1,9 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/140.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ s.contains("a")
+INFO  flat.checker.VCPrf: Failed (time: 39.212404 ms)
+- [ERROR] Type Error: /benchmark/subjects/140.neg.1.py
+4 |  return s.index("a")
+  |         ^^^^^^^^^^^^
+  |         assertion may fail

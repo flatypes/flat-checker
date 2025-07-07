@@ -1,0 +1,30 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/062.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 38.777782 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((0 + 1) ≥ 0) && ((0 + 1) < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 5.916212 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((0 + 2) ≥ 0) && ((0 + 2) < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 6.101092 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (|s| = (0 + 3))
+INFO  flat.checker.VCPrf: Failed (time: 5.237423 ms)
+- [ERROR] Type Error: /benchmark/subjects/062.neg.1.py
+5 |  c0 = s[i]
+  |         ^
+  |         index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/062.neg.1.py
+6 |  c1 = s[i+1]
+  |         ^^^
+  |         index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/062.neg.1.py
+7 |  c2 = s[i+2]
+  |         ^^^
+  |         index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/062.neg.1.py
+8 |  assert len(s) == i + 3
+  |         ^^^^^^^^^^^^^^^
+  |         assertion may fail

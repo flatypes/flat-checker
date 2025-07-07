@@ -1,0 +1,18 @@
+[
+  {
+    "file": "/benchmark/subjects/190.neg.1.py",
+    "success": false,
+    "goals": [
+      {
+        "goal": 1,
+        "success": false,
+        "time (ms)": 34.010801
+      },
+      {
+        "goal": 2,
+        "success": false,
+        "time (ms)": 29.483217
+      }
+    ]
+  }
+]

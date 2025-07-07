@@ -1,0 +1,25 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/202.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≤ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 37.526095 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.781757 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < |s|) ∧ (s[i₁] ≠ "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ ((0 ≤ i₁) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.049648 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < |s|) ∧ (s[i₁] = "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ ((0 ≤ (i₁ + 1)) && ((i₁ + 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 56.678939 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((i₁ ≥ |s|) || ((s[i₁] ≠ "a") && ((i₁ ≥ 0) && (i₁ < |s|)))) ∧ (0 ≤ i₁) ∧ (i₁ < |s|) ⇒ (i₁ = (|s| - 1))
+INFO  flat.checker.VCPrf: Failed (time: 47.806415 ms)
+- [ERROR] Type Error: /benchmark/subjects/202.neg.1.py
+6 |    inv(0 <= i < len(s))
+  |        ^^^^^^^^^^^^^^^
+  |        invariant may violate
+-- [ERROR] Type Error: /benchmark/subjects/202.neg.1.py
+10 |  assert i == len(s)-1
+   |         ^^^^^^^^^^^^^
+   |         assertion may fail

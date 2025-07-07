@@ -1,0 +1,59 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/333.pos.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ⇒ ((0 ≥ 0) && (2 ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.367742 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ⇒ (|s[0:2]| = 2)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 35.846114 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ⇒ ((0 ≥ 0) && (0 < |s[0:2]|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.396517 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ⇒ ((1 ≥ 0) && (1 < |s[0:2]|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 15.815166 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ⇒ (s[0:2][0] = "a")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 16.15912 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ∧ (|s| > 1) ⇒ ((1 ≥ 0) && (3 ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.947509 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ∧ (|s| > 1) ⇒ (|s[1:3]| = 2)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 14.284548 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ∧ (|s| > 1) ⇒ ((0 ≥ 0) && (0 < |s[1:3]|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.386545 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ∧ (|s| > 1) ⇒ ((1 ≥ 0) && (1 < |s[1:3]|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 18.362556 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ∧ (|s| > 1) ⇒ (s[1:3][1] = "b")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 13.897792 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ∧ (|s| > 1) ∧ (|s| > 3) ⇒ false
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 3.081117 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| > 0) ∧ (|s| ≤ 1) ∧ (|s| > 3) ⇒ false
+INFO  flat.checker.VCPrf: Proved with SMT (time: 1.993904 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 0) ∧ (|s| > 1) ⇒ ((1 ≥ 0) && (3 ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.667191 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 0) ∧ (|s| > 1) ⇒ (|s[1:3]| = 2)
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.264129 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 0) ∧ (|s| > 1) ⇒ ((0 ≥ 0) && (0 < |s[1:3]|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.64137 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 0) ∧ (|s| > 1) ⇒ ((1 ≥ 0) && (1 < |s[1:3]|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.60415 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 0) ∧ (|s| > 1) ⇒ (s[1:3][1] = "b")
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.344169 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 0) ∧ (|s| > 1) ∧ (|s| > 3) ⇒ false
+INFO  flat.checker.VCPrf: Proved with SMT (time: 1.775696 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≤ 0) ∧ (|s| ≤ 1) ∧ (|s| > 3) ⇒ false
+INFO  flat.checker.VCPrf: Proved with SMT (time: 1.942452 ms)

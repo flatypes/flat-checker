@@ -1,0 +1,70 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/450.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≤ 0) && (0 < (|s| + 3)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 22.979702 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ s[0:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*))
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 13.707367 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ⇒ (((i₁ + 0) ≥ 0) && ((i₁ + 0) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.950993 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ∧ ((i₁ + 0) ≥ 0) ∧ ((i₁ + 0) < |s|) ⇒ (s[(i₁ + 0)] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 56.290941 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ⇒ (((i₁ + 1) ≥ 0) && ((i₁ + 1) < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 19.253806 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ∧ ((i₁ + 1) ≥ 0) ∧ ((i₁ + 1) < |s|) ⇒ (s[(i₁ + 1)] ≠ "a")
+INFO  flat.checker.VCPrf: Failed (time: 31.87624 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ⇒ (((i₁ + 1) ≥ 0) && ((i₁ + 1) < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 18.671111 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ∧ ((i₁ + 1) ≥ 0) ∧ ((i₁ + 1) < |s|) ⇒ (s[(i₁ + 1)] ≠ "b")
+INFO  flat.checker.VCPrf: Failed (time: 32.026157 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ⇒ (((i₁ + 2) ≥ 0) && ((i₁ + 2) < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 19.192509 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ∧ ((i₁ + 2) ≥ 0) ∧ ((i₁ + 2) < |s|) ⇒ (s[(i₁ + 2)] = "b")
+INFO  flat.checker.VCPrf: Failed (time: 35.641842 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ⇒ ((0 ≤ (i₁ + 3)) && ((i₁ + 3) < (|s| + 3)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.022065 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*)) ⇒ s[(i₁ + 3):] : ([^a].*|a([^ab](ba[^ab])*(b([^a].*|a([ab]([^ab])*)*)|([^b]b*)*)|([ab]([^ab])*)*))
+INFO  flat.checker.VCPrf: Failed (time: 4.823713 ms)
+- [ERROR] Type Error: /benchmark/subjects/450.neg.1.py
+8 |    assert s[i+0] == "a"
+  |           ^^^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/450.neg.1.py
+9 |    assert s[i+1] != "a"
+  |             ^^^
+  |             index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/450.neg.1.py
+9 |    assert s[i+1] != "a"
+  |           ^^^^^^^^^^^^^
+  |           assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/450.neg.1.py
+10 |    assert s[i+1] != "b"
+   |             ^^^
+   |             index may be out of bounds
+-- [ERROR] Type Error: /benchmark/subjects/450.neg.1.py
+10 |    assert s[i+1] != "b"
+   |           ^^^^^^^^^^^^^
+   |           assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/450.neg.1.py
+11 |    assert s[i+2] == "b"
+   |             ^^^
+   |             index may be out of bounds
+-- [ERROR] Type Error: /benchmark/subjects/450.neg.1.py
+11 |    assert s[i+2] == "b"
+   |           ^^^^^^^^^^^^^
+   |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/450.neg.1.py
+7 |    inv(isinstance(s[i:], Input))
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^
+  |        invariant may violate

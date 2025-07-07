@@ -1,0 +1,19 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/072.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 43.33768 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((1 ≥ 0) && (1 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 7.612406 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (0 < |s|) ∧ (1 ≥ 0) ∧ (1 < |s|) ⇒ (s[0] ++ s[1]) : LangType(..)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 5.795215 ms)
+- [ERROR] Type Error: /benchmark/subjects/072.neg.1.py
+5 |  return s[0] + s[1]
+  |           ^
+  |           index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/072.neg.1.py
+5 |  return s[0] + s[1]
+  |                  ^
+  |                  index may be out of bounds

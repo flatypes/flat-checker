@@ -1,0 +1,47 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/442.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 37.668666 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ ((1 ≥ 0) && (1 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 35.309314 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (s[1] = "b") ∧ (1 ≥ 0) ∧ (1 < |s|) ∧ (|s| ≠ 2) ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 24.655185 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (s[1] ≠ "b") ∧ (1 ≥ 0) ∧ (1 < |s|) ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 26.917997 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.045433 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (s[0] = "c") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (|s| ≠ 1) ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 17.531413 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (s[0] ≠ "c") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 16.784901 ms)
+- [ERROR] Type Error: /benchmark/subjects/442.neg.1.py
+4 |  if s[0] == "a":
+  |       ^
+  |       index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/442.neg.1.py
+5 |    if s[1] == "b":
+  |         ^
+  |         index may be out of bounds
+-- [ERROR] Type Error: /benchmark/subjects/442.neg.1.py
+11 |  raise Exception
+   |  ^^^^^^^^^^^^^^^
+   |  assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/442.neg.1.py
+11 |  raise Exception
+   |  ^^^^^^^^^^^^^^^
+   |  assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/442.neg.1.py
+11 |  raise Exception
+   |  ^^^^^^^^^^^^^^^
+   |  assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/442.neg.1.py
+11 |  raise Exception
+   |  ^^^^^^^^^^^^^^^
+   |  assertion may fail

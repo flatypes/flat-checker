@@ -1,0 +1,26 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/272.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s.find("b") = 1) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 25.109731 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s.find("b") = 1) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "a")
+INFO  flat.checker.VCPrf: Failed (time: 59.564735 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s.find("b") = 1) ⇒ (|s| = 2)
+INFO  flat.checker.VCPrf: Failed (time: 20.71061 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s.find("b") ≠ 1) ⇒ (s = "a")
+INFO  flat.checker.VCPrf: Failed (time: 16.237414 ms)
+- [ERROR] Type Error: /benchmark/subjects/272.neg.1.py
+6 |    assert s[0] == "a"
+  |           ^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/272.neg.1.py
+7 |    assert len(s) == 2
+  |           ^^^^^^^^^^^
+  |           assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/272.neg.1.py
+9 |    assert s == "a"
+  |           ^^^^^^^^
+  |           assertion may fail

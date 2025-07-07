@@ -1,0 +1,14 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/071.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((1 ≥ 0) && (|s| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.372302 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (1 ≥ 0) ∧ (|s| ≥ 0) ⇒ s[1:] : LangType(..*)
+INFO  flat.checker.VCPrf: Failed (time: 25.648581 ms)
+- [ERROR] Type Error: /benchmark/subjects/071.neg.1.py
+5 |  return s[1:]
+  |         ^^^^^
+  |         type may mismatch
+  |         expected: LangType(..*)
+  |         actual:   LangType(?)

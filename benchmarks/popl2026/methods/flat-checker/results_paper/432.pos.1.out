@@ -1,0 +1,32 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/432.pos.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 38.4692 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "b") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ false
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 13.624642 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "b") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (((|s| - 1) ≥ 0) && ((|s| - 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.81608 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "b") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (((|s| - 1) ≥ 0) && ((|s| - 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.863074 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "b") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ ((s[(|s| - 1)] = "a") || (s[(|s| - 1)] = "b")) ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ∧ (|s| > 1) ⇒ false
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 12.23712 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] = "b") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (s[(|s| - 1)] ≠ "a") ∧ (s[(|s| - 1)] ≠ "b") ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ⇒ (|s| = 1)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 26.426261 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "b") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (((|s| - 1) ≥ 0) && ((|s| - 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.095075 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "b") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (((|s| - 1) ≥ 0) && ((|s| - 1) < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.08096 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "b") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ ((s[(|s| - 1)] = "a") || (s[(|s| - 1)] = "b")) ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ∧ (|s| > 1) ⇒ false
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 9.402471 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (s[0] ≠ "b") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (s[(|s| - 1)] ≠ "a") ∧ (s[(|s| - 1)] ≠ "b") ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ∧ ((|s| - 1) ≥ 0) ∧ ((|s| - 1) < |s|) ⇒ (|s| = 1)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 20.154537 ms)

@@ -1,0 +1,20 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/971_getAddrSpec.pos.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ email.contains("<")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 33.556417 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((email.find("<") + 1) ≥ 0) && (|email| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 6.606822 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((email.find("<") + 1) ≥ 0) ∧ (|email| ≥ 0) ⇒ email[(email.find("<") + 1):].contains(">")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 32.115592 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((email.find("<") + 1) ≥ 0) && (|email| ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.17186 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((email.find("<") + 1) ≥ 0) && ((email[(email.find("<") + 1):].find(">") + (email.find("<") + 1)) ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 21.48967 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: ((email.find("<") + 1) ≥ 0) ∧ ((email[(email.find("<") + 1):].find(">") + (email.find("<") + 1)) ≥ 0) ⇒ email[(email.find("<") + 1):(email[(email.find("<") + 1):].find(">") + (email.find("<") + 1))] : LangType(([^>])*)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 14.385608 ms)

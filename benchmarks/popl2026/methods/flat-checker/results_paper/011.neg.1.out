@@ -1,0 +1,25 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/011.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (|s| ≤ 1)
+INFO  flat.checker.VCPrf: Failed (time: 37.994683 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Failed (time: 6.923592 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (0 ≥ 0) ∧ (0 < |s|) ⇒ s[0] : LangType((...*)?)
+INFO  flat.checker.VCPrf: Failed (time: 12.597901 ms)
+- [ERROR] Type Error: /benchmark/subjects/011.neg.1.py
+4 |  assert len(s) <= 1
+  |         ^^^^^^^^^^^
+  |         assertion may fail
+- [ERROR] Type Error: /benchmark/subjects/011.neg.1.py
+5 |  return s[0]
+  |           ^
+  |           index may be out of bounds
+- [ERROR] Type Error: /benchmark/subjects/011.neg.1.py
+5 |  return s[0]
+  |         ^^^^
+  |         type may mismatch
+  |         expected: LangType((...*)?)
+  |         actual:   LangType(.)

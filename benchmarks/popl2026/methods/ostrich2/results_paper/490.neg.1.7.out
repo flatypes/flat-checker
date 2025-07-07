@@ -1,0 +1,15 @@
+Loading /benchmark/subjects/490.neg.1/7.smt2 ...
+
+Loading OSTRICH 1.4.1, a solver for string constraints
+(c) Matthew Hague, Denghang Hu, Philipp Rümmer, 2018-2024
+With contributions by Riccardo De Masellis, Zhilei Han, Oliver Markgraf.
+For more information, see https://github.com/uuverifiers/ostrich
+
+Warning: exit is only supported in incremental mode (option +incremental), ignoring it
+Preprocessing ...
+Warning: could not encode regular expression right away, post-poning: re_++(re_*(str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty))), re_union(re_++(re_++(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), re_*(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)))), re_union(re_++(re_++(str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)), re_*(re_++(re_++(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), re_*(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)))), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty))))), re_union(re_++(re_++(str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)), re_*(re_++(re_++(re_++(re_++(re_++(re_*(str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty))), str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty))), re_*(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)))), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty))), re_*(re_++(re_++(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), re_*(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)))), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty))))), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty))))), re_union(re_union(re_++(re_diff(re_allchar, re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)))), re_*(re_allchar)), _let_11_0), re_++(re_++(str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)), re_*(str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)))), re_union(_let_11_0, re_*(re_++(re_diff(re_allchar, re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)))), re_*(re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)))))))))), re_*(re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), re_++(re_diff(re_allchar, re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)))), re_*(re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty))))))))), re_*(re_++(re_diff(re_allchar, re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)))), re_*(re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)))))))), re_*(re_++(re_diff(re_allchar, re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty)))), re_*(re_union(str_to_re(str_cons(mod_cast(0, 65535, 48), str_empty)), str_to_re(str_cons(mod_cast(0, 65535, 49), str_empty))))))))
+Constructing countermodel ...
+
+sat
+
+2455ms

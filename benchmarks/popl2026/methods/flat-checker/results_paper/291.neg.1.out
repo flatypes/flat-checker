@@ -1,0 +1,39 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/291.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 0) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.405898 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 0) ∧ (s[0] = "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (|s| ≠ 1) ∧ (|s| = 2) ⇒ ((1 ≥ 0) && (1 < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.743029 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 0) ∧ (s[0] = "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (|s| ≠ 1) ∧ (|s| = 2) ∧ (1 ≥ 0) ∧ (1 < |s|) ⇒ (s[1] = "b")
+INFO  flat.checker.VCPrf: Failed (time: 57.625173 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 0) ∧ (s[0] = "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (|s| ≠ 1) ∧ (|s| ≠ 2) ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 18.576001 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 0) ∧ (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ ((0 ≥ 0) && (0 < |s|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.030233 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 0) ∧ (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (s[0] = "b")
+INFO  flat.checker.VCPrf: Failed (time: 18.514211 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 0) ∧ (s[0] ≠ "a") ∧ (0 ≥ 0) ∧ (0 < |s|) ⇒ (|s| = 1)
+INFO  flat.checker.VCPrf: Failed (time: 17.369048 ms)
+-- [ERROR] Type Error: /benchmark/subjects/291.neg.1.py
+10 |      assert s[1] == "b"
+   |             ^^^^^^^^^^^
+   |             assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/291.neg.1.py
+12 |      raise Exception
+   |      ^^^^^^^^^^^^^^^
+   |      assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/291.neg.1.py
+14 |    assert s[0] == "b"
+   |           ^^^^^^^^^^^
+   |           assertion may fail
+-- [ERROR] Type Error: /benchmark/subjects/291.neg.1.py
+15 |    assert len(s) == 1
+   |           ^^^^^^^^^^^
+   |           assertion may fail

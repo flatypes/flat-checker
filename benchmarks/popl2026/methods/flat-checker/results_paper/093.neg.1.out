@@ -1,0 +1,9 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/093.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (|s| ≠ 0) ∧ (s ≠ "a") ⇒ false
+INFO  flat.checker.VCPrf: Failed (time: 51.040355 ms)
+- [ERROR] Type Error: /benchmark/subjects/093.neg.1.py
+9 |    raise Exception
+  |    ^^^^^^^^^^^^^^^
+  |    assertion may fail

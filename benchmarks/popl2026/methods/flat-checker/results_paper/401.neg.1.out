@@ -1,0 +1,52 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/401.neg.1.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≤ 0) && (0 ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 23.135355 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (if s.contains("a") then (0 = 0) else (0 = 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.25556 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 2.899984 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] = "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.037758 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] = "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ∧ (s[i₁] = "b") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ ((0 ≤ (i₁ + 1)) && ((i₁ + 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.145759 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] = "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ∧ (s[i₁] = "b") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (if s.contains("a") then ((ca₁ + 1) = (i₁ + 1)) else ((cb₁ + 1) = (i₁ + 1)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.592297 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] = "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ∧ (s[i₁] ≠ "b") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ ((0 ≤ (i₁ + 1)) && ((i₁ + 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 6.282952 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] = "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ∧ (s[i₁] ≠ "b") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (if s.contains("a") then ((ca₁ + 1) = (i₁ + 1)) else (cb₁ = (i₁ + 1)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 8.568397 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] ≠ "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ ((i₁ ≥ 0) && (i₁ < |s|))
+INFO  flat.checker.VCPrf: Proved trivial (time: 0.04295 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] ≠ "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ∧ (s[i₁] = "b") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ ((0 ≤ (i₁ + 1)) && ((i₁ + 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.352428 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] ≠ "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ∧ (s[i₁] = "b") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (if s.contains("a") then (ca₁ = (i₁ + 1)) else ((cb₁ + 1) = (i₁ + 1)))
+INFO  flat.checker.VCPrf: Failed (time: 91.505282 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] ≠ "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ∧ (s[i₁] ≠ "b") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ ((0 ≤ (i₁ + 1)) && ((i₁ + 1) ≤ |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.794864 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ∧ (s[i₁] ≠ "a") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ∧ (s[i₁] ≠ "b") ∧ (i₁ ≥ 0) ∧ (i₁ < |s|) ⇒ (if s.contains("a") then (ca₁ = (i₁ + 1)) else (cb₁ = (i₁ + 1)))
+INFO  flat.checker.VCPrf: Failed (time: 49.712292 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ ≥ |s|) ∧ (0 ≤ i₁) ∧ (i₁ ≤ |s|) ∧ (if s.contains("a") then (ca₁ = i₁) else (cb₁ = i₁)) ⇒ ((ca₁ = |s|) || (cb₁ = |s|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 3.223381 ms)
+- [ERROR] Type Error: /benchmark/subjects/401.neg.1.py
+9 |    inv(ca == i if 'a' in s else cb == i)
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |        invariant may violate
+- [ERROR] Type Error: /benchmark/subjects/401.neg.1.py
+9 |    inv(ca == i if 'a' in s else cb == i)
+  |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |        invariant may violate

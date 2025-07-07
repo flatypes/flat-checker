@@ -1,0 +1,30 @@
+[
+  {
+    "file": "/benchmark/subjects/371.neg.1.py",
+    "success": false,
+    "goals": [
+      {
+        "goal": 1,
+        "success": false,
+        "time (ms)": 34.750092
+      },
+      {
+        "goal": 2,
+        "success": false,
+        "time (ms)": 6.743956
+      },
+      {
+        "goal": 3,
+        "success": true,
+        "time (ms)": 0.423686,
+        "use SMT": false,
+        "use lemmas": false
+      },
+      {
+        "goal": 4,
+        "success": false,
+        "time (ms)": 35.058279
+      }
+    ]
+  }
+]
