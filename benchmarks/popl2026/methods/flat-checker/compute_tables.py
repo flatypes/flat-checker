@@ -2,6 +2,8 @@ import csv
 import math
 from collections import defaultdict
 
+results_dir='results'
+
 def read_csv_dict(filepath):
     with open(filepath, newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
@@ -25,8 +27,8 @@ def stdev(values):
 
 # Load data
 categories = read_csv_dict("../../subjects/categories.csv")    # subject,category
-results = read_csv_dict("results/results.csv")                # subject,time_ms,status,success
-results_vc = read_csv_dict("results/results_vc.csv")          # subject,goal,time_ms,success
+results = read_csv_dict(results_dir + "/results.csv")                # subject,time_ms,status,success
+results_vc = read_csv_dict(results_dir + "/results_vc.csv")          # subject,goal,time_ms,success
 invariants = read_csv_dict("invariants.csv")          # subject,inv
 
 # Build lookups
@@ -79,7 +81,7 @@ for category in sorted(cat_subjects.keys()):
     num_subjects = len(subjects)
     num_goals = cat_goals_count.get(category, 0)
     num_inv = cat_inv_counts.get(category, 0)
-    success_rate = mean(cat_success_values[category]) if cat_success_values[category] else 0.0
+    num_verified = sum(cat_success_values.get(category, []))
     avg_time_ms = mean(cat_time_values[category]) if cat_time_values[category] else 0.0
     avg_time_stdev = stdev(cat_time_values[category]) if cat_time_values[category] else 0.0
 
@@ -88,7 +90,7 @@ for category in sorted(cat_subjects.keys()):
         'num_subjects': num_subjects,
         'num_goals': num_goals,
         'num_inv': num_inv,
-        'success_rate': success_rate,
+        'num_verified': num_verified,
         'avg_time_ms': avg_time_ms,
         'avg_time_stdev': avg_time_stdev
     })
@@ -98,7 +100,7 @@ all_subjects = set(row['subject'] for row in categories)
 total_num_subjects = len(all_subjects)
 total_num_goals = len(results_vc)
 total_num_inv = sum(subject_to_inv.values())
-total_success_rate = mean([r['success'].lower() in ('true', '1', 'yes') for r in results])
+total_num_verified = sum(sum(lst) for lst in cat_success_values.values())
 total_times = [float(r['time_ms']) for r in results if r['time_ms']]
 total_avg_time = mean(total_times) if total_times else 0.0
 total_avg_stdev = stdev(total_times) if total_times else 0.0
@@ -108,11 +110,11 @@ rows.append({
     'num_subjects': total_num_subjects,
     'num_goals': total_num_goals,
     'num_inv': total_num_inv,
-    'success_rate': total_success_rate,
+    'num_verified': total_num_verified,
     'avg_time_ms': total_avg_time,
     'avg_time_stdev': total_avg_stdev
 })
 
 # Write output
-fieldnames = ['category', 'num_subjects', 'num_goals', 'num_inv', 'success_rate', 'avg_time_ms', 'avg_time_stdev']
-write_csv_dict("results/results_by_category.csv", fieldnames, rows)
+fieldnames = ['category', 'num_subjects', 'num_goals', 'num_inv', 'num_verified', 'avg_time_ms', 'avg_time_stdev']
+write_csv_dict(results_dir + "/results_by_category.csv", fieldnames, rows)

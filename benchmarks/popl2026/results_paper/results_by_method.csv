@@ -1,6 +1,6 @@
-method,num_goals,num_sat,num_unsat,num_timeouts,time_total_sec,time_total_with_timeouts_sec,time_avg_sec,time_stdev_sec
-z3,966,0,866,100,9.117,309.876,0.011,0.002
-z3-noodler-pos,966,8,957,1,25.339,28.348,0.026,0.026
-flat-checker,966,0,966,0,51.287,51.287,0.053,0.814
-ostrich2,966,0,938,28,895.325,986.469,0.955,0.351
-cvc5,966,0,910,56,11.666,180.137,0.013,0.026
+method,num_subjects,num_subjects_verified,num_subjects_refuted,num_subjects_unknown,num_goals,num_sat,num_unsat,num_timeouts,time_total_ms,time_total_with_timeouts_ms,time_avg_ms,time_stdev_ms
+z3,203,152,0,51,966,0,866,100,9117.0,309876.0,10.528,2.266
+z3-noodler-pos,203,198,4,1,966,8,957,1,25339.0,28348.0,26.258,25.667
+flat-checker,203,203,0,0,966,0,966,0,51286.639,51286.639,53.092,814.024
+ostrich2,203,181,0,22,966,0,938,28,895325.0,986469.0,954.504,350.948
+cvc5,203,159,0,44,966,0,910,56,11666.0,180137.0,12.82,26.262

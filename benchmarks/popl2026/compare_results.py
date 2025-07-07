@@ -35,7 +35,7 @@ for file_path in all_result_files:
             if not row.get("subject") or not row.get("goal"):
                 continue
 
-            key = (row["subject"], row["goal"])
+            key = (row["subject"], int(row["goal"]))
             results[key][method_name] = row.get(result_col, "")
 
 # Sort methods for consistent column order
@@ -49,5 +49,5 @@ with open("results/comparison.csv", "w", newline='') as out_f:
     for (subject, goal), method_data in sorted(results.items()):
         row = [subject, goal]
         for method in sorted_methods:
-            row.append(method_data.get(method, ""))
+            row.append(method_data.get(method, "error"))
         writer.writerow(row)
