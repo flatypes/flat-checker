@@ -1,5 +1,5 @@
-category,num_subjects,num_goals,num_inv,num_verified,avg_time_ms,avg_time_stdev
-cond,51,253,0,51,822.4117647058823,54.993882012670554
-loop,64,463,45,64,1426.609375,4193.327865910538
-straight,89,250,0,89,783.8426966292135,54.493514809396544
-total,204,966,45,204,995.1372549019608,2354.7606010924874
+category,num_subjects,num_inv,num_verified,num_goals,num_trivial,num_smt_simp,num_smt_lemmas,num_lemmas,time_ms_avg,time_ms_stdev
+straight,89,0,89,250,0,21,101,128,783.84,54.19
+cond,51,0,51,253,11,55,54,133,822.41,54.45
+loop,64,45,64,463,45,227,82,109,1426.61,4160.44
+total,204,45,204,966,56,303,237,370,995.14,2348.98
