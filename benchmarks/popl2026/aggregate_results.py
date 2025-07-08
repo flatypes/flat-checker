@@ -153,7 +153,8 @@ def main():
     methods_dir = "methods"
     output_rows = []
 
-    for method in os.listdir(methods_dir):
+    methods = os.listdir(methods_dir)
+    for method in methods:
         method_path = os.path.join(methods_dir, method)
         if not os.path.isdir(method_path):
             continue

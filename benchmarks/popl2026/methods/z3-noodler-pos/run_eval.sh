@@ -3,7 +3,7 @@
 # NOTE: this is intended to be run from within the z3-noodler-pos docker container
 # see README for more information
 
-TIMEOUT_SECONDS=3
+TIMEOUT_SECONDS=60
 
 subjects_dir="/benchmark/subjects"
 results_dir="/benchmark/methods/z3-noodler-pos/results"

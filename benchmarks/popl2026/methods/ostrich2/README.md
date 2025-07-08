@@ -22,7 +22,7 @@ docker build -t ostrich2-artifact .
 
 ## 3. Run the evaluation
 
-This might take about half an hour.
+This takes about half an hour.
 
 ```shell
 docker run --entrypoint /benchmark/methods/ostrich2/run_eval.sh -v $(realpath ../../../):/benchmark ostrich2-artifact

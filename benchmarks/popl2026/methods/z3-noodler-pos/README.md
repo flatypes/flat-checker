@@ -20,7 +20,7 @@ docker load -i position-constraints-artifact.tar
 
 ## 3. Run the evaluation
 
-This should take about 1 minute.
+This should take about 2 minutes.
 
 ```shell
 docker run --entrypoint /benchmark/methods/z3-noodler-pos/run_eval.sh -v $(realpath ../../../):/benchmark pldi-artifact:latest
