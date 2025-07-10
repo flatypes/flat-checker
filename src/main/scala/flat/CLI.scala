@@ -30,6 +30,11 @@ object CLI:
         .action { (f, c) => c.copy(extractTo = Some(f)) }
         .valueName("<folder>")
         .text("do not solve but only extract proof obligations as SMT queries"),
+      // option --stat
+      opt[File]("stat")
+        .action { (f, c) => c.copy(recorder = Some(Recorder(f))) }
+        .valueName("<file>")
+        .text("save statistics to a JSON file"),
       help('h', "help").text("print this usage text"),
       arg[Seq[String]]("<file>...")
         .unbounded()

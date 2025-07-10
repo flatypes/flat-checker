@@ -20,4 +20,4 @@ class IndexMayOutOfBounds(loc: Location) extends TypeError("index may be out of 
 class OverApprox(reason: String, loc: Location)
   extends Diagnostic(loc, WARN, "Over-approximation", s"cannot infer a precise result because $reason")
 
-class ShowType(inferred: String, loc: Location) extends Diagnostic(loc, INFO, "Show type", inferred)
+class TypeInferred(inferred: String, loc: Location) extends Diagnostic(loc, INFO, "Show type", inferred)

@@ -3,8 +3,7 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Location
 import flat.checker.core.*
-import flat.checker.core.CmpOp.{EQ, GE, LE, LT}
-import flat.regex.RegExpr
+import flat.checker.core.CmpOp.{GE, LT}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -12,6 +11,7 @@ import scala.collection.mutable
 enum Formula:
   case True
   case HasType(value: Expr, typ: Type, loc: Location)
+  case InferType(value: Expr, loc: Location)
   case Goal(boolExpr: Expr, err: TypeError)
   case LAnd(left: Formula, right: Formula)
   case LImp(premise: Expr, conclusion: Formula)
@@ -19,6 +19,7 @@ enum Formula:
   def subst(mappings: Map[String, Expr]): Formula = this match
     case True => True
     case HasType(e, t, loc) => HasType(e.subst(mappings), t, loc)
+    case InferType(e, loc) => InferType(e.subst(mappings), loc)
     case Goal(e, err) => Goal(e.subst(mappings), err)
     case LAnd(phi1, phi2) => LAnd(phi1.subst(mappings), phi2.subst(mappings))
     case LImp(e, phi) => LImp(e.subst(mappings), phi.subst(mappings))
@@ -26,6 +27,7 @@ enum Formula:
   override def toString: String = this match
     case True => "⊤"
     case HasType(e, t, _) => s"($e : $t)"
+    case InferType(e, _) => s"($e : ?)"
     case Goal(e, _) => s"$e"
     case LAnd(phi1, phi2) => s"($phi1 ∧ $phi2)"
     case LImp(e, phi) => s"$e ⇒ $phi"
@@ -39,6 +41,10 @@ object Formula:
     if nontrivial.isEmpty then True else nontrivial.reduceRight(LAnd.apply)
 
   def mkLAnd(formulas: Formula*): Formula = mkLAnd(formulas.toList)
+
+  def mkLImp(premises: List[Expr], conclusion: Formula): Formula = premises match
+    case Nil => conclusion
+    case _ => LImp(premises.reduce(And(_, _)), conclusion)
 
 final class Types(store: Map[String, Type]):
   def apply(name: String): Type =
@@ -74,37 +80,42 @@ object VCGen extends LazyLogging:
                  (using types: Types, pReturn: Formula, fresher: Fresher): Formula =
     stmt match
       case Assign(x, e) =>
-        val pSide = mkLAnd(collectSideGoals(e))
+        val sides = collectSideGoals(e)
         val t = types(x)
         val b: Type = t.toSort
         val pAssign = if t == b then True else HasType(e, t, e.loc)
-        mkLAnd(pSide, pAssign, post.subst(Map(x -> e)))
+        mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(sides.map(_._1), pAssign), post.subst(Map(x -> e)))
       case Assert(cond) =>
-        val pSide = mkLAnd(collectSideGoals(cond))
-        mkLAnd(pSide, Goal(cond, AssertionMayFail(cond.loc)), post)
+        val sides = collectSideGoals(cond)
+        mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(sides.map(_._1), Goal(cond, AssertionMayFail(cond.loc))), post)
       case IfStmt(b, s1, s2) =>
         val conds = destruct(b)
         val pTrue = conds.foldRight(wlp(s1, post, pInv)) { case (e, p) =>
-          val pSide = mkLAnd(collectSideGoals(e))
-          mkLAnd(pSide, LImp(e, p))
+          val sides = collectSideGoals(e)
+          mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(e :: sides.map(_._1), p))
         }
-        val pFalse = LImp(Not(b).copyLocation(b), wlp(s2, post, pInv))
+        val pFalse = mkLImp(Not(b).copyLocation(b) :: collectSideGoals(b).map(_._1), wlp(s2, post, pInv))
         mkLAnd(pTrue, pFalse)
       case whileStmt@While(b, s, userInv) =>
         val inv =
           if userInv.isEmpty then Analyzer.guessLoopInv(whileStmt, body).map(_.copyLocation(b)) else userInv
         if userInv.isEmpty then
           logger.debug(s"Guessing invariants: ${inv.mkString(", ")}")
-        val pInv = mkLAnd(inv.flatMap(collectSideGoals) ++ (for e <- inv yield Goal(e, InvariantMayViolate(e.loc))))
-        val pSide = mkLAnd(collectSideGoals(b))
-        val pEnter = (b :: inv).foldRight(wlp(s, pInv, pInv))(LImp.apply)
-        val exitCond = mkOr(Not(b).copyLocation(b) :: collectBreakCond(s))
+        val pInv = mkLAnd(for e <- inv yield Goal(e, InvariantMayViolate(e.loc)))
+        val sides = collectSideGoals(b)
+        val pEnter = (b :: sides.map(_._1) ++ inv).foldRight(wlp(s, pInv, pInv))(LImp.apply)
+        val exitCond = mkOr(
+          mkAnd(Not(b).copyLocation(b) :: sides.map(_._1)) ::
+            collectBreakCond(s).map(e => mkAnd(e :: collectSideGoals(e).map(_._1))))
         val pExit = (exitCond :: inv).foldRight(post)(LImp.apply)
         val pLoop = mkLAnd(pEnter, pExit)
         val m = Map.from(for x <- Analyzer.getModifiedVars(whileStmt) yield x -> Var(fresher.fresh(x)))
-        mkLAnd(pInv, pSide, pLoop.subst(m))
+        mkLAnd(pInv, mkLAnd(sides.map(Goal(_, _))), pLoop.subst(m))
       case Break() => pInv
       case Return() => pReturn
+      case ShowType(e) =>
+        val sides = collectSideGoals(e)
+        mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(sides.map(_._1), InferType(e, e.loc)), post)
 
   @tailrec
   private def wlp(body: List[Stmt], post: Formula, pInv: Formula)
@@ -122,13 +133,15 @@ object VCGen extends LazyLogging:
       case IfStmt(cond, List(Break()), _) => cond
     }
 
-  private def collectSideGoals(expr: Expr): List[Formula] = expr.walkAndCollect {
+  private def collectSideGoals(expr: Expr): List[(Expr, TypeError)] = expr.walkAndCollect {
     case StrAt(str, index) => // 0 <= index < |str|
-      Goal(And(GE(index, 0), LT(index, StrLen(str))), IndexMayOutOfBounds(index.loc))
-    case StrToCode(str) => // |str| == 1
-      Goal(EQ(StrLen(str), 1), TypeMayMismatch("char (string of length 1)", "string", str.loc))
-    case StrFromCode(int) => // 0 <= int <= 0x2FFFF
-      Goal(And(GE(int, 0), LE(int, 0x2FFFF)), IndexMayOutOfBounds(int.loc))
-    case StrToInt(str) => // str in number
-      HasType(str, LangType(RegExpr.number), str.loc)
+      (And(GE(index, 0), LT(index, StrLen(str))), IndexMayOutOfBounds(index.loc))
+    case StrSlice(_, fromIndex, untilIndex) => // both indices are non-negative
+      (And(GE(fromIndex, 0), GE(untilIndex, 0)), IndexMayOutOfBounds(expr.loc))
+    //    case StrToCode(str) => // |str| == 1
+    //      Goal(EQ(StrLen(str), 1), TypeMayMismatch("char (string of length 1)", "string", str.loc))
+    //    case StrFromCode(int) => // 0 <= int <= 0x2FFFF
+    //      Goal(And(GE(int, 0), LE(int, 0x2FFFF)), IndexMayOutOfBounds(int.loc))
+    //    case StrToInt(str) => // str in number
+    //      HasType(str, LangType(RegExpr.number), str.loc)
   }

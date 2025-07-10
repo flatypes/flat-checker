@@ -7,7 +7,7 @@ import io.github.cvc5
 
 import scala.collection.mutable.ListBuffer
 
-class VCExtract(input: os.Path)(using types: Types, config: Config) extends VCPrf:
+class VCExtract(input: os.Path)(using types: Types, config: Config) extends VCPrf(input):
   private val smtSolver = SMTSolver(using config)
 
   override def proveSubGoal(goal: Goal)(using ctx: PrfCtx): Unit =

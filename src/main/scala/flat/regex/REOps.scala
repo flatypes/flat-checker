@@ -201,14 +201,6 @@ object REOps extends LazyLogging:
   def tryEnumerate(re: RegExpr): Option[Set[String]] =
     if size(re.normalize).exists(_ < 20) then Some(langSet(re)) else None
 
-  def containsWord(re: RegExpr, word: String): Boolean = word.length match
-    case 0 => re.nullable
-    case 1 => length(re) == NatRange.at(1) && alphabet(re).contains(word.head)
-    case _ =>
-      tryEnumerate(re) match
-        case Some(words) => words.contains(word)
-        case None => throw UnsupportedOperationException(re.toString)
-
   def derivative(re: RegExpr, c: Char): RegExpr = re match
     case RENone | RENull => RENone
     case REChar(cs) => if cs.contains(c) then RENull else RENone
@@ -217,6 +209,13 @@ object REOps extends LazyLogging:
       if r1.nullable then mkUnion(r, derivative(r2, c)) else mkConcat(r, r2)
     case REUnion(r1, r2) => mkUnion(derivative(r1, c), derivative(r2, c))
     case RELoop(q, r1) => mkConcat(derivative(r1, c), mkLoop(q - 1, r1))
+
+  @tailrec
+  def canParse(re: RegExpr, s: String): Boolean =
+    if s.isEmpty then re.nullable
+    else
+      val r = derivative(re, s.head)
+      if r == RENone then false else canParse(r, s.tail)
 
   @tailrec
   private def mayStartWith(re: RegExpr, prefix: String): Boolean =
