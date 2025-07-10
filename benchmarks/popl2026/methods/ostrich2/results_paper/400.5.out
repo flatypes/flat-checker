@@ -9,6 +9,6 @@ Warning: exit is only supported in incremental mode (option +incremental), ignor
 Preprocessing ...
 Constructing countermodel ...
 
-sat
+unsat
 
-913ms
+591ms

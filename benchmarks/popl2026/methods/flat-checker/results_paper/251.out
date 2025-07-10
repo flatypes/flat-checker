@@ -1,0 +1,32 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/251.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≤ 0) && (0 < (|s| + 2)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 43.95291 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ s[0:] : (ab)*
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 13.680711 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 2)) ∧ s[i₁:] : (ab)* ⇒ ((i₁ ≥ 0) && ((i₁ + 2) ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.907247 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 2)) ∧ s[i₁:] : (ab)* ⇒ (|s[i₁:(i₁ + 2)]| = 2)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 40.997977 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 2)) ∧ s[i₁:] : (ab)* ⇒ ((0 ≥ 0) && (0 < |s[i₁:(i₁ + 2)]|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 6.514539 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 2)) ∧ s[i₁:] : (ab)* ⇒ ((1 ≥ 0) && (1 < |s[i₁:(i₁ + 2)]|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 26.507895 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 2)) ∧ s[i₁:] : (ab)* ⇒ (s[i₁:(i₁ + 2)][0] = "a")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 32.203822 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 2)) ∧ s[i₁:] : (ab)* ⇒ (s[i₁:(i₁ + 2)][1] = "b")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 44.97347 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 2)) ∧ s[i₁:] : (ab)* ⇒ ((0 ≤ (i₁ + 2)) && ((i₁ + 2) < (|s| + 2)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.300203 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 2)) ∧ s[i₁:] : (ab)* ⇒ s[(i₁ + 2):] : (ab)*
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 4.546658 ms)

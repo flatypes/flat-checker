@@ -1,0 +1,5 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/161.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ (((s = "") || (s ≠ "a")) && (|s| ≤ 1))
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 49.917665 ms)

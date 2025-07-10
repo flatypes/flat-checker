@@ -1,0 +1,5 @@
+category,num_subjects,num_inv,num_verified,num_goals,num_trivial,num_smt_simp,num_smt_lemmas,num_lemmas,time_ms_avg,time_ms_stdev
+straight,89,0,89,250,0,21,101,128,783.84,54.19
+cond,51,0,51,253,11,55,54,133,822.41,54.45
+loop,64,45,64,463,45,227,82,109,1426.61,4160.44
+total,204,45,204,966,56,303,237,370,995.14,2348.98

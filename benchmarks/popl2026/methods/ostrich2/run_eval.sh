@@ -3,7 +3,7 @@
 # NOTE: this is intended to be run from within the ostrich2 docker container
 # see README for more information
 
-TIMEOUT_MILLISECONDS=3000
+TIMEOUT_MILLISECONDS=60000
 
 subjects_dir="/benchmark/subjects"
 results_dir="/benchmark/methods/ostrich2/results"

@@ -1,0 +1,15 @@
+[
+  {
+    "file": "/benchmark/subjects/161.py",
+    "success": true,
+    "goals": [
+      {
+        "goal": 1,
+        "success": true,
+        "time (ms)": 49.917665,
+        "use SMT": false,
+        "use lemmas": true
+      }
+    ]
+  }
+]

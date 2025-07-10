@@ -1,0 +1,38 @@
+INFO  flat.Driver$: 
+INFO  flat.Driver$: Checking: /benchmark/subjects/451.py
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ ((0 ≤ 0) && (0 < (|s| + 3)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 26.130695 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal:  ⇒ s[0:] : (a[^ab]b)*
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 13.615491 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ ((i₁ ≥ 0) && ((i₁ + 3) ≥ 0))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 4.998928 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ (|s[i₁:(i₁ + 3)]| = 3)
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 40.031058 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ ((0 ≥ 0) && (0 < |s[i₁:(i₁ + 3)]|))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 6.176933 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ ((1 ≥ 0) && (1 < |s[i₁:(i₁ + 3)]|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 26.489508 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ ((2 ≥ 0) && (2 < |s[i₁:(i₁ + 3)]|))
+INFO  flat.checker.VCPrf: Proved with SMT + lemmas (time: 25.624674 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ (s[i₁:(i₁ + 3)][0] = "a")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 31.65565 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ (s[i₁:(i₁ + 3)][2] = "b")
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 27.511302 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ ((s[i₁:(i₁ + 3)][1] ≠ "a") && (s[i₁:(i₁ + 3)][1] ≠ "b"))
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 59.330244 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ ((0 ≤ (i₁ + 3)) && ((i₁ + 3) < (|s| + 3)))
+INFO  flat.checker.VCPrf: Proved with SMT (time: 5.523281 ms)
+INFO  flat.checker.VCPrf: 
+INFO  flat.checker.VCPrf: Goal: (i₁ < |s|) ∧ (0 ≤ i₁) ∧ (i₁ < (|s| + 3)) ∧ s[i₁:] : (a[^ab]b)* ⇒ s[(i₁ + 3):] : (a[^ab]b)*
+INFO  flat.checker.VCPrf: Proved with lemmas (time: 4.553473 ms)

@@ -3,7 +3,7 @@
 # NOTE: this is intended to be run from within the cvc5 docker container
 # see README for more information
 
-TIMEOUT_MILLISECONDS=3000
+TIMEOUT_MILLISECONDS=60000
 
 subjects_dir="/benchmark/subjects"
 results_dir="/benchmark/methods/cvc5/results"

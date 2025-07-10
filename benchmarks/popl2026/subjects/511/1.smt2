@@ -1,7 +1,7 @@
 ; Input: /benchmark/subjects/511.py
 (set-logic ALL)
 (declare-const s String)
-(assert (str.in_re s (re.++ (re.++ ((_ re.loop 0 1) (str.to_re "a")) ((_ re.loop 0 1) (str.to_re "b"))) ((_ re.loop 0 1) (str.to_re "c")))))
+(assert (str.in_re s (re.++ (re.++ (re.opt (str.to_re "a")) (re.opt (str.to_re "b"))) (re.opt (str.to_re "c")))))
 (assert (distinct s "abc"))
 (assert (distinct s "ab"))
 (assert (distinct s "a"))

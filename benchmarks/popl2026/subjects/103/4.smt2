@@ -8,6 +8,8 @@
 (assert (<= 0 i@1))
 (assert (<= i@1 (str.len s)))
 (assert (= j@1 i@1))
+(assert (>= i@1 0))
+(assert (< i@1 (str.len s)))
 (assert (not (= (str.at s i@1) "a")))
 (check-sat)
 (exit)
