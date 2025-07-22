@@ -1,5 +1,3 @@
-from flat.py import lang
-
 type VersionNumber = lang(r'[0-9]+\.[0-9]+\.[0-9]+')
 type Number = lang(r'[0-9]+')
 
