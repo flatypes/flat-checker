@@ -57,7 +57,7 @@ class Prover(path: os.Path)(using types: Types, config: Config) extends VCPrf(pa
 
   private def checkType(expr: Expr, typ: Type)(using ctx: PrfCtx): Either[Type, Unit] = typ match
     case LangType(r2) =>
-      val inferer = new HintSynth
+      val inferer = new Inferer
       val r1 = inferer.inferLang(expr)
       if r1.subsetOf(r2) then Right(()) else Left(LangType(r1))
     case TupleType(ts) =>
@@ -75,7 +75,7 @@ class Prover(path: os.Path)(using types: Types, config: Config) extends VCPrf(pa
       throw UnsupportedOperationException(s"check $expr : $typ")
 
   override def inferType(goal: Formula.InferType)(using ctx: PrfCtx): Unit =
-    val inferer = new HintSynth
+    val inferer = new Inferer
     val r = inferer.inferLang(goal.value)
     issuer.report(TypeInferred(r.toString, goal.loc))
 

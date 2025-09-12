@@ -2,38 +2,35 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
+import flat.Ops.CmpOp.*
 import flat.checker.core.*
+import flat.checker.core.ArithOp.*
 import flat.regex.*
-import flat.regex.RegExpr.*
-import flat.util.tryAll
+import flat.regex.AOps.*
+import flat.regex.RegEx.*
 
 import scala.collection.mutable.ListBuffer
 
 class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
-
-  import ArithOp.*
-  import CmpOp.*
-  import Direction.*
-
   private val hints = ListBuffer.empty[Expr]
 
   private val types = ctx.types
 
-  private val indexSolver = new IndexSolver
+  private val inferer = new Inferer
 
   private val smtSolver = new SMTSolver
 
   def collectHints(seed: Expr): List[Expr] =
     val temps = seed.collect {
-      case e@StrLen(_) => Len(e)
-      case e@StrAt(_, _) => CharAt(e)
-      case e@StrFind(_, _) => Find(e)
-      case e@StrContains(_, _) => StrTest(e)
-      case Cmp(EQ | NE, e, Const(s: String)) => StrEq(e, s)
+      case e@Length(_) => HLength(e)
+      case e@CharAt(_, _) => HChars(e)
+      case e@Find(_, _) => HFind(e)
+      case e@InfixOf(_, _) => HTest(e)
+      case Cmp(EQ | NE, e, Const(s: String)) => HEq(e, s)
       case e@Var(_) if ctx.exists {
-        case Cmp(_, StrAt(_, ei), _) => ei == e
-        case Cmp(_, ei, StrFind(_, _)) => ei == e
-      } => IndexVar(e)
+        case Cmp(_, CharAt(_, ei), _) => ei == e
+        case Cmp(_, ei, Find(_, _)) => ei == e
+      } => HIndex(e)
     }.distinct
     hints.clear()
     for temp <- temps do temp()
@@ -42,140 +39,138 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
   sealed trait HintTemp extends LazyLogging:
     def apply(): Unit
 
-  final case class Len(expr: StrLen) extends HintTemp:
+  final case class HLength(expr: Length) extends HintTemp:
     def apply(): Unit =
-      tryAll(
-        () => for
-          (ei, r) <- extractSuffixLang(expr.str)
-          if smtSolver.canProve(mkAnd(GE(ei, 0), LT(ei, expr)))
-        yield
-          val r1 = RERefiner.refineByLen(r, (GT, 0))
-          val NatRange(lb, ub) = REOps.length(r1)
-          hints += GE(expr, ADD(ei, lb))
-          for k <- ub do hints += LE(expr, ADD(ei, k))
-      ).getOrElse {
-        val r = inferLang(expr.str)
-        val NatRange(lb, ub) = REOps.length(r)
-        if ub.contains(lb) then
-          hints += EQ(expr, lb)
-        else
-          if lb > 0 then hints += GE(expr, lb)
-          for k <- ub do hints += LE(expr, k)
-      }
+      //      tryAll(
+      //        () => for
+      //          (ei, r) <- extractSuffixLang(expr.str)
+      //          if smtSolver.canProve(mkAnd(GE(ei, 0), LT(ei, expr)))
+      //        yield
+      //          val r1 = RERefiner.refineByLen(r, (GT, 0))
+      //          val Interval(lb, ub) = r1.length
+      //          hints += GE(expr, ADD(ei, lb))
+      //          for k <- ub do hints += LE(expr, ADD(ei, k))
+      //      ).getOrElse {
+      val r = inferer.inferLang(expr.str)
+      val Interval(lb, ub) = r.length
+      if lb == ub then
+        hints += EQ(expr, lb)
+      else
+        if lb > 0 then hints += GE(expr, lb)
+        ub match
+          case n: Int => hints += LE(expr, n)
+          case _ =>
+  //      }
 
-  final case class IndexVar(expr: Var) extends HintTemp:
+  final case class HIndex(expr: Var) extends HintTemp:
     def apply(): Unit =
       ctx.foreach {
-        case Cmp(EQ, StrAt(es, ei@Var(_)), Const(s: String)) if s.length == 1 =>
-          val r = inferLang(es)
+        case Cmp(EQ, CharAt(es, ei@Var(_)), Const(s: String)) if s.length == 1 =>
+          val r = inferer.inferLang(es)
           val c = s.head
-          val ((r1, _), _) = REOps.splitAtIndexOf(r, c)
+          val r1 = r.splitPrefix(c)
           if r1 != RENone then
-            val k1 = REOps.length(r1).lower
+            val k1 = r1.length.lb
             hints += GE(ei, k1)
-            val ((_, r2), _) = REOps.splitAtIndexOf(r.reverse, c)
-            val k2 = REOps.length(r2).lower
-            hints += LT(ei, SUB(StrLen(es), k2))
-        case Cmp(NE, StrAt(es, ei@Var(_)), Const(s: String)) if s.length == 1 =>
-          val r = inferLang(es)
+            val r2 = r.reverse.splitSuffix(c)
+            val k2 = r2.length.lb
+            hints += LT(ei, SUB(Length(es), k2))
+        case Cmp(NE, CharAt(es, ei@Var(_)), Const(s: String)) if s.length == 1 =>
+          val r = inferer.inferLang(es)
           val c = s.head
           r match
-            case REConcat(RELoop(_, REChar(cs)), r1) if cs.isSingletonOf(c) =>
-              for k1 <- REOps.length(r1).upper do hints += GE(ei, SUB(StrLen(es), k1))
+            case REConcat(REStar(RELit(cs)), r1) if cs.isSingletonOf(c) =>
+              r1.length.ub match
+                case k1: Int => hints += GE(ei, SUB(Length(es), k1))
+                case _ =>
             case _ =>
-        case Cmp(LE, e1, StrFind(es, Const(s: String))) if e1 == expr && s.length == 1 =>
-          val r = inferLang(es)
+        case Cmp(LE, e1, Find(es, Const(s: String))) if e1 == expr && s.length == 1 =>
+          val r = inferer.inferLang(es)
           val c = s.head
-          val ((r1, _), _) = REOps.splitAtIndexOf(r, c)
-          val cs = REOps.alphabet(r) -- REOps.alphabet(r1) - c
+          val r1 = r.splitPrefix(c)
+          val cs = r.alphabet -- r1.alphabet - c
           require(cs.polarity)
           for
             c <- cs.chars
-            if ctx.exists { case StrContains(e1, Const(s1: String)) => e1 == es && s1 == c.toString }
-          do hints += LT(e1, StrFind(es, Const(c.toString)))
+            if ctx.exists { case InfixOf(e1, Const(s1: String)) => e1 == es && s1 == c.toString }
+          do hints += LT(e1, Find(es, Const(c.toString)))
         case _ =>
       }
 
-  final case class CharAt(expr: StrAt) extends HintTemp:
+  final case class HChars(expr: CharAt) extends HintTemp:
     def apply(): Unit =
-      inferLang(expr) match
-        case REChar(cs) if cs.polarity =>
+      inferer.inferLang(expr) match
+        case RELit(cs) if cs.polarity =>
           val cases = for c <- cs.chars yield EQ(expr, c.toString)
           hints += mkOr(cases.toList)
         case _ => throw InternalError()
 
-  final case class Find(expr: StrFind) extends HintTemp:
+  final case class HFind(expr: Find) extends HintTemp:
     def apply(): Unit =
-      inferIndexOf(expr) match
-        case Some(IndexAt(_, L, k)) => hints += EQ(expr, k)
-        case Some(IndexAt(_, R, 0)) => hints += EQ(expr, -1)
-        case Some(IndexAt(_, R, k)) => hints += EQ(expr, SUB(StrLen(expr.str), k))
-        case Some((IndexAt(_, L, k1), IndexAt(_, L, k2))) =>
-          hints += GE(expr, k1)
-          hints += LE(expr, k2)
-        case Some((IndexAt(_, L, k1), IndexAt(_, R, k2))) =>
-          hints += GE(expr, k1)
-          hints += LE(expr, SUB(StrLen(expr.str), k2))
+      val (interval, found) = inferer.inferFind(expr)
+      val ge = GE(expr, interval.lb)
+      hints += (if found then ge else mkOr(EQ(expr, -1), ge))
+      interval.ub match
+        case m: Int =>
+          hints += LE(expr, m)
         case _ =>
 
-  final case class StrEq(str: Expr, target: String) extends HintTemp:
+  final case class HEq(str: Expr, target: String) extends HintTemp:
     def apply(): Unit =
-      val r = inferLang(str)
-      for ss <- REOps.tryEnumerate(r) do
+      val r = inferer.inferLang(str)
+      for ss <- AOps.tryEnumerate(r) do
         val cases = for s <- ss yield EQ(str, s)
         hints += mkOr(cases.toList)
       r match
-        case REChar(cs) if !cs.polarity =>
+        case RELit(cs) if !cs.polarity =>
           for c <- cs.chars do
             hints += NE(str, c.toString)
         case _ =>
 
-  final case class StrTest(expr: StrContains) extends HintTemp:
-    def apply(): Unit = expr match
-      case StrContains(e, Const(s: String)) if s.length == 1 =>
-        val r = inferLang(e)
-        REOps.contains(r, s.charAt(0)) match
-          case Some(true) => hints += StrContains(e, s)
-          case Some(false) => hints += Not(StrContains(e, s))
-          case None =>
-      case _ =>
-
-  def inferLang(expr: Expr): RegExpr = expr match
-    case Const(s: String) => fromString(s)
-    case Var(_) => ctx.getLang(expr)
-    case StrConcat(es1, es2) =>
-      val r1 = inferLang(es1)
-      val r2 = inferLang(es2)
-      mkConcat(r1, r2)
-    case StrAt(es, ei) =>
-      val attempt = for
-        (from, r) <- extractSuffixLang(es)
-        k <- Rewriter.tryGetConstDiff(ei, from)
-        if k >= 0
-      // r = langRefiner.refineSuffix(es, from, r0)
-      yield REOps.firstSet(slice(r, IndexAt(null, L, k)))
-      // normal attempt
-      val r = inferLang(es)
-      var cs = indexSolver.solve(ei, es) match
-        case IndexAt(_, L, k) => REOps.charAt(r, k)
-        case IndexAt(_, R, k) => REOps.charAt(r.reverse, k - 1)
-        case i: Index => REOps.firstSet(slice(r, i))
-        case IndexRange(i1: Index, i2: Index) =>
-          logger.debug(s"slice $r from $i1 to $i2")
-          REOps.alphabet(slice(r, i1, i2 + 1))
-      if cs.isEmpty then cs = REOps.alphabet(r)
-      ctx.foreach {
-        case Cmp(NE, StrAt(e1, e2), Const(s: String)) if e1 == es && e2 == ei && s.length == 1 =>
-          // TODO: is it possible to direct report inconsistency at this phase?
-          if !cs.isSingleton then cs = cs - s.head
+  final case class HTest(expr: InfixOf) extends HintTemp:
+    def apply(): Unit =
+      inferer.inferTest(expr) match
+        case BoolSet.True => hints += expr
+        case BoolSet.False => hints += Not(expr)
         case _ =>
-      }
-      // pick the more precise one
-      attempt match
-        case Some(cs1) if cs1.subsetOf(cs) =>
-          logger.debug(s"  infer $expr ∈ $cs1 by suffix")
-          REChar(cs1)
-        case _ => REChar(cs)
+
+/*  def inferLang(str: Expr): RegEx = str match
+    case Const(s: String) => RegEx.fromString(s)
+    case Var(_) => ctx.getLang(str)
+    case StrConcat(es1, es2) => inferLang(es1) ++ inferLang(es2)
+    case StrRev(es) => inferLang(es).reverse
+    case StrAt(es, ei) =>
+      val r = inferLang(es)
+      val i = indexInferer.infer(ei, es)
+      substr(r, i, AIndexR(0)).take1
+//      val attempt = for
+//        (from, r) <- extractSuffixLang(es)
+//        k <- Rewriter.tryGetConstDiff(ei, from)
+//        if k >= 0
+//      // r = langRefiner.refineSuffix(es, from, r0)
+//      yield slice(r, IndexAt(null, L, k)).first
+//      // normal attempt
+//      val r = inferLang(es)
+//      var cs = indexSolver.solve(ei, es) match
+//        case IndexAt(_, L, k) => AOps.charAt(r, k)
+//        case IndexAt(_, R, k) => AOps.charAt(r.reverse, k - 1)
+//        case i: Index => slice(r, i).first
+//        case IndexRange(i1: Index, i2: Index) =>
+//          logger.debug(s"slice $r from $i1 to $i2")
+//          slice(r, i1, i2 + 1).alphabet
+//      if cs.isEmpty then cs = r.alphabet
+//      ctx.foreach {
+//        case Cmp(NE, StrAt(e1, e2), Const(s: String)) if e1 == es && e2 == ei && s.length == 1 =>
+//          // TODO: is it possible to direct report inconsistency at this phase?
+//          if !cs.isSingleton then cs = cs - s.head
+//        case _ =>
+//      }
+//      // pick the more precise one
+//      attempt match
+//        case Some(cs1) if cs1.subsetOf(cs) =>
+//          logger.debug(s"  infer $str ∈ $cs1 by suffix")
+//          RELit(cs1)
+//        case _ => RELit(cs)
     case StrSlice(es, ei, ej) =>
       logger.debug(s"infer $es[$ei:$ej]")
       tryAll(
@@ -208,7 +203,7 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
             indexSolver.solve(ei, es) match
               case i1: Index =>
                 val r1 = slice(r, i1)
-                val ((r2, _), _) = REOps.splitAtIndexOf(r1, s.head)
+                val ((r2, _), _) = AOps.splitAtIndexOf(r1, s.head)
                 return r2
               case _ =>
           case _ =>
@@ -219,90 +214,91 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
             logger.debug(s"$es[$ei:$ej] : $r1")
             r1
           case (IndexRange(i1, i2), IndexAt(_, R, 0)) =>
-            val cs = REOps.alphabet(slice(r, i1, i2 + 1))
+            val cs = slice(r, i1, i2 + 1).alphabet
             val r2 = slice(r, i2 + 1, IndexAt(es, R, 0))
             val r1 = i1 match
-              case IndexAt(_, L, _) => REChar(cs).+
+              case IndexAt(_, L, _) => RELit(cs).+
               case _ => throw UnsupportedOperationException(i1.toString)
             logger.debug(s"$es[$ei:$ej] : $r1$r2")
-            mkConcat(r1, r2)
+            concat(r1, r2)
           case (i1, i2) => throw UnsupportedOperationException(s"slice $i1 until $i2")
       }
-    case _ => throw IllegalArgumentException(s"not a str-sorted expression: $expr")
+    case _ => throw IllegalArgumentException(s"not a str-sorted expression: $str")
 
-  private def extractSuffixLang(str: Expr): Option[(Expr, RegExpr)] =
+  private def extractSuffixLang(str: Expr): Option[(Expr, RegEx)] =
     ctx.collectFirst {
       case TypeTest(suffix@StrSlice(e1, ei, StrLen(e2)), LangType(_)) if e1 == str && e2 == str =>
         (ei, ctx.getLang(suffix))
     }
 
-  private def slice(re: RegExpr, fromIndex: Index): RegExpr = slice(re, fromIndex, IndexAt(null, R, 0))
+  private def slice(re: RegEx, fromIndex: Index): RegEx = slice(re, fromIndex, IndexAt(null, R, 0))
 
-  private def slice(re: RegExpr, fromIndex: Index, untilIndex: Index): RegExpr =
+  private def slice(re: RegEx, fromIndex: Index, untilIndex: Index): RegEx =
     // TODO: check empty slice first?
     fromIndex match
       case IndexAt(_, d1, i1) =>
         val ra = d1 match
-          case L => REOps.drop(re, i1)
-          case R => REOps.takeRight(re, i1)
+          case L => re.drop(i1)
+          case R => AOps.takeRight(re, i1)
         untilIndex match
           case IndexAt(_, L, i2) =>
             require(d1 == L)
-            REOps.take(ra, (i2 - i1) max 0)
+            ra.take((i2 - i1) max 0)
           case IndexAt(_, R, i2) =>
-            REOps.dropRight(ra, i2)
+            AOps.dropRight(ra, i2)
           case IndexOf(e, c, k) =>
             val r0 = inferLang(e)
             require(r0 == re || r0 == ra)
-            val ((ral, rar), raNot) = REOps.splitAtIndexOf(ra, c)
+            val ((ral, rar), raNot) = AOps.splitAtIndexOf(ra, c)
             // assert(raNot == ReNone)
-            val (r, _) = REOps.shift(ral, rar, k)
+            val (r, _) = AOps.shift(ral, rar, k)
             val dropped =
               if r0 == re then d1 match
-                case L => REOps.alphabet(REOps.take(re, i1))
-                case R => REOps.alphabet(REOps.dropRight(re, i1))
+                case L => re.take(i1).alphabet
+                case R => AOps.dropRight(re, i1).alphabet
               else CharSet.empty
-            if dropped.contains(c) then mkNullable(r) else r
+            if dropped.contains(c) then r.unionNull else r
       case IndexOf(es1, c1, k1) =>
         val r1 = inferLang(es1)
         require(r1 == re)
         untilIndex match
           case IndexAt(_, d2, i2) =>
             val ra = d2 match
-              case L => REOps.take(re, i2)
-              case R => REOps.dropRight(re, i2)
-            val ((ral, rar), raNot) = REOps.splitAtIndexOf(ra, c1)
+              case L => re.take(i2)
+              case R => AOps.dropRight(re, i2)
+            val ((ral, rar), raNot) = AOps.splitAtIndexOf(ra, c1)
             // assert(raNot == ReNone, raNot.toString)
-            val (_, r) = REOps.shift(ral, rar, k1)
+            val (_, r) = AOps.shift(ral, rar, k1)
             val dropped = d2 match
-              case L => REOps.alphabet(REOps.dropRight(re, i2))
-              case R => REOps.alphabet(REOps.take(re, i2))
-            if dropped.contains(c1) then mkNullable(r) else r
+              case L => AOps.dropRight(re, i2).alphabet
+              case R => re.take(i2).alphabet
+            if dropped.contains(c1) then r.unionNull else r
           case IndexOf(es2, c2, k2) =>
             val r2 = inferLang(es2)
-            val ((rel, rer), reNot) = REOps.splitAtIndexOf(re, c1)
+            val ((rel, rer), reNot) = AOps.splitAtIndexOf(re, c1)
             // assert(reNot == RENone, reNot.toString)
-            val (rDrop, ra) = REOps.shift(rel, rer, k1)
+            val (rDrop, ra) = AOps.shift(rel, rer, k1)
             require(r2 == ra || r2 == re)
-            val ((ral, rar), raNot) = REOps.splitAtIndexOf(ra, c2)
+            val ((ral, rar), raNot) = AOps.splitAtIndexOf(ra, c2)
             // assert(raNot == RENone, raNot.toString)
-            val (r, _) = REOps.shift(ral, rar, k2)
-            val dropped = if r2 == re then REOps.alphabet(rDrop) else CharSet.empty
-            if dropped.contains(c2) then mkNullable(r) else r
+            val (r, _) = AOps.shift(ral, rar, k2)
+            val dropped = if r2 == re then rDrop.alphabet else CharSet.empty
+            if dropped.contains(c2) then r.unionNull else r
 
   def inferIndexOf(expr: StrFind): Option[Index | (Index, Index)] = expr match
     case StrFind(es, Const(s: String)) if s.length == 1 =>
       val r = inferLang(es)
-      val ((r1, r2), rNot) = REOps.splitAtIndexOf(r, s.head)
+      val ((r1, r2), rNot) = AOps.splitAtIndexOf(r, s.head)
       if rNot != RENone && r1 == RENone && r2 == RENone then
         return Some(IndexAt(expr.str, R, 0))
-      val k1 = REOps.length(r1).lower
-      if REOps.length(r1).upper.contains(k1) && rNot == RENone then
+      val k1 = r1.length.lower
+      if r1.length.upper.contains(k1) && rNot == RENone then
         return Some(IndexAt(expr.str, L, k1))
-      val k2 = REOps.length(r2).lower
-      if REOps.length(r2).upper.contains(k2) && rNot == RENone then
+      val k2 = r2.length.lower
+      if r2.length.upper.contains(k2) && rNot == RENone then
         return Some(IndexAt(expr.str, R, k2))
-      REOps.length(r1).upper match
+      r1.length.upper match
         case Some(k3) => Some((IndexAt(expr.str, L, k1), IndexAt(expr.str, L, k3)))
         case None => Some((IndexAt(expr.str, L, k1), IndexAt(expr.str, R, 1)))
     case _ => None
+*/

@@ -1,7 +1,7 @@
 package flat.checker
 
 import flat.checker.*
-import flat.regex.RegExpr
+import flat.regex.RegEx
 import flat.util.renderSubscript
 import flat.{Location, Locational, Ops}
 import org.apache.commons.text.StringEscapeUtils.escapeJava
@@ -33,14 +33,14 @@ object core:
   case object BoolType extends Type:
     def toSort: Sort = Sort.Bool
 
-  final case class LangType(re: RegExpr) extends Type:
+  final case class LangType(re: RegEx) extends Type:
     def toSort: Sort = Sort.String
 
-  val strType: Type = LangType(RegExpr.all)
+  val strType: Type = LangType(RegEx.all)
 
-  val charType: Type = LangType(RegExpr.allChar)
+  val charType: Type = LangType(RegEx.allChar)
 
-  def literalType(value: String): Type = LangType(RegExpr.fromString(value))
+  def literalType(value: String): Type = LangType(RegEx.fromString(value))
 
   final case class TupleType(elems: Seq[Type]) extends Type:
     def toSort: Sort = Sort.Tuple(elems.map(_.toSort))
@@ -331,105 +331,105 @@ object core:
 
   inline def mkSub(expr: Expr, value: Int): Expr = mkAdd(expr, -value)
 
-  final case class StrConcat(left: Expr, right: Expr) extends Expr:
+  final case class Concat(left: Expr, right: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrConcat(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrConcat(left.transform(pf), right.transform(pf))
+        case None => Concat(left.transform(pf), right.transform(pf))
 
     override def toString: String = s"($left ++ $right)"
 
-  final case class StrLen(str: Expr) extends Expr:
+  final case class Length(str: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrLen(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrLen(str.transform(pf))
+        case None => Length(str.transform(pf))
 
     override def toString: String = s"|$str|"
 
-  final case class StrAt(str: Expr, index: Expr) extends Expr:
+  final case class CharAt(str: Expr, index: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrAt(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrAt(str.transform(pf), index.transform(pf))
+        case None => CharAt(str.transform(pf), index.transform(pf))
 
     override def toString: String = s"$str[$index]"
 
-  final case class StrSlice(str: Expr, fromIndex: Expr, untilIndex: Expr) extends Expr:
+  final case class Substr(str: Expr, fromIndex: Expr, untilIndex: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrSlice(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrSlice(str.transform(pf), fromIndex.transform(pf), untilIndex.transform(pf))
+        case None => Substr(str.transform(pf), fromIndex.transform(pf), untilIndex.transform(pf))
 
     override def toString: String = untilIndex match
-      case StrLen(s) if s == str => s"$str[$fromIndex:]"
+      case Length(s) if s == str => s"$str[$fromIndex:]"
       case _ => s"$str[$fromIndex:$untilIndex]"
 
-  final case class StrStartsWith(str: Expr, prefix: Expr) extends Expr:
+  final case class PrefixOf(prefix: Expr, str: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrStartsWith(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrStartsWith(str.transform(pf), prefix.transform(pf))
+        case None => PrefixOf(prefix.transform(pf), str.transform(pf))
 
     override def toString: String = s"$str.startsWith($prefix)"
 
-  final case class StrEndsWith(str: Expr, suffix: Expr) extends Expr:
+  final case class SuffixOf(suffix: Expr, str: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrEndsWith(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrEndsWith(str.transform(pf), suffix.transform(pf))
+        case None => SuffixOf(suffix.transform(pf), str.transform(pf))
 
     override def toString: String = s"$str.endsWith($suffix)"
 
-  final case class StrContains(str: Expr, infix: Expr) extends Expr:
+  final case class InfixOf(infix: Expr, str: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrContains(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrContains(str.transform(pf), infix.transform(pf))
+        case None => InfixOf(infix.transform(pf), str.transform(pf))
 
     override def toString: String = s"$str.contains($infix)"
 
-  final case class StrFind(str: Expr, target: Expr) extends Expr:
+  final case class Find(str: Expr, pat: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrFind(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrFind(str.transform(pf), target.transform(pf))
+        case None => Find(str.transform(pf), pat.transform(pf))
 
-    override def toString: String = s"$str.find($target)"
+    override def toString: String = s"$str.find($pat)"
 
-  final case class StrSplit(str: Expr, sep: Expr) extends Expr:
+  final case class Split(str: Expr, sep: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrSplit(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrSplit(str.transform(pf), sep.transform(pf))
+        case None => Split(str.transform(pf), sep.transform(pf))
 
     override def toString: String = s"$str.split($sep)"
 
-  final case class StrRev(str: Expr) extends Expr:
+  final case class Reverse(str: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrRev(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrRev(str.transform(pf))
+        case None => Reverse(str.transform(pf))
 
     override def toString: String = s"$str.rev"
 
@@ -521,25 +521,25 @@ object core:
 
     def visitArith(node: Arith, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrConcat(node: StrConcat, ctx: C): T = visitExpr(node, ctx)
+    def visitStrConcat(node: Concat, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrLen(node: StrLen, ctx: C): T = visitExpr(node, ctx)
+    def visitStrLen(node: Length, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrAt(node: StrAt, ctx: C): T = visitExpr(node, ctx)
+    def visitStrAt(node: CharAt, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrStartsWith(node: StrStartsWith, ctx: C): T = visitExpr(node, ctx)
+    def visitStrStartsWith(node: PrefixOf, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrEndsWith(node: StrEndsWith, ctx: C): T = visitExpr(node, ctx)
+    def visitStrEndsWith(node: SuffixOf, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrContains(node: StrContains, ctx: C): T = visitExpr(node, ctx)
+    def visitStrContains(node: InfixOf, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrSlice(node: StrSlice, ctx: C): T = visitExpr(node, ctx)
+    def visitStrSlice(node: Substr, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrFind(node: StrFind, ctx: C): T = visitExpr(node, ctx)
+    def visitStrFind(node: Find, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrSplit(node: StrSplit, ctx: C): T = visitExpr(node, ctx)
+    def visitStrSplit(node: Split, ctx: C): T = visitExpr(node, ctx)
 
-    def visitStrRev(node: StrRev, ctx: C): T = visitExpr(node, ctx)
+    def visitStrRev(node: Reverse, ctx: C): T = visitExpr(node, ctx)
 
     def visitCharToCode(node: StrToCode, ctx: C): T = visitExpr(node, ctx)
 

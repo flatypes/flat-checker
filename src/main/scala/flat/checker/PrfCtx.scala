@@ -2,11 +2,11 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.core.*
-import flat.regex.RegExpr
+import flat.regex.RegEx
 
 class PrfCtx private(hypotheses: List[Expr])(using val types: Types) extends LazyLogging:
 
-  import RegExpr.RENone
+  import RegEx.RENone
   import Rewriter.*
 
   def assumptions: List[Expr] = hypotheses
@@ -47,7 +47,7 @@ class PrfCtx private(hypotheses: List[Expr])(using val types: Types) extends Laz
       (ctx1, ctx2)
   }
 
-  def getLang(value: Expr): RegExpr =
+  def getLang(value: Expr): RegEx =
     hypotheses.reverse.collectFirst {
       case TypeTest(e, LangType(r)) if e == value => r
     }.getOrElse {

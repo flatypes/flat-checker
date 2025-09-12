@@ -3,7 +3,7 @@ package flat.checker
 import flat.checker.core.*
 
 object Rewriter:
-  def strSlice(str: Expr, fromIndex: Expr): StrSlice = StrSlice(str, fromIndex, StrLen(str))
+  def strSlice(str: Expr, fromIndex: Expr): Substr = Substr(str, fromIndex, Length(str))
 
   def simplifyCond(expr: Expr): Expr =
     expr match

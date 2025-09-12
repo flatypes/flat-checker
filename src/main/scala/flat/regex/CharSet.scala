@@ -5,7 +5,7 @@ import org.apache.commons.text.StringEscapeUtils
 import scala.collection.mutable
 
 /** A set of Unicode characters. */
-final class CharSet(val polarity: Boolean, val chars: Set[Char]):
+final case class CharSet(polarity: Boolean, chars: Set[Char]):
   // If polarity is true, `chars` stores included characters. Otherwise, it stores excluded characters.
   require(chars.size < 1000)
 
@@ -112,6 +112,8 @@ object CharSet:
   val ALPHA_UPPER: CharSet = from('A' to 'Z')
   val ALPHA: CharSet = from('a' to 'z', 'A' to 'Z')
   val ALPHA_NUM: CharSet = from('a' to 'z', 'A' to 'Z', '0' to '9')
+
+  def fromChar(c: Char): CharSet = CharSet(true, Set(c))
 
   def of(chars: Char*): CharSet = CharSet(true, chars.toSet)
 

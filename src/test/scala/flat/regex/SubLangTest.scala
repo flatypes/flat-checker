@@ -18,7 +18,7 @@ class SubLangTest extends RegexTest:
     positive("a(bc|bd)", "ab(c|d)")
     positive("ab{2,4}", "abb|abbb|abbbb")
     positive("(ab){3}", "a(ba){2}b")
-  // positive("(ab){2,}", "a(ba)+b") TODO: cannot pass
+    positive("(ab){2,}", "a(ba)+b")
 
   test("positive cases"):
     positive("[a-f]", "[a-z]")
@@ -27,7 +27,7 @@ class SubLangTest extends RegexTest:
     positive("[ab]a*", "[ab]a*|[bc]c*")
     positive("ab{2,4}", "ab{2,5}")
     positive("ab{2,4}", "ab{1,4}")
-  // positive("(ab){2,}", "a(ba)*b") TODO: cannot pass
+    positive("(ab){2,}", "a(ba)*b")
 
   test("negative cases"):
     negative("(ab)*", "a(ba)*b")

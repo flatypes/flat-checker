@@ -2,7 +2,7 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.core.*
-import flat.regex.{NatRange, RegExpr}
+import flat.regex.{Interval, RegEx}
 import flat.{Config, regex}
 import io.github.cvc5.{Sort as SMTSort, *}
 
@@ -64,12 +64,12 @@ class SMTSolver(using config: Config) extends LazyLogging:
     case Sort.Array(t) => smt.mkArraySort(smt.getIntegerSort, encodeType(t))
     case Sort.Fun(ts, t) => smt.mkFunctionSort(ts.map(encodeType(_)).toArray, encodeType(t))
 
-  import RegExpr.*
+  import RegEx.*
 
-  private def encodeRegExpr(re: RegExpr): Term = re match
+  private def encodeRegExpr(re: RegEx): Term = re match
     case RENone => smt.mkTerm(Kind.REGEXP_NONE)
     case RENull => smt.mkTerm(Kind.STRING_TO_REGEXP, smt.mkString(""))
-    case REChar(cs) =>
+    case RELit(cs) =>
       if cs.isFull then smt.mkTerm(Kind.REGEXP_ALLCHAR)
       else
         val t = cs.chars.map(encodeRegExprChar).reduce(smt.mkTerm(Kind.REGEXP_UNION, _, _))
@@ -84,17 +84,20 @@ class SMTSolver(using config: Config) extends LazyLogging:
       val t1 = encodeRegExpr(r1)
       val t2 = encodeRegExpr(r2)
       smt.mkTerm(Kind.REGEXP_UNION, t1, t2)
-    case RELoop(range, r) =>
+    case REStar(r) =>
       val t = encodeRegExpr(r)
-      range match
-        case NatRange(0, None) => smt.mkTerm(Kind.REGEXP_STAR, t)
-        case NatRange(1, None) => smt.mkTerm(Kind.REGEXP_PLUS, t)
-        case NatRange(0, Some(1)) => smt.mkTerm(Kind.REGEXP_OPT, t)
-        case NatRange(m, Some(m1)) if m1 == m => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m), t)
-        case NatRange(m1, Some(m2)) => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m1, m2), t)
-        case NatRange(m1, None) => // r^m1 r*
-          smt.mkTerm(Kind.REGEXP_CONCAT,
-            smt.mkTerm(smt.mkOp(Kind.REGEXP_REPEAT, m1), t), smt.mkTerm(Kind.REGEXP_STAR, t))
+      smt.mkTerm(Kind.REGEXP_STAR, t)
+  //    case RELoop(range, r) =>
+  //      val t = encodeRegExpr(r)
+  //      range match
+  //        case Interval(0, None) => smt.mkTerm(Kind.REGEXP_STAR, t)
+  //        case Interval(1, None) => smt.mkTerm(Kind.REGEXP_PLUS, t)
+  //        case Interval(0, Some(1)) => smt.mkTerm(Kind.REGEXP_OPT, t)
+  //        case Interval(m, Some(m1)) if m1 == m => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m), t)
+  //        case Interval(m1, Some(m2)) => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m1, m2), t)
+  //        case Interval(m1, None) => // r^m1 r*
+  //          smt.mkTerm(Kind.REGEXP_CONCAT,
+  //            smt.mkTerm(smt.mkOp(Kind.REGEXP_REPEAT, m1), t), smt.mkTerm(Kind.REGEXP_STAR, t))
 
   private inline def encodeRegExprChar(char: Char): Term =
     smt.mkTerm(Kind.STRING_TO_REGEXP, smt.mkString(char.toString))
@@ -192,37 +195,37 @@ class SMTSolver(using config: Config) extends LazyLogging:
         case ArithOp.SUB => Kind.SUB
       smt.mkTerm(kind, x, y)
 
-    override def visitStrConcat(node: StrConcat, ctx: Ctx): Term =
+    override def visitStrConcat(node: Concat, ctx: Ctx): Term =
       val s1 = node.left.accept(this, ctx)
       val s2 = node.right.accept(this, ctx)
       smt.mkTerm(Kind.STRING_CONCAT, s1, s2)
 
-    override def visitStrLen(node: StrLen, ctx: Ctx): Term =
+    override def visitStrLen(node: Length, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
       smt.mkTerm(Kind.STRING_LENGTH, s)
 
-    override def visitStrAt(node: StrAt, ctx: Ctx): Term =
+    override def visitStrAt(node: CharAt, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
       val i = node.index.accept(this, ctx)
       // If the index `i` is negative or greater than the length of the string `s`, the result is the empty string.
       smt.mkTerm(Kind.STRING_CHARAT, s, i)
 
-    override def visitStrStartsWith(node: StrStartsWith, ctx: Ctx): Term =
+    override def visitStrStartsWith(node: PrefixOf, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
       val t = node.prefix.accept(this, ctx)
       smt.mkTerm(Kind.STRING_PREFIX, t, s)
 
-    override def visitStrEndsWith(node: StrEndsWith, ctx: Ctx): Term =
+    override def visitStrEndsWith(node: SuffixOf, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
       val t = node.suffix.accept(this, ctx)
       smt.mkTerm(Kind.STRING_SUFFIX, t, s)
 
-    override def visitStrContains(node: StrContains, ctx: Ctx): Term =
+    override def visitStrContains(node: InfixOf, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
       val t = node.infix.accept(this, ctx)
       smt.mkTerm(Kind.STRING_CONTAINS, s, t)
 
-    override def visitStrSlice(node: StrSlice, ctx: Ctx): Term =
+    override def visitStrSlice(node: Substr, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
       val i = node.fromIndex.accept(this, ctx)
       val j = node.untilIndex.accept(this, ctx)
@@ -231,17 +234,17 @@ class SMTSolver(using config: Config) extends LazyLogging:
       // or the length `l` is negative, the result is the empty string.
       smt.mkTerm(Kind.STRING_SUBSTR, s, i, l)
 
-    override def visitStrFind(node: StrFind, ctx: Ctx): Term =
+    override def visitStrFind(node: Find, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
-      val t = node.target.accept(this, ctx)
+      val t = node.pat.accept(this, ctx)
       // If the index `i` is negative or greater than the length of string `s`,
       // or the substring `t` does not appear in `s` after index `i`, the result is -1.
       smt.mkTerm(Kind.STRING_INDEXOF, s, t, smt.mkInteger(0))
 
-    override def visitStrSplit(node: StrSplit, ctx: Ctx): Term =
+    override def visitStrSplit(node: Split, ctx: Ctx): Term =
       throw UnsupportedOperationException("smt solver does not support string split")
 
-    override def visitStrRev(node: StrRev, ctx: Ctx): Term =
+    override def visitStrRev(node: Reverse, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
       smt.mkTerm(Kind.STRING_REV, s)
 
