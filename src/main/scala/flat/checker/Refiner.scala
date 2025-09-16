@@ -15,10 +15,47 @@ object Refiner extends LazyLogging:
 
   def refine(ctx: PrfCtx)(using config: Config): PrfCtx =
     m.clear()
+    /* for
+      x <- ctx.types.strVars
+      e -> r <- refineByLength(x)(using ctx)
+    do m(e) = r */
     ctx.foreach { cond => for e -> r <- refine(cond)(using ctx) do m(e) = r }
     if m.nonEmpty then
       for e -> r <- m do logger.debug(s"refine $e : $r")
     ctx ++ List.from(for e -> r <- m yield TypeTest(e, LangType(r)))
+
+  private def refineByLength(x: String)(using ctx: PrfCtx): Option[(Expr, RegEx)] =
+    // Collect length constraints
+    val selected = Array.fill(ctx.assumptions.length)(false)
+    val relatedVars = mutable.Set.empty[String]
+    // 1. Select all `Cmp`s containing |x|
+    for i <- ctx.assumptions.indices do
+      ctx.assumptions(i) match
+        case cmp@Cmp(op, _, _) if op != NE && cmp.collectFirst { case Length(Var(x)) if x == x => () }.isDefined =>
+          selected(i) = true
+          relatedVars ++= (cmp.collectVars - x)
+        case _ =>
+    // 2. Select all other `Cmp`s containing any related vars, until reaching the fixpoint
+    var changed = relatedVars.nonEmpty
+    while changed do
+      changed = false
+      for i <- ctx.assumptions.indices do
+        if !selected(i) then
+          ctx.assumptions(i) match
+            case cmp@Cmp(op, _, _) if op != NE && (cmp.collectVars & relatedVars.toSet).nonEmpty =>
+              selected(i) = true
+              relatedVars ++= (cmp.collectVars - x)
+              changed = true
+            case _ =>
+    val constraints = for
+      i <- selected.indices.toList
+      if selected(i)
+    yield ctx.assumptions(i).asInstanceOf[Cmp]
+
+    val solver = LPSolver(constraints)
+    val (min, max) = solver.solve(Length(Var(x)))
+    val interval = Interval(min.getOrElse(0), max.getOrElse(Inf))
+    for r <- getNonEmptyLang(x) yield (Var(x) -> RERefiner.refineByLen(r, interval))
 
   private def refine(assumption: Expr)(using ctx: PrfCtx, config: Config): Option[(Expr, RegEx)] =
     assumption match
@@ -52,18 +89,16 @@ object Refiner extends LazyLogging:
   private def refineByCharAt(str: Expr, lang: RegEx, idx: Expr, op: CmpOp, c: Char)
                             (using ctx: PrfCtx, config: Config): Option[(Expr, RegEx)] =
     val solution = for
-      (base, r) <- ctx.collectFirst {
-        case TypeTest(Substr(e1, i, Length(e2)), LangType(r)) if e1 == str && e2 == str => (i, r)
-      }
+      (base, r) <- ctx.lookupSuffixLang(str)
       k <- Rewriter.tryGetConstDiff(idx, base)
       if k >= 0
     yield Substr(str, base, Length(str)) -> RERefiner.refineByCharAt(r, k, (op, c))
     solution.orElse {
       val indexInferer = new IndexInferer
       indexInferer.infer(idx, str) match
-        case AIndexL(k) =>
+        case IndexL(k) =>
           Some(str -> RERefiner.refineByCharAt(lang, k, (op, c)))
-        case AIndexR(k) if k > 0 =>
+        case IndexR(k) if k > 0 =>
           Some(str -> RERefiner.refineByCharAt(lang.reverse, k - 1, (op, c)).reverse)
         case IndexInterval(_, _) if op == NE =>
           Some(str -> refineBySomeCharNotEqual(lang, c))

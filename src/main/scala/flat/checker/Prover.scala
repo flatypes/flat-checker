@@ -46,6 +46,8 @@ class Prover(path: os.Path)(using types: Types, config: Config) extends VCPrf(pa
   private def processTypeTest(expr: Expr, expected: Type)(using ctx: PrfCtx): Either[String, Setting] =
     if ctx.canTriviallyProve(Const(false)) then
       return Right(Setting())
+    if smtSolver.canProve(Const(false)) then
+      return Right(Setting(withSMT = true))
 
     val ctx1 = Refiner.refine(ctx)
     if ctx1.canTriviallyProve(Const(false)) then

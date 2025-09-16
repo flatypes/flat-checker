@@ -63,9 +63,10 @@ object AOps extends LazyLogging:
       case REStar(r) => false
 
     /** Tests if ''all'' members of this regex include the infix `t`. */
-    def forallInfix(t: String): Boolean =
-      if t.isEmpty then true
-      else forallContains(t.head) && splitSuffix(t.head).forallPrefix(t)
+    def forallInfix(t: String): Boolean = t.length match
+      case 0 => true
+      case 1 => forallContains(t.head)
+      case _ => forallContains(t.head) && splitSuffix(t.head).forallPrefix(t)
 
     /** Abstract version of `s.drop(1)`. */
     def drop1: RegEx = re match
@@ -115,16 +116,24 @@ object AOps extends LazyLogging:
     def findSuffix(c: Char): RegEx = union(find(c).map(_._2))
 
     /** Abstract version of `s.drop(k)` where `k = index.concretize(s)`. */
-    def drop(index: AIndex): RegEx = index match
-      case AIndexL(k) => drop(k)
-      case AIndexR(k) => re.reverse.take(k).reverse
-      case AIndexAt(t) => if t.length == 1 then findSuffix(t.head) else splitSuffix(t)
+    def drop(index: BasicIndex): RegEx = index match
+      case IndexL(k) => drop(k)
+      case IndexR(k) => re.reverse.take(k).reverse
+      case IndexAt(t) =>
+        t.length match
+          case 0 => re
+          case 1 => findSuffix(t.head)
+          case _ => splitSuffix(t)
 
     /** Abstract version of `s.take(k)` where `k = index.concretize(s)`. */
-    def take(index: AIndex): RegEx = index match
-      case AIndexL(k) => take(k)
-      case AIndexR(k) => re.reverse.drop(k).reverse
-      case AIndexAt(t) => if t.length == 1 then findPrefix(t.head) else splitPrefix(t)
+    def take(index: BasicIndex): RegEx = index match
+      case IndexL(k) => take(k)
+      case IndexR(k) => re.reverse.drop(k).reverse
+      case IndexAt(t) =>
+        t.length match
+          case 0 => RENull
+          case 1 => findPrefix(t.head)
+          case _ => splitPrefix(t)
 
     /** Abstract version of `s.length`. */
     def length: Interval = re match

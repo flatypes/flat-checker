@@ -36,10 +36,10 @@ object CLI:
         .valueName("<file>")
         .text("save statistics to a JSON file"),
       help('h', "help").text("print this usage text"),
-      arg[Seq[String]]("<file>...")
+      arg[String]("<file>...")
         .unbounded()
         .required()
-        .action { (fs, c) => c.copy(inputs = fs) }
+        .action { (f, c) => c.copy(inputs = c.inputs :+ f) }
         .text("input files/folders")
     )
 

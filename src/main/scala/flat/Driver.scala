@@ -46,7 +46,8 @@ object Driver extends LazyLogging:
             "success" -> ujson.Bool(false),
             "fatal error" -> ujson.Bool(true),
           ))
-        ex.printStackTrace()
+        if config.fastExit then throw ex
+        else ex.printStackTrace()
 
   private def checkPython(path: os.Path)(using config: Config): Unit =
     logger.info("")

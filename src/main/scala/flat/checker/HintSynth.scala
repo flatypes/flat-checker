@@ -41,26 +41,21 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
 
   final case class HLength(expr: Length) extends HintTemp:
     def apply(): Unit =
-      //      tryAll(
-      //        () => for
-      //          (ei, r) <- extractSuffixLang(expr.str)
-      //          if smtSolver.canProve(mkAnd(GE(ei, 0), LT(ei, expr)))
-      //        yield
-      //          val r1 = RERefiner.refineByLen(r, (GT, 0))
-      //          val Interval(lb, ub) = r1.length
-      //          hints += GE(expr, ADD(ei, lb))
-      //          for k <- ub do hints += LE(expr, ADD(ei, k))
-      //      ).getOrElse {
+      // Optional attempt
+      for
+        (eb, r) <- ctx.lookupSuffixLang(expr.str)
+        if smtSolver.canProve(mkAnd(GE(eb, 0), LT(eb, expr)))
+      do
+        val r1 = RERefiner.refineByLen(r, (GT, 0))
+        exprIn(SUB(expr, eb), r1.length)
+      // Ordinary attempt
       val r = inferer.inferLang(expr.str)
-      val Interval(lb, ub) = r.length
-      if lb == ub then
-        hints += EQ(expr, lb)
-      else
-        if lb > 0 then hints += GE(expr, lb)
-        ub match
-          case n: Int => hints += LE(expr, n)
-          case _ =>
-  //      }
+      exprIn(expr, r.length)
+
+  private def exprIn(expr: Expr, interval: Interval): Unit = interval match
+    case Interval(n1, n2: Int) if n1 == n2 => hints += EQ(expr, n1)
+    case Interval(n1, n2: Int) => hints += mkAnd(GE(expr, n1), LE(expr, n2))
+    case Interval(n1, _) => hints += GE(expr, n1)
 
   final case class HIndex(expr: Var) extends HintTemp:
     def apply(): Unit =
@@ -68,11 +63,11 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
         case Cmp(EQ, CharAt(es, ei@Var(_)), Const(s: String)) if s.length == 1 =>
           val r = inferer.inferLang(es)
           val c = s.head
-          val r1 = r.splitPrefix(c)
+          val r1 = r.findPrefix(c)
           if r1 != RENone then
             val k1 = r1.length.lb
             hints += GE(ei, k1)
-            val r2 = r.reverse.splitSuffix(c)
+            val r2 = r.reverse.findSuffix(c)
             val k2 = r2.length.lb
             hints += LT(ei, SUB(Length(es), k2))
         case Cmp(NE, CharAt(es, ei@Var(_)), Const(s: String)) if s.length == 1 =>
@@ -84,18 +79,21 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
                 case k1: Int => hints += GE(ei, SUB(Length(es), k1))
                 case _ =>
             case _ =>
-        case Cmp(LE, e1, Find(es, Const(s: String))) if e1 == expr && s.length == 1 =>
-          val r = inferer.inferLang(es)
+        case Cmp(_, e1, Find(es, Const(s: String))) if e1 == expr && s.length == 1 && ctx.exists(_ == InfixOf(s, es)) =>
           val c = s.head
-          val r1 = r.splitPrefix(c)
-          val cs = r.alphabet -- r1.alphabet - c
-          require(cs.polarity)
-          for
-            c <- cs.chars
-            if ctx.exists { case InfixOf(e1, Const(s1: String)) => e1 == es && s1 == c.toString }
-          do hints += LT(e1, Find(es, Const(c.toString)))
+          ctx.foreach:
+            case InfixOf(Const(s1: String), e) if e == es && s1.length == 1 && s1.head != c =>
+              val c1 = s1.head
+              val r = inferer.inferLang(es)
+              if firstOccurBefore(r, c, c1) then
+                hints += LT(Find(es, c.toString), Find(es, c1.toString))
+              else if firstOccurBefore(r, c1, c) then
+                hints += LT(Find(es, c1.toString), Find(es, c.toString))
+            case _ =>
         case _ =>
       }
+
+  private def firstOccurBefore(r: RegEx, c1: Char, c2: Char): Boolean = !r.findPrefix(c1).alphabet.contains(c2)
 
   final case class HChars(expr: CharAt) extends HintTemp:
     def apply(): Unit =
@@ -105,15 +103,26 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
           hints += mkOr(cases.toList)
         case _ => throw InternalError()
 
+  extension (index: Index)
+    private def concretize(str: Expr): Expr = index match
+      case IndexL(k) => k
+      case IndexR(k) => SUB(Length(str), k)
+      case IndexAt(t) => Find(str, t)
+      case IndexShifted(b, k) => ADD(b.concretize(str), k)
+      case IndexInterval(lb, ub) => throw IllegalArgumentException(s"cannot concretize $index")
+
+    /** Generates a Boolean expression that encodes the concrete `idx` (of `str`) is in this abstract `index`. */
+    def constraint(idx: Expr, str: Expr): Expr = index match
+      case _: BasicIndex | IndexShifted => EQ(idx, concretize(str))
+      case IndexInterval(lb, ub) => mkAnd(GE(idx, lb.concretize(str)), LE(idx, ub.concretize(str)))
+
   final case class HFind(expr: Find) extends HintTemp:
     def apply(): Unit =
-      val (interval, found) = inferer.inferFind(expr)
-      val ge = GE(expr, interval.lb)
-      hints += (if found then ge else mkOr(EQ(expr, -1), ge))
-      interval.ub match
-        case m: Int =>
-          hints += LE(expr, m)
-        case _ =>
+      val (found, results) = inferer.inferFind(expr)
+      found match
+        case BoolSet.True => for index <- results do hints += index.constraint(expr, expr.str)
+        case BoolSet.False => hints += EQ(expr, -1)
+        case BoolSet.All => for index <- results do hints += mkOr(index.constraint(expr, expr.str), EQ(expr, -1))
 
   final case class HEq(str: Expr, target: String) extends HintTemp:
     def apply(): Unit =

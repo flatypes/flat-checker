@@ -56,6 +56,10 @@ class PrfCtx private(hypotheses: List[Expr])(using val types: Types) extends Laz
         case _ => throw IllegalArgumentException(s"regex not found: $value")
     }
 
+  def lookupSuffixLang(str: Expr): Option[(Expr, RegEx)] =
+    hypotheses.reverse.collectFirst:
+      case TypeTest(suffix@Substr(e1, ei, Length(e2)), LangType(r)) if e1 == str && e2 == str => (ei, r)
+
   def +(cond: Expr): PrfCtx = PrfCtx(hypotheses ++ destructAnd(simplifyCond(cond)))
 
   def ++(conds: List[Expr]): PrfCtx = PrfCtx(hypotheses ++ conds.map(simplifyCond).flatMap(destructAnd))
