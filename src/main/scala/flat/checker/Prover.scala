@@ -3,57 +3,111 @@ package flat.checker
 import flat.Config
 import flat.checker.core.*
 
+import scala.annotation.tailrec
+
 class Prover(path: os.Path)(using types: Types, config: Config) extends VCPrf(path):
   protected def process(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
-    if ctx.canTriviallyProve(conclusion) then
-      return Right(Setting())
-
-    conclusion match
-      case And(e1, e2) =>
-        for config1 <- process(e1); config2 <- process(e2) yield config1 | config2
-      case Or(e1, e2) =>
-        process(e2)(using ctx + Not(e1))
-      case e =>
-        e.collectFirst { case ite: Ite => ite } match
-          case Some(Ite(cond, _, _)) =>
-            val (ctx1, ctx2) = ctx.destruct(cond)
-            val e1 = e.transform { case Ite(b, e, _) if b == cond => e }
-            val e2 = e.transform { case Ite(b, _, e) if b == cond => e }
-            for config1 <- process(e1)(using ctx1); config2 <- process(e2)(using ctx2) yield config1 | config2
-          case None => processAtomic(e)
-
-  private def processAtomic(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
-    logger.debug(s"SubGoal: $ctx ⇒ $conclusion")
-    val result = conclusion match
-      case TypeTest(e, t) => processTypeTest(e, t)
-      case e => processProp(e)
-    val result1 = result match
-      case Left(_) =>
-        logger.debug("Try destruct")
-        ctx.tryDestruct match
-          case Some((ctx1, ctx2)) =>
-            for
-              config1 <- processAtomic(conclusion)(using ctx1)
-              config2 <- processAtomic(conclusion)(using ctx2)
-            yield config1 | config2
-          case None => result
-      case _ => result
-    result1 match
-      case Left(_) => logger.debug("SubGoal FAILED")
-      case Right(_) => logger.debug("SubGoal proved")
-    result1
-
-  private def processTypeTest(expr: Expr, expected: Type)(using ctx: PrfCtx): Either[String, Setting] =
-    if ctx.canTriviallyProve(Const(false)) then
-      return Right(Setting())
+    // Trivial case: context is inconsistent
     if smtSolver.canProve(Const(false)) then
       return Right(Setting(withSMT = true))
 
-    val ctx1 = Refiner.refine(ctx)
-    if ctx1.canTriviallyProve(Const(false)) then
-      return Right(Setting(withHints = true))
+    // Split the conclusion into multiple subgoals and prove each
+    proveSubgoals(split(conclusion, ctx), 1, Setting())
 
-    checkType(expr, expected)(using ctx1) match
+  private def split(conclusion: Expr, ctx: PrfCtx): List[(Expr, PrfCtx)] = conclusion match
+    case And(e1, e2) => split(e1, ctx) ++ split(e2, ctx)
+    case Or(e1, e2) => split(e2, ctx + Not(e1))
+    case e =>
+      e.collectFirst { case ite: Ite => ite } match
+        case Some(Ite(cond, _, _)) =>
+          val (ctx1, ctx2) = ctx.destructIf(cond)
+          val e1 = e.transform { case Ite(b, e, _) if b == cond => e }
+          val e2 = e.transform { case Ite(b, _, e) if b == cond => e }
+          split(e1, ctx1) ++ split(e2, ctx2)
+        case None => List((e, ctx))
+
+  @tailrec
+  private def proveSubgoals(subgoals: List[(Expr, PrfCtx)],
+                            start: Int, acc: Setting): Either[String, Setting] = subgoals match
+    case Nil => Right(acc)
+    case (e, ctx) :: rest =>
+      logger.debug(s"Subgoal $start ⇒ $e")
+      proveSubgoal(e)(using ctx) match
+        case Left(err) =>
+          logger.debug(s"[X] FAILED")
+          Left(err)
+        case Right(setting) => proveSubgoals(rest, start + 1, acc | setting)
+
+  private def proveSubgoal(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
+    // Immediate: conclusion already occurs as a hypothesis
+    if ctx.hypotheses.contains(conclusion) then
+      return Right(Setting())
+    // Trivial for SMT solving
+    if smtSolver.canProve(conclusion) then
+      return Right(Setting(withSMT = true))
+    // Nontrivial
+    proveNontrivial(conclusion, ctx)
+
+  private def proveNontrivial(conclusion: Expr, ctx: PrfCtx): Either[String, Setting] =
+    val candidates = ctx.destructCandidates
+    if candidates.isEmpty then
+      return proveCase(conclusion)(using ctx)
+
+    val m = candidates.groupBy(similarity(conclusion, _))
+    val bs = m(m.keySet.max)
+    logger.debug("Destruct: " + bs.mkString(", "))
+    val cases = ctx.destruct(bs)
+    proveCases(conclusion, cases, 1, Setting())
+
+  private def similarity(conclusion: Expr, hypothesis: Expr): Int =
+    val xs = conclusion.collectVars
+    (hypothesis.collectVars & xs).size
+
+  @tailrec
+  private def proveCases(conclusion: Expr, ctxs: List[PrfCtx],
+                         start: Int, acc: Setting): Either[String, Setting] = ctxs match
+    case Nil => Right(acc)
+    case ctx :: rest =>
+      logger.debug(s"Case $start: $ctx ⇒ $conclusion")
+      proveCase(conclusion)(using ctx) match
+        case Left(err) =>
+          // Try destruct more
+          val destructMore = ctx.hypotheses.exists:
+            case _: Or | Ite => true
+            case _ => false
+          if destructMore then
+            logger.debug("destruct more")
+            proveNontrivial(conclusion, ctx) match
+              case Left(err) =>
+                logger.debug(s"[X] FAILED")
+                Left(err)
+              case Right(setting) => Right(setting)
+          else
+            logger.debug(s"[X] FAILED")
+            Left(err)
+        case Right(setting) => proveCases(conclusion, rest, start + 1, acc | setting)
+
+  private def proveCase(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
+    // Trivial case: conclusion already occurs as a hypothesis
+    if ctx.hypotheses.contains(conclusion) then
+      return Right(Setting())
+    // Trivial case: simple LIA problem
+    if smtSolver.canProve(conclusion) then
+      return Right(Setting(withSMT = true))
+    // Type narrowing
+    val ctx1 = Refiner.refine(ctx)
+    if ctx1.canTriviallyProve(conclusion) then
+      return Right(Setting(withHints = true))
+    // Nontrivial
+    conclusion match
+      case TypeTest(e, t) => check(e, t)(using ctx1)
+      case e =>
+        proveWithLemmas(conclusion, List(conclusion))(using ctx1) match
+          case Right(setting) => Right(setting)
+          case Left(_) => proveWithLemmas(conclusion, ctx1.assumptions)(using ctx1)
+
+  private def check(expr: Expr, expected: Type)(using ctx: PrfCtx): Either[String, Setting] =
+    checkType(expr, expected)(using ctx) match
       case Right(_) => Right(Setting(withHints = true))
       case Left(actual) => Left(actual.toString)
 
@@ -83,33 +137,16 @@ class Prover(path: os.Path)(using types: Types, config: Config) extends VCPrf(pa
 
   private val smtSolver = new SMTSolver
 
-  private def processProp(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
-    // First try: without any hints
-    if ctx.canTriviallyProve(conclusion) then
-      return Right(Setting())
-    if smtSolver.canProve(conclusion) then
-      return Right(Setting(withSMT = true))
-
-    // Second try: with refinement
-    val ctx1 = Refiner.refine(ctx)
-    if ctx1.canTriviallyProve(conclusion) then
-      return Right(Setting(withHints = true))
-    if smtSolver.canProve(conclusion)(using ctx1) then
-      return Right(Setting(withHints = true, withSMT = true))
-
-    // Last try: with hints
-    val seeds = collectSeeds(conclusion).distinct
-    val synth = HintSynth(using ctx1)
-    val hints = seeds.flatMap(synth.collectHints).distinct
-    if hints.nonEmpty then
-      val ctx2 = ctx1 ++ hints
-      logger.debug("hints: " + hints.mkString(" ∧ "))
-      if ctx2.canTriviallyProve(conclusion) then
+  private def proveWithLemmas(conclusion: Expr, seeds: List[Expr])(using ctx: PrfCtx): Either[String, Setting] =
+    val synth = new HintSynth
+    val lemmas = seeds.flatMap(synth.collectHints).distinct
+    if lemmas.nonEmpty then
+      val ctx1 = ctx ++ lemmas
+      logger.debug("lemmas: " + lemmas.mkString(" ∧ "))
+      if ctx1.canTriviallyProve(conclusion) then
         return Right(Setting(withHints = true))
-      if smtSolver.canProve(conclusion)(using ctx2) then
+      if smtSolver.canProve(conclusion)(using ctx1) then
         return Right(Setting(withHints = true, withSMT = true))
 
     // Otherwise: not proved
     Left("")
-
-  private def collectSeeds(conclusion: Expr)(using ctx: PrfCtx): List[Expr] = conclusion :: ctx.assumptions

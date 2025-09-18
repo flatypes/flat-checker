@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.checker.core.*
 import flat.regex.RegEx
 
-class PrfCtx private(hypotheses: List[Expr])(using val types: Types) extends LazyLogging:
+class PrfCtx private(val hypotheses: List[Expr])(using val types: Types) extends LazyLogging:
 
   import RegEx.RENone
   import Rewriter.*
@@ -23,12 +23,35 @@ class PrfCtx private(hypotheses: List[Expr])(using val types: Types) extends Laz
 
   def foreach(f: Expr => Unit): Unit = hypotheses.foreach(f)
 
-  def destruct(cond: Expr): (PrfCtx, PrfCtx) =
-    val ctx1 = PrfCtx(hypotheses.map(_.transform { case Ite(c, e, _) if c == cond => e }) :+ cond)
+  def destructCandidates: List[Expr] = hypotheses.collect:
+    case or: Or => or
+    case e if e.collectFirst { case Ite(_, _, _) => () }.isDefined => e
+
+  def destruct(candidates: List[Expr]): List[PrfCtx] = candidates match
+    case Nil => List(this)
+    case b :: bs =>
+      val k = hypotheses.indexOf(b)
+      assert(k >= 0)
+      val ctxs = b match
+        case or: Or =>
+          val bs = destructOr(or)
+          for i <- bs.indices.toList yield
+            val es1 = destructAnd(bs(i))
+            val es2 = (0 until i).toList.flatMap(j => destructAnd(simplifyCond(Not(bs(j)))))
+            PrfCtx(hypotheses.take(k) ++ es1 ++ es2 ++ hypotheses.drop(k + 1))
+        case _ =>
+          val cond = b.collectFirst { case Ite(c, _, _) => c }.get
+          val (ctx1, ctx2) = destructIf(cond)
+          List(ctx1, ctx2)
+      ctxs.flatMap(_.destruct(bs))
+
+  def destructIf(cond: Expr): (PrfCtx, PrfCtx) =
+    val ctx1 = PrfCtx(hypotheses.map(_.transform { case Ite(b, e, _) if b == cond => e }) :+ cond)
     val not = destructAnd(simplifyCond(Not(cond)))
-    val ctx2 = PrfCtx(hypotheses.map(_.transform { case Ite(c, _, e) if c == cond => e }) ++ not)
+    val ctx2 = PrfCtx(hypotheses.map(_.transform { case Ite(b, _, e) if b == cond => e }) ++ not)
     (ctx1, ctx2)
 
+  @deprecated
   def tryDestruct: Option[(PrfCtx, PrfCtx)] = hypotheses.zipWithIndex.collectFirst {
     case (Or(b1, b2), i) =>
       val es1 = hypotheses.take(i)

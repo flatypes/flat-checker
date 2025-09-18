@@ -58,7 +58,7 @@ class IndexInferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
     val eqs = constraints.flatMap {
       case (EQ, e) => convert(e, str)
       case _ => None
-    }
+    }.distinct
     if eqs.nonEmpty then
       require(eqs.length == 1, s"multiple EQ: $eqs")
       return eqs.head

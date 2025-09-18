@@ -131,7 +131,7 @@ enum RegEx:
   def derivative(s: String): RegEx = if s.isEmpty then this else derivative(s.head).derivative(s.tail)
 
   /** Tests if `s` is a member of this language. */
-  def contains(s: String): Boolean = derivative(s).isEmpty
+  def contains(s: String): Boolean = derivative(s) == RENull
 
   /** Tests if this language is a subset of `that` language. */
   def subsetOf(that: RegEx): Boolean = RESub.check(this, that)

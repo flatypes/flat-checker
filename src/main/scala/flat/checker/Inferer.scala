@@ -8,6 +8,7 @@ import flat.checker.summands
 import flat.regex.*
 import flat.regex.AOps.*
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 enum BoolSet:
@@ -18,37 +19,39 @@ enum BoolSet:
 class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
   private val indexInferer = new IndexInferer
 
-  def inferLang(str: Expr): RegEx = str match
-    case Const(s: String) => RegEx.fromString(s)
-    case Var(x) => ctx.getLang(str)
-    case Concat(es1, es2) => inferLang(es1) ++ inferLang(es2)
-    case Reverse(es) => inferLang(es).reverse
-    case CharAt(es, ei) =>
-      // es[ei] = es[ei:].first
-      val (rOpt, rOrd) = inferSubstr(es, ei, Length(es))
-      val cs = rOpt match
-        case Some(r) => // select the more premise one
-          val cs1 = r.first
-          val cs2 = rOrd.first
-          if cs1.subsetOf(cs2) then
-            logger.debug(s"infer $es[$ei]: prefer $cs1 than $cs2")
-            cs1
-          else
-            logger.debug(s"infer $es[$ei]: prefer $cs2 than $cs1")
-            cs2
-        case None => rOrd.first
-      RegEx.fromCharSet(cs)
-    case Substr(es, ei, Arith(ADD, Find(Substr(e1, e2, Length(e3)), Const(t: String)), e4))
-      if e1 == es && e2 == ei && e3 == es && e4 == ei =>
-      // Special case: es[ei : (es[ei:].find(t) + ei)] = es[ei : es.find(t, ei)]
-      val r = inferLang(es)
-      val i = indexInferer.infer(ei, es)
-      val r1 = substr(r, i, IndexR(0))
-      r1.take(IndexAt(t))
-    case Substr(es, ei, ej) =>
-      val (rOpt, rOrd) = inferSubstr(es, ei, ej)
-      rOpt.getOrElse(rOrd)
-    case _ => throw IllegalArgumentException()
+  def inferLang(str: Expr): RegEx =
+    logger.debug(s"infer $str")
+    str match
+      case Const(s: String) => RegEx.fromString(s)
+      case Var(x) => ctx.getLang(str)
+      case Concat(es1, es2) => inferLang(es1) ++ inferLang(es2)
+      case Reverse(es) => inferLang(es).reverse
+      case CharAt(es, ei) =>
+        // es[ei] = es[ei:].first
+        val (rOpt, rOrd) = inferSubstr(es, ei, Length(es))
+        val cs = rOpt match
+          case Some(r) => // select the more premise one
+            val cs1 = r.first
+            val cs2 = rOrd.first
+            if cs1.subsetOf(cs2) then
+              logger.debug(s"infer $es[$ei]: prefer $cs1 than $cs2")
+              cs1
+            else
+              logger.debug(s"infer $es[$ei]: prefer $cs2 than $cs1")
+              cs2
+          case None => rOrd.first
+        RegEx.fromCharSet(cs)
+      case Substr(es, ei, Arith(ADD, Find(Substr(e1, e2, Length(e3)), Const(t: String)), e4))
+        if e1 == es && e2 == ei && e3 == es && e4 == ei =>
+        // Special case: es[ei : (es[ei:].find(t) + ei)] = es[ei : es.find(t, ei)]
+        val r = inferLang(es)
+        val i = indexInferer.infer(ei, es)
+        val r1 = substr(r, i, IndexR(0))
+        r1.take(IndexAt(t))
+      case Substr(es, ei, ej) =>
+        val (rOpt, rOrd) = inferSubstr(es, ei, ej)
+        rOpt.getOrElse(rOrd)
+      case _ => throw IllegalArgumentException()
 
   private def inferSubstr(str: Expr, start: Expr, end: Expr): (Option[RegEx], RegEx) =
     // Optional attempt: Given that the language of `str[base:]` (for some `base` index) is `r`,
