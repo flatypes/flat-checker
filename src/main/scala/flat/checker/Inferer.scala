@@ -20,7 +20,6 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
   private val indexInferer = new IndexInferer
 
   def inferLang(str: Expr): RegEx =
-    logger.debug(s"infer $str")
     str match
       case Const(s: String) => RegEx.fromString(s)
       case Var(x) => ctx.getLang(str)
@@ -161,7 +160,6 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
       case BoolSet.False => (BoolSet.False, Nil)
       case bs =>
         val r = inferLang(find.str)
-        logger.debug(s"${find.str} : $r")
         val results = ListBuffer.empty[Index]
         r.take(IndexAt(t)).length match
           case Interval(n1, n2: Int) if n1 == n2 => results += IndexL(n1)

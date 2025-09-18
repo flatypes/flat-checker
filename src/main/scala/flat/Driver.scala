@@ -7,10 +7,8 @@ import flat.checker.py.{Transpiler, Unpickler}
 import java.io.File
 import scala.collection.mutable.ListBuffer
 
-final case class Config(inputs: Seq[String] = Seq.empty,
-                        smtOnly: Boolean = false, smtTimeLimit: Int = 3000,
-                        fastExit: Boolean = false, extractTo: Option[File] = None,
-                        recorder: Option[Recorder] = None)
+final case class Config(inputs: Seq[String] = Seq.empty, smtTimeLimit: Int = 3000, fastExit: Boolean = false,
+                        extractTo: Option[File] = None, recorder: Option[Recorder] = None)
 
 final class Recorder(output: File):
   private val path = os.Path(output.getAbsolutePath)
@@ -57,14 +55,8 @@ object Driver extends LazyLogging:
     val transpiler = new Transpiler
     val programs = transpiler.transpile(tree)
     for program <- programs do
-      val vc = VCGen.generate(program)
-      val types = Types.from(program.vars)
-      val prover =
-        if config.extractTo.isDefined then VCExtract(path)(using types = types)
-        else if config.smtOnly then SMTProver(path)(using types = types)
-        else Prover(path)(using types = types)
-      prover.prove(vc)
-      if config.fastExit then prover.issuer.ensureNoError()
-      else prover.issuer.print()
-      for recorder <- config.recorder do
-        recorder.append(prover.getRecord)
+      // TODO: support extract as a different mode
+      val checker = new Checker
+      checker.check(program)
+      if config.fastExit then checker.issuer.ensureNoError()
+      else checker.issuer.print()

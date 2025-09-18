@@ -53,7 +53,6 @@ class IndexInferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
       case cond: Cmp => Rewriter.push(Var(x), cond)
       case _ => None
     })
-    logger.debug(s"infer $x: constraints: $constraints")
 
     val eqs = constraints.flatMap {
       case (EQ, e) => convert(e, str)
@@ -77,7 +76,6 @@ class IndexInferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
       require(common.size == 1, s"multiple EQ: $common")
       return common.head
 
-    logger.debug(s"lbs: $lbs  ubs: $ubs")
     val lb = tryAll(
       () => lbs.find(i => i.isInstanceOf[IndexAt] ||
         i.isInstanceOf[IndexShifted] && i.asInstanceOf[IndexShifted].base.isInstanceOf[IndexAt]),
@@ -96,5 +94,4 @@ class IndexInferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
       }.minByOption(_.asInstanceOf[IndexShifted].offset),
       () => ubs.maxByOption(_.getOffset)
     ).getOrElse(IndexR(1))
-    logger.debug(s"lb: $lb  ub: $ub")
     IndexInterval(lb, ub)

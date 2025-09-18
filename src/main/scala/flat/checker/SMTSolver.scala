@@ -2,7 +2,7 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.core.*
-import flat.regex.{Interval, RegEx}
+import flat.regex.RegEx
 import flat.{Config, regex}
 import io.github.cvc5.{Sort as SMTSort, *}
 
@@ -28,7 +28,7 @@ class SMTSolver(using config: Config) extends LazyLogging:
     for x <- vars do
       val s = encodeType(pCtx.types(x))
       ctxBuf(x) = smt.mkConst(s, x)
-      if config.extractTo.isDefined || config.smtOnly then
+      if config.extractTo.isDefined then
         pCtx.types(x) match
           case LangType(r) => slv.assertFormula(smt.mkTerm(Kind.STRING_IN_REGEXP, ctxBuf(x), encodeRegExpr(r)))
           case _ =>
@@ -126,7 +126,7 @@ class SMTSolver(using config: Config) extends LazyLogging:
       smt.mkTuple(terms.toArray)
 
     override def visitTypeTest(node: TypeTest, ctx: Ctx): Term =
-      if config.extractTo.isDefined || config.smtOnly then
+      if config.extractTo.isDefined then
         node.typ match
           case LangType(r) =>
             val t = node.value.accept(this, ctx)

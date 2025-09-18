@@ -6,7 +6,6 @@ import flat.regex.RegEx
 
 class PrfCtx private(val hypotheses: List[Expr])(using val types: Types) extends LazyLogging:
 
-  import RegEx.RENone
   import Rewriter.*
 
   def assumptions: List[Expr] = hypotheses
@@ -27,48 +26,32 @@ class PrfCtx private(val hypotheses: List[Expr])(using val types: Types) extends
     case or: Or => or
     case e if e.collectFirst { case Ite(_, _, _) => () }.isDefined => e
 
-  def destruct(candidates: List[Expr]): List[PrfCtx] = candidates match
-    case Nil => List(this)
+  def destruct(candidates: List[Expr]): List[PrfCtxCase] = candidates match
+    case Nil => List(PrfCtxCase(this, Nil))
     case b :: bs =>
       val k = hypotheses.indexOf(b)
       assert(k >= 0)
-      val ctxs = b match
+      val cases = b match
         case or: Or =>
           val bs = destructOr(or)
           for i <- bs.indices.toList yield
             val es1 = destructAnd(bs(i))
             val es2 = (0 until i).toList.flatMap(j => destructAnd(simplifyCond(Not(bs(j)))))
-            PrfCtx(hypotheses.take(k) ++ es1 ++ es2 ++ hypotheses.drop(k + 1))
+            PrfCtxCase(PrfCtx(hypotheses.take(k) ++ es1 ++ es2 ++ hypotheses.drop(k + 1)), List(bs(i).toString))
         case _ =>
           val cond = b.collectFirst { case Ite(c, _, _) => c }.get
           val (ctx1, ctx2) = destructIf(cond)
-          List(ctx1, ctx2)
-      ctxs.flatMap(_.destruct(bs))
+          List(PrfCtxCase(ctx1, List(cond.toString)), PrfCtxCase(ctx2, List(Not(cond).toString)))
+      for
+        PrfCtxCase(ctx, labels) <- cases
+        PrfCtxCase(ctx1, labels1) <- ctx.destruct(bs)
+      yield PrfCtxCase(ctx1, labels ++ labels1)
 
   def destructIf(cond: Expr): (PrfCtx, PrfCtx) =
     val ctx1 = PrfCtx(hypotheses.map(_.transform { case Ite(b, e, _) if b == cond => e }) :+ cond)
     val not = destructAnd(simplifyCond(Not(cond)))
     val ctx2 = PrfCtx(hypotheses.map(_.transform { case Ite(b, _, e) if b == cond => e }) ++ not)
     (ctx1, ctx2)
-
-  @deprecated
-  def tryDestruct: Option[(PrfCtx, PrfCtx)] = hypotheses.zipWithIndex.collectFirst {
-    case (Or(b1, b2), i) =>
-      val es1 = hypotheses.take(i)
-      val es2 = hypotheses.drop(i + 1)
-      val ctx1 = PrfCtx(es1 ++ destructAnd(b1) ++ es2)
-      val ctx2 = PrfCtx(es1 ++ destructAnd(b2) ++ destructAnd(simplifyCond(Not(b1))) ++ es2)
-      (ctx1, ctx2)
-    case (e, i) if e.collectFirst { case Ite(_, _, _) => () }.isDefined =>
-      val cond = e.collectFirst { case Ite(c, _, _) => c }.get
-      val e1 = e.transform { case Ite(c, e, _) if c == cond => e }
-      val e2 = e.transform { case Ite(c, _, e) if c == cond => e }
-      val es1 = hypotheses.take(i)
-      val es2 = hypotheses.drop(i + 1)
-      val ctx1 = PrfCtx(es1 ++ destructAnd(cond) ++ destructAnd(e1) ++ es2)
-      val ctx2 = PrfCtx(es1 ++ destructAnd(simplifyCond(Not(cond))) ++ destructAnd(e2) ++ es2)
-      (ctx1, ctx2)
-  }
 
   def getLang(value: Expr): RegEx =
     hypotheses.reverse.collectFirst {
@@ -83,14 +66,15 @@ class PrfCtx private(val hypotheses: List[Expr])(using val types: Types) extends
     hypotheses.reverse.collectFirst:
       case TypeTest(suffix@Substr(e1, ei, Length(e2)), LangType(r)) if e1 == str && e2 == str => (ei, r)
 
-  def +(cond: Expr): PrfCtx = PrfCtx(hypotheses ++ destructAnd(simplifyCond(cond)))
+  def +(cond: Expr): PrfCtx =
+    PrfCtx(hypotheses ++ destructAnd(simplifyCond(cond)))
 
-  def ++(conds: List[Expr]): PrfCtx = PrfCtx(hypotheses ++ conds.map(simplifyCond).flatMap(destructAnd))
-
-  def canTriviallyProve(conclusion: Expr): Boolean =
-    contains(conclusion) || contains(Const(false)) || exists { case TypeTest(_, LangType(RENone)) => true }
+  def ++(conds: List[Expr]): PrfCtx =
+    PrfCtx(hypotheses ++ conds.map(simplifyCond).flatMap(destructAnd))
 
   override def toString: String = hypotheses.mkString(" ∧ ")
 
 object PrfCtx:
   def empty(using types: Types) = PrfCtx(Nil)
+
+final case class PrfCtxCase(ctx: PrfCtx, labels: List[String])

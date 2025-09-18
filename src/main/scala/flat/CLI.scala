@@ -12,10 +12,6 @@ object CLI:
     OParser.sequence(
       programName("flat-checker"),
       head("flat-checker", "dev"),
-      // option --smt-only
-      opt[Unit]("smt-only")
-        .action { (_, c) => c.copy(smtOnly = true) }
-        .text("solving only using SMT"),
       // option --smt-time-limit
       opt[Int]("smt-time-limit")
         .action { (n, c) => c.copy(smtTimeLimit = n) }

@@ -127,7 +127,6 @@ class HintSynth(using ctx: PrfCtx, config: Config) extends LazyLogging:
   final case class HEq(str: Expr, target: String) extends HintTemp:
     def apply(): Unit =
       val r = inferer.inferLang(str)
-      logger.debug(s"$str : $r")
       for ss <- AOps.tryEnumerate(r) do
         val cases = for s <- ss yield EQ(str, s)
         hints += mkOr(cases.toList)

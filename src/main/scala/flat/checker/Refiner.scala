@@ -20,8 +20,10 @@ object Refiner extends LazyLogging:
       e -> r <- refineByLength(x)(using ctx)
     do m(e) = r */
     ctx.foreach { cond => for e -> r <- refine(cond)(using ctx) do m(e) = r }
-    if m.nonEmpty then
-      for e -> r <- m do logger.debug(s"refine $e : $r")
+    for
+      e -> r <- m
+      if ctx.getLang(e) != r
+    do logger.debug(s"refine $e : $r")
     ctx ++ List.from(for e -> r <- m yield TypeTest(e, LangType(r)))
 
   private def refineByLength(x: String)(using ctx: PrfCtx): Option[(Expr, RegEx)] =
