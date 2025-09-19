@@ -178,5 +178,3 @@ object RegEx:
   def parse(regex: String): RegEx = REParser.tryParse(regex) match
     case Left(err) => throw IllegalArgumentException(err)
     case Right(r) => r
-
-  val number: RegEx = RELit(CharSet.NUM).+

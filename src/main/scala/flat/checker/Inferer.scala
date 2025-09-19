@@ -50,7 +50,7 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
       case Substr(es, ei, ej) =>
         val (rOpt, rOrd) = inferSubstr(es, ei, ej)
         rOpt.getOrElse(rOrd)
-      case _ => throw IllegalArgumentException()
+      case _ => throw IllegalArgumentException(str.toString)
 
   private def inferSubstr(str: Expr, start: Expr, end: Expr): (Option[RegEx], RegEx) =
     // Optional attempt: Given that the language of `str[base:]` (for some `base` index) is `r`,
@@ -151,23 +151,22 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
       else if r.forallContains(t.head) && r1.forallPrefix(t) then BoolSet.True
       else BoolSet.All
 
-  def inferLength(len: Length): Interval =
-    val r = inferLang(len.str)
+  def inferLength(str: Expr): Interval =
+    val r = inferLang(str)
     r.length
 
-  def inferFind(find: Find): (BoolSet, List[Index]) = find.pat match
-    case Const(t: String) => infixOf(t, find.str) match
+  def inferFind(str: Expr, pat: String): (BoolSet, List[Index]) =
+    infixOf(pat, str) match
       case BoolSet.False => (BoolSet.False, Nil)
       case bs =>
-        val r = inferLang(find.str)
+        val r = inferLang(str)
         val results = ListBuffer.empty[Index]
-        r.take(IndexAt(t)).length match
+        r.take(IndexAt(pat)).length match
           case Interval(n1, n2: Int) if n1 == n2 => results += IndexL(n1)
           case Interval(n1, n2: Int) => results += IndexInterval(IndexL(n1), IndexL(n2))
           case Interval(n1, _) => results += IndexInterval(IndexL(n1), IndexR(1))
-        r.drop(IndexAt(t)).length match
+        r.drop(IndexAt(pat)).length match
           case Interval(n1, n2: Int) if n1 == n2 => results += IndexR(n1)
           case Interval(n1, n2: Int) => results += IndexInterval(IndexR(n2), IndexR(n1))
           case Interval(n1, _) => results += IndexInterval(IndexL(0), IndexR(n1))
         (bs, results.toList)
-    case _ => (BoolSet.All, List(IndexInterval(IndexL(0), IndexR(1))))

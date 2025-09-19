@@ -2,9 +2,10 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
+import flat.Ops.CmpOp.*
+import flat.checker.Rewriter.destructAnd
 import flat.checker.core.*
 import flat.regex.RegEx
-import flat.regex.RegEx.RENone
 
 import scala.annotation.tailrec
 
@@ -93,7 +94,7 @@ final class Prover(using types: Types, config: Config) extends LazyLogging:
       return Right(())
 
     val ctx1 = Refiner.refine(ctx)
-    val noneStr = ctx1.hypotheses.collectFirst { case TypeTest(e, LangType(RENone)) => e }
+    val noneStr = ctx1.hypotheses.collectFirst { case TypeTest(e, LangType(RegEx.RENone)) => e }
     if noneStr.isDefined then
       logger.debug(s"PROVED by ${noneStr.get} : ∅ after type narrowing")
       return Right(())
@@ -127,19 +128,41 @@ final class Prover(using types: Types, config: Config) extends LazyLogging:
       throw UnsupportedOperationException(s"checkType $expr : $typ")
 
   private val smtSolver = new SMTSolver
+  private val syn = new LemmaSynth
 
   private def proveWithLemmas(conclusion: Expr, seeds: List[Expr], ctx: PrfCtx): Either[String, Unit] =
-    val synth = new HintSynth(using ctx)
-    val lemmas = seeds.flatMap(synth.collectHints).distinct
+    val sketches = seeds.flatMap(collectSketches(_, ctx))
+    val lemmas = syn.synth(sketches)(using ctx)
     if lemmas.nonEmpty then
-      if lemmas.contains(conclusion) then
-        logger.debug(s"PROVED by the exact lemma $conclusion" +
-          (if lemmas.length > 1 then s" (${lemmas.length - 1} unused lemmas)" else ""))
+      logger.debug("Lemmas: " + lemmas.mkString(", "))
+      if lemmas.flatMap(destructAnd).contains(conclusion) then
+        logger.debug(s"PROVED by lemmas")
         return Right(())
 
       if smtSolver.canProve(conclusion)(using ctx ++ lemmas) then
-        logger.debug(s"PROVED by lemmas + SMT (lemmas: ${lemmas.mkString(", ")})")
+        logger.debug(s"PROVED by lemmas + SMT")
         return Right(())
 
     // Otherwise: not proved
     Left("")
+
+  extension (expr: Expr)
+    // NOTE: incomplete
+    def getSort: Sort = expr match
+      case CharAt(_, _) => Sort.String
+      case Substr(_, _, _) => Sort.String
+      case _ => Sort.Bot
+
+  private def collectSketches(seed: Expr, ctx: PrfCtx): List[syn.Sketch] =
+    val sketches = seed.collect:
+      case Cmp(EQ | NE, es, Const(t: String)) => List(syn.InferLang(es, target = Some(t)))
+      case Cmp(EQ | NE, es1, es2) if es1.getSort == Sort.String && es2.getSort == Sort.String =>
+        List(syn.InferLang(es1), syn.InferLang(es2))
+      case e@InfixOf(_, _) => List(syn.InferTest(e))
+      case Length(es) => List(syn.InferLength(es))
+      case e@Var(_) if ctx.exists {
+        case Cmp(_, CharAt(_, ei), _) => ei == e
+        case Cmp(_, ei, Find(_, _)) => ei == e
+      } => List(syn.InferIndex(e))
+      case Find(es, Const(t: String)) => List(syn.InferFirstIndexOf(es, t))
+    sketches.flatten.distinct
