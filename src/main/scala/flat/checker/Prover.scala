@@ -9,7 +9,9 @@ import flat.regex.RegEx
 
 import scala.annotation.tailrec
 
+/** Prover: prove verification conditions, or answer type queries. */
 final class Prover(using types: Types, config: Config) extends LazyLogging:
+  /** Proves that `conclusion` is valid under `ctx`. */
   def prove(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
     if smtSolver.canProve(Const(false))(using ctx) then
       logger.debug("PROVED by contradiction")
@@ -18,9 +20,11 @@ final class Prover(using types: Types, config: Config) extends LazyLogging:
     // Split the conclusion into multiple goals and prove each of them
     proveGoals(split(conclusion, ctx))
 
+  /** Proves that `value` has the `expected` type under `ctx`. */
   def check(value: Expr, expected: Type, ctx: PrfCtx): Either[String, Unit] =
     prove(TypeTest(value, expected), ctx)
 
+  /** Infers the type of `value` under `ctx`. */
   def infer(value: Expr, ctx: PrfCtx): RegEx =
     val inferer = new Inferer(using ctx)
     inferer.inferLang(value)
@@ -131,7 +135,7 @@ final class Prover(using types: Types, config: Config) extends LazyLogging:
   private val syn = new LemmaSynth
 
   private def proveWithLemmas(conclusion: Expr, seeds: List[Expr], ctx: PrfCtx): Either[String, Unit] =
-    val sketches = seeds.flatMap(collectSketches(_, ctx))
+    val sketches = seeds.flatMap(collectSketches(_, ctx)).distinct
     val lemmas = syn.synth(sketches)(using ctx)
     if lemmas.nonEmpty then
       logger.debug("Lemmas: " + lemmas.mkString(", "))
@@ -154,15 +158,13 @@ final class Prover(using types: Types, config: Config) extends LazyLogging:
       case _ => Sort.Bot
 
   private def collectSketches(seed: Expr, ctx: PrfCtx): List[syn.Sketch] =
-    val sketches = seed.collect:
+    val sss = seed.collect:
+      case Cmp(op@(EQ | NE), ec@CharAt(es, ei@Var(_)), Const(t: String)) if t.length == 1 =>
+        List(syn.InferLang(ec, target = Some(t)), syn.InferIndex(op, es, ei, t.head))
       case Cmp(EQ | NE, es, Const(t: String)) => List(syn.InferLang(es, target = Some(t)))
       case Cmp(EQ | NE, es1, es2) if es1.getSort == Sort.String && es2.getSort == Sort.String =>
         List(syn.InferLang(es1), syn.InferLang(es2))
       case e@InfixOf(_, _) => List(syn.InferTest(e))
       case Length(es) => List(syn.InferLength(es))
-      case e@Var(_) if ctx.exists {
-        case Cmp(_, CharAt(_, ei), _) => ei == e
-        case Cmp(_, ei, Find(_, _)) => ei == e
-      } => List(syn.InferIndex(e))
       case Find(es, Const(t: String)) => List(syn.InferFirstIndexOf(es, t))
-    sketches.flatten.distinct
+    sss.flatten

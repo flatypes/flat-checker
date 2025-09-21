@@ -5,7 +5,9 @@ import flat.checker.Formula.*
 import flat.checker.core.Program
 import flat.{Config, Issuer}
 
+/** Core Type Checker. */
 class Checker(using config: Config) extends LazyLogging:
+  /** Type-checks a `program` in the core language. */
   def check(program: Program): Unit =
     val vc = VCGen.generate(program)
 
@@ -13,6 +15,7 @@ class Checker(using config: Config) extends LazyLogging:
 
     discharge(vc, PrfCtx.empty)(using new Prover)
 
+  /** Issuer: maintains the diagnostics during type checking. */
   val issuer = new Issuer
 
   private var vcCounter = 1

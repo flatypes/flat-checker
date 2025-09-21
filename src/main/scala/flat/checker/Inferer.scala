@@ -11,14 +11,20 @@ import flat.regex.AOps.*
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
+/** Boolean Set. */
 enum BoolSet:
+  /** The singleton set {true}. */
   case True
+  /** The singleton set {false}. */
   case False
+  /** The full set {true, false}. */
   case All
 
+/** Type Inferer. */
 class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
   private val indexInferer = new IndexInferer
 
+  /** Infer the regular language of a given `str`. */
   def inferLang(str: Expr): RegEx =
     str match
       case Const(s: String) => RegEx.fromString(s)
@@ -118,6 +124,7 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
         logger.debug(s"substr($startIndex, $endIndex) => [$lb, $ub)")
         RegEx.RELit(substr(r, lb, ub).alphabet).*
 
+  /** Infer the result of a given string `test`. */
   def inferTest(test: Expr): BoolSet = test match
     case PrefixOf(Const(t: String), es) => prefixOf(t, es)
     case PrefixOf(_, _) => BoolSet.All
@@ -151,10 +158,15 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
       else if r.forallContains(t.head) && r1.forallPrefix(t) then BoolSet.True
       else BoolSet.All
 
+  /** Infer the length interval of a given `str`. */
   def inferLength(str: Expr): Interval =
     val r = inferLang(str)
     r.length
 
+  /** Infer the result of `Find(str, pat)`.
+   * Returns a pair of:
+   *  - a Boolean set that indicates if the finding succeeds; and
+   *  - an semantically equivalent set of indices of the first occurrence. */
   def inferFind(str: Expr, pat: String): (BoolSet, List[Index]) =
     infixOf(pat, str) match
       case BoolSet.False => (BoolSet.False, Nil)
@@ -162,11 +174,13 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
         val r = inferLang(str)
         val results = ListBuffer.empty[Index]
         r.take(IndexAt(pat)).length match
-          case Interval(n1, n2: Int) if n1 == n2 => results += IndexL(n1)
-          case Interval(n1, n2: Int) => results += IndexInterval(IndexL(n1), IndexL(n2))
-          case Interval(n1, _) => results += IndexInterval(IndexL(n1), IndexR(1))
+          case Interval(n1, n2: Int) =>
+            results += (if n1 == n2 then IndexL(n1) else IndexInterval(IndexL(n1), IndexL(n2)))
+          case Interval(n1, Inf) =>
+            results += IndexInterval(IndexL(n1), IndexR(1))
         r.drop(IndexAt(pat)).length match
-          case Interval(n1, n2: Int) if n1 == n2 => results += IndexR(n1)
-          case Interval(n1, n2: Int) => results += IndexInterval(IndexR(n2), IndexR(n1))
-          case Interval(n1, _) => results += IndexInterval(IndexL(0), IndexR(n1))
-        (bs, results.toList)
+          case Interval(n1, n2: Int) =>
+            results += (if n1 == n2 then IndexR(n1) else IndexInterval(IndexR(n2), IndexR(n1)))
+          case Interval(n1, Inf) =>
+            results += IndexInterval(IndexL(0), IndexR(n1))
+        (bs, results.distinct.toList)

@@ -9,15 +9,27 @@ import flat.regex.*
 import flat.regex.AOps.*
 import flat.regex.RegEx.*
 
-import scala.collection.mutable.ListBuffer
-
+/** Lemma Synthesizer. */
 class LemmaSynth(using config: Config) extends LazyLogging:
+  /** Lemma Sketch. */
   sealed trait Sketch extends LazyLogging:
     def apply(using ctx: PrfCtx): Expr
 
+  /** Synthesizes lemmas according to the given `sketches`. */
   def synth(sketches: List[Sketch])(using ctx: PrfCtx): List[Expr] = sketches.map(_.apply)
 
+  final case class InferLang(str: Expr, target: Option[String] = None) extends Sketch:
+    def apply(using ctx: PrfCtx): Expr =
+      val inferer = new Inferer
+      val r = inferer.inferLang(str)
+      val e1: Expr = target match
+        case Some(t) if !r.contains(t) => NE(str, t)
+        case _ => true
+      val e2 = if r.isSmall then mkOr(r.words.map(EQ(str, _))) else TypeTest(str, LangType(r))
+      mkAnd(e1, e2)
+
   extension (re: RegEx)
+    /** Tests if this regular language is *small*: free of Kleene stars and negative charsets. */
     private def isSmall: Boolean = re match
       case RENone => true
       case RENull => true
@@ -38,16 +50,6 @@ class LemmaSynth(using config: Config) extends LazyLogging:
       case REUnion(r1, r2) => r1.words | r2.words
       case REStar(_) => Set.empty
 
-  final case class InferLang(str: Expr, target: Option[String] = None) extends Sketch:
-    def apply(using ctx: PrfCtx): Expr =
-      val inferer = new Inferer
-      val r = inferer.inferLang(str)
-      val e1: Expr = target match
-        case Some(t) if !r.contains(t) => NE(str, t)
-        case _ => true
-      val e2 = if r.isSmall then mkOr(r.words.map(EQ(str, _))) else TypeTest(str, LangType(r))
-      mkAnd(e1, e2)
-
   final case class InferTest(test: InfixOf) extends Sketch:
     def apply(using ctx: PrfCtx): Expr =
       val inferer = new Inferer
@@ -57,11 +59,6 @@ class LemmaSynth(using config: Config) extends LazyLogging:
         case _ => true
 
   private val smtSolver = new SMTSolver
-
-  private def inInterval(expr: Expr, interval: Interval): Expr = interval match
-    case Interval(0, Inf) => true
-    case Interval(n1, Inf) => GE(expr, n1)
-    case Interval(n1, n2: Int) => And(GE(expr, n1), LE(expr, n2))
 
   final case class InferLength(str: Expr) extends Sketch:
     def apply(using ctx: PrfCtx): Expr =
@@ -74,46 +71,23 @@ class LemmaSynth(using config: Config) extends LazyLogging:
           val inferer = new Inferer
           inInterval(len, inferer.inferLength(str))
 
-  final case class InferIndex(idx: Var) extends Sketch:
-    def apply(using ctx: PrfCtx): Expr =
-      val inferer = new Inferer
-      val hints = ListBuffer.empty[Expr]
-      ctx.foreach {
-        case Cmp(EQ, CharAt(es, ei@Var(_)), Const(s: String)) if s.length == 1 =>
-          val r = inferer.inferLang(es)
-          val c = s.head
-          val r1 = r.findPrefix(c)
-          if r1 != RENone then
-            val k1 = r1.length.lb
-            hints += GE(ei, k1)
-            val r2 = r.reverse.findSuffix(c)
-            val k2 = r2.length.lb
-            hints += LT(ei, SUB(Length(es), k2))
-        case Cmp(NE, CharAt(es, ei@Var(_)), Const(s: String)) if s.length == 1 =>
-          val r = inferer.inferLang(es)
-          val c = s.head
-          r match
-            case REConcat(REStar(RELit(cs)), r1) if cs.isSingletonOf(c) =>
-              r1.length.ub match
-                case k1: Int => hints += GE(ei, SUB(Length(es), k1))
-                case _ =>
-            case _ =>
-        case Cmp(_, e1, Find(es, Const(s: String))) if e1 == idx && s.length == 1 && ctx.exists(_ == InfixOf(s, es)) =>
-          val c = s.head
-          ctx.foreach:
-            case InfixOf(Const(s1: String), e) if e == es && s1.length == 1 && s1.head != c =>
-              val c1 = s1.head
-              val r = inferer.inferLang(es)
-              if firstOccurBefore(r, c, c1) then
-                hints += LT(Find(es, c.toString), Find(es, c1.toString))
-              else if firstOccurBefore(r, c1, c) then
-                hints += LT(Find(es, c1.toString), Find(es, c.toString))
-            case _ =>
-        case _ =>
-      }
-      mkAnd(hints.toList)
+  private def inInterval(expr: Expr, interval: Interval): Expr = interval match
+    case Interval(0, Inf) => true
+    case Interval(n1, Inf) => GE(expr, n1)
+    case Interval(n1, n2: Int) => And(GE(expr, n1), LE(expr, n2))
 
-  private def firstOccurBefore(r: RegEx, c1: Char, c2: Char): Boolean = !r.findPrefix(c1).alphabet.contains(c2)
+  private def firstOccurBefore(r: RegEx, c1: Char, c2: Char): Boolean =
+    !r.findPrefix(c1).alphabet.contains(c2)
+
+  final case class InferFirstIndexOf(str: Expr, pat: String) extends Sketch:
+    def apply(using ctx: PrfCtx): Expr =
+      val idx = Find(str, pat)
+      val inferer = new Inferer
+      val (found, indices) = inferer.inferFind(str, pat)
+      found match
+        case BoolSet.True => mkAnd(indices.flatMap(_.constraint(idx, str)))
+        case BoolSet.False => EQ(idx, -1)
+        case BoolSet.All => Or(EQ(idx, -1), mkAnd(indices.flatMap(_.constraint(idx, str))))
 
   extension (index: Index)
     private def concretize(str: Expr): Expr = index match
@@ -128,12 +102,17 @@ class LemmaSynth(using config: Config) extends LazyLogging:
       case _: BasicIndex | IndexShifted => List(EQ(idx, concretize(str)))
       case IndexInterval(lb, ub) => List(GE(idx, lb.concretize(str)), LE(idx, ub.concretize(str)))
 
-  final case class InferFirstIndexOf(str: Expr, pat: String) extends Sketch:
+  final case class InferIndex(eq: EQ.type | NE.type, str: Expr, idx: Expr, c: Char) extends Sketch:
     def apply(using ctx: PrfCtx): Expr =
-      val idx = Find(str, pat)
       val inferer = new Inferer
-      val (found, indices) = inferer.inferFind(str, pat)
-      found match
-        case BoolSet.True => mkAnd(indices.flatMap(_.constraint(idx, str)))
-        case BoolSet.False => EQ(idx, -1)
-        case BoolSet.All => Or(EQ(idx, -1), mkAnd(indices.flatMap(_.constraint(idx, str))))
+      val r = inferer.inferLang(str)
+      val r1 = r.splitPrefix(c)
+      val r2 = r.splitSuffix(c)
+      if !r1.isEmpty && !r2.isEmpty then
+        val e1 = inInterval(idx, r1.length)
+        val e2 = inInterval(SUB(Length(str), idx), r2.length)
+        eq match
+          case EQ => And(e1, e2)
+          case NE => Or(Not(e1), Not(e2))
+      else
+        true

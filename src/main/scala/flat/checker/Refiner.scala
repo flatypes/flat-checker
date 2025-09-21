@@ -57,12 +57,12 @@ object Refiner extends LazyLogging:
     val solver = LPSolver(constraints)
     val (min, max) = solver.solve(Length(Var(x)))
     val interval = Interval(min.getOrElse(0), max.getOrElse(Inf))
-    for r <- getNonEmptyLang(x) yield (Var(x) -> RERefiner.refineByLen(r, interval))
+    for r <- getNonEmptyLang(x) yield Var(x) -> RERefiner.refineByLen(r, interval)
 
   private def refine(assumption: Expr)(using ctx: PrfCtx, config: Config): Option[(Expr, RegEx)] =
     assumption match
       case Cmp(op, Length(Var(x)), Const(n: Int)) =>
-        for r <- getNonEmptyLang(x) yield (Var(x) -> RERefiner.refineByLen(r, (op, n)))
+        for r <- getNonEmptyLang(x) yield Var(x) -> RERefiner.refineByLen(r, (op, n))
       case Cmp(op@(EQ | NE), CharAt(Var(x), ei), Const(s: String)) =>
         val c = ensureChar(s)
         for
@@ -104,6 +104,8 @@ object Refiner extends LazyLogging:
           Some(str -> RERefiner.refineByCharAt(lang.reverse, k - 1, (op, c)).reverse)
         case IndexInterval(_, _) if op == NE =>
           Some(str -> refineBySomeCharNotEqual(lang, c))
+        case IndexInterval(_, _) if op == EQ =>
+          Some(str -> union(lang.find(c).map(_ ++ _)))
         case _ => None
     }
 
