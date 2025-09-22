@@ -2,8 +2,9 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
+import flat.Ops.CmpOp.*
 import flat.checker.core.*
-import flat.checker.core.ArithOp.ADD
+import flat.checker.core.ArithOp.*
 import flat.checker.summands
 import flat.regex.*
 import flat.regex.AOps.*
@@ -21,7 +22,7 @@ enum BoolSet:
   case All
 
 /** Type Inferer. */
-class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
+class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
   private val indexInferer = new IndexInferer
 
   /** Infer the regular language of a given `str`. */
@@ -38,12 +39,7 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
           case Some(r) => // select the more premise one
             val cs1 = r.first
             val cs2 = rOrd.first
-            if cs1.subsetOf(cs2) then
-              logger.debug(s"infer $es[$ei]: prefer $cs1 than $cs2")
-              cs1
-            else
-              logger.debug(s"infer $es[$ei]: prefer $cs2 than $cs1")
-              cs2
+            if cs1.subsetOf(cs2) then cs1 else cs2
           case None => rOrd.first
         RegEx.fromCharSet(cs)
       case Substr(es, ei, Arith(ADD, Find(Substr(e1, e2, Length(e3)), Const(t: String)), e4))
@@ -51,13 +47,15 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
         // Special case: es[ei : (es[ei:].find(t) + ei)] = es[ei : es.find(t, ei)]
         val r = inferLang(es)
         val i = indexInferer.infer(ei, es)
-        val r1 = substr(r, i, IndexR(0))
+        val r1 = substr(r, i, IndexR(0), startIdx = Some(ei))(using es)
         r1.take(IndexAt(t))
       case Substr(es, ei, ej) =>
         val (rOpt, rOrd) = inferSubstr(es, ei, ej)
         rOpt.getOrElse(rOrd)
       case _ => throw IllegalArgumentException(str.toString)
 
+  /** Infer the type of `Substr(str, start, end)`.
+   * Return two solutions: one using the suffix lang (if specified), and the other using the ordinary method. */
   private def inferSubstr(str: Expr, start: Expr, end: Expr): (Option[RegEx], RegEx) =
     // Optional attempt: Given that the language of `str[base:]` (for some `base` index) is `r`,
     // and that `start` equals to `base + ki` for some constant ki >= 0.
@@ -67,13 +65,13 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
       (base, r) <- ctx.lookupSuffixLang(str)
       ki <- computeConstOffset(start, base)
       j <- if end == Length(str) then Some(IndexR(0)) else computeConstOffset(end, base).map(IndexR(_))
-    yield substr(r, IndexL(ki), j)
+    yield substr(r, IndexL(ki), j)(using Substr(str, base, Length(str)))
 
     // Ordinary attempt in a compositional manner.
     val r = inferLang(str)
     val i = indexInferer.infer(start, str)
     val j = indexInferer.infer(end, str)
-    val rOrd = substr(r, i, j)
+    val rOrd = substr(r, i, j, startIdx = Some(start), endIdx = Some(end))(using str)
 
     // Return both results.
     (rOpt, rOrd)
@@ -85,44 +83,64 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
     expr.summands.foreach:
       case Const(n: Int) => sum += n
       case e => if e == base then baseCount += 1 else unexpected = true
-    if !unexpected && baseCount == 1 && sum >= 0 then Some(sum)
-    else None
+    if !unexpected && baseCount == 1 && sum >= 0 then Some(sum) else None
 
-  private def substr(r: RegEx, startIndex: Index, endIndex: Index): RegEx =
+  private def substr(r: RegEx, startIndex: Index, endIndex: Index,
+                     startIdx: Option[Expr] = None, endIdx: Option[Expr] = None)(using str: Expr): RegEx =
     (startIndex, endIndex) match
       case (IndexL(0), IndexR(0)) => r
       case (i: BasicIndex, IndexR(0)) => r.drop(i)
       case (IndexL(0), j: BasicIndex) => r.take(j)
       case (IndexL(i), IndexL(j)) => r.take(j).drop(i)
-      case (IndexR(_), IndexL(_)) => throw UnsupportedOperationException()
+      case (IndexR(_), IndexL(_)) => throw UnsupportedOperationException(s"substr from $startIndex until $endIndex")
       case (IndexAt(t), IndexL(j)) =>
-        // TODO: prove that i + |t| < j
+        // Require: startIndex + |t| < endIndex
+        assert(isValid(LT(ADD(startIndex.concretize(str), t.length), endIndex.concretize(str))))
         r.take(j).drop(IndexAt(t))
-      case (i: BasicIndex, j: BasicIndex) => r.drop(i).take(j)
+      case (i: BasicIndex, j: BasicIndex) =>
+        // Require: startIndex < endIndex
+        assert(isValid(LT(startIndex.concretize(str), endIndex.concretize(str))))
+        r.drop(i).take(j)
       case (IndexShifted(i, k), j) if k < 0 =>
-        // -k ≤ i ∧ i ≤ j ≤ length s
-        r.take(i).reverse.take(-k).reverse ++ substr(r, i, j)
-      case (IndexShifted(i, k), j) if k > 0 => substr(r, i, j).drop(k)
+        // Require: -k ≤ i ∧ i ≤ j ≤ length s
+        assert(isValid(mkAnd(
+          LE(-k, i.concretize(str)),
+          LE(i.concretize(str), j.concretize(str)),
+          LE(j.concretize(str), Length(str)))))
+        // s[i + (-k) : j] = (reverse (reverse s[:i])[:(-k)]) ++ s[i:j]
+        r.take(i).reverse.take(-k).reverse ++ substr(r, i, j, endIdx = endIdx)
+      case (IndexShifted(i, k), j) if k > 0 =>
+        // s[i + k : j] = s[i:j][k:]
+        substr(r, i, j, endIdx = endIdx).drop(k)
       case (i, IndexShifted(j, k)) if k < 0 =>
-        // i ≤ j - -k ∧ j ≤ length s
-        substr(r, i, j).reverse.drop(-k).reverse
+        // Require: i ≤ j - (-k) ∧ j ≤ length s
+        assert(isValid(And(
+          LE(i.concretize(str), SUB(j.concretize(str), -k)),
+          LE(j.concretize(str), Length(str)))))
+        // s[i : j - k] = reverse (reverse s[i:j])[k:]
+        substr(r, i, j, startIdx = startIdx).reverse.drop(-k).reverse
       case (i, IndexShifted(j, k)) if k > 0 =>
-        // i ≤ j
-        substr(r, i, j) ++ r.drop(j).take(k)
-      case (IndexInterval(i1, i2), IndexR(0)) =>
-        val fragment = substr(r, i1, i2.shift(1))
-        val r1 = RegEx.fromCharSet(fragment.alphabet).+
-        val r2 = substr(r, i2.shift(1), IndexR(0))
+        // Require: i ≤ j
+        assert(isValid(LE(i.concretize(str), j.concretize(str))))
+        // s[i : j + k] = s[i:j] ++ s[j:][:k]
+        substr(r, i, j, startIdx = startIdx) ++ r.drop(j).take(k)
+      case (IndexInterval(i1, i2), j: BasicIndex) =>
+        val rc = RegEx.fromCharSet(substr(r, i1, i2.shift(1)).alphabet)
+        val r1 = if isValid(LT(startIdx.get, Length(str))) then rc.+ else rc.*
+        val r2 = substr(r, i2.shift(1), j)
+        logger.debug(s"infer substr of $r from $startIndex until $endIndex: $r1 ++ $r2")
         r1 ++ r2
-      case _ =>
-        val lb = startIndex match
-          case i: (BasicIndex | IndexShifted) => i
-          case IndexInterval(i, _) => i
-        val ub = endIndex match
-          case j: (BasicIndex | IndexShifted) => j
-          case IndexInterval(_, j) => j
-        logger.debug(s"substr($startIndex, $endIndex) => [$lb, $ub)")
-        RegEx.RELit(substr(r, lb, ub).alphabet).*
+      case (i: BasicIndex, IndexInterval(j1, j2)) =>
+        val r1 = substr(r, i, j1)
+        val rc = RegEx.fromCharSet(substr(r, j1, j2.shift(1)).alphabet)
+        val r2 = if isValid(LT(endIdx.get, Length(str))) then rc.+ else rc.*
+        logger.debug(s"infer substr of $r from $startIndex until $endIndex: $r1 ++ $r2")
+        r1 ++ r2
+      case (IndexInterval(i, _), IndexInterval(_, j)) =>
+        val rc = RegEx.fromCharSet(substr(r, i, j).alphabet)
+        val r1 = if isValid(LT(startIdx.get, endIdx.get)) then rc.+ else rc.*
+        logger.debug(s"infer substr of $r from $startIndex until $endIndex: $r1")
+        r1
 
   /** Infer the result of a given string `test`. */
   def inferTest(test: Expr): BoolSet = test match
@@ -184,3 +202,7 @@ class Inferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
           case Interval(n1, Inf) =>
             results += IndexInterval(IndexL(0), IndexR(n1))
         (bs, results.distinct.toList)
+
+  private val smtSolver = new SMTSolver
+
+  private def isValid(cond: Expr): Boolean = ctx.hypotheses.contains(cond) || smtSolver.canProve(cond)

@@ -6,9 +6,6 @@ import flat.Ops.CmpOp.*
 import flat.checker.core.*
 import flat.checker.core.ArithOp.*
 import flat.regex.*
-import flat.util.tryAll
-
-import scala.Function.unlift
 
 final case class IndexShifted(base: BasicIndex, offset: Int) extends Index
 
@@ -23,75 +20,68 @@ extension (index: Index)
       case IndexShifted(b, k) => if k + offset == 0 then b else IndexShifted(b, k + offset)
       case IndexInterval(lb, ub) => IndexInterval(lb.shift(offset), ub.shift(offset))
 
-  def getOffset: Int = index match
-    case IndexShifted(_, k) => k
-    case _ => 0
+  def concretize(str: Expr): Expr = index match
+    case IndexL(k) => k
+    case IndexR(k) => SUB(Length(str), k)
+    case IndexAt(t) => Find(str, t)
+    case IndexShifted(b, k) => ADD(b.concretize(str), k)
+    case _: IndexInterval => throw IllegalArgumentException(index.toString)
 
-class IndexInferer(using ctx: PrfCtx, config: Config) extends LazyLogging:
-  def infer(idx: Expr, str: Expr): Index =
-    convert(idx, str).getOrElse {
-      idx match
-        case Var(x) => solve(x, str)
-        case Arith(ADD, Var(x), Const(k: Int)) => solve(x, str).shift(k)
-        case Arith(SUB, Var(x), Const(k: Int)) => solve(x, str).shift(-k)
-        case Arith(ADD, Find(es, Const(t: String)), Const(k: Int)) if es == str => IndexAt(t).shift(k)
-        case _ => throw UnsupportedOperationException(idx.toString)
-    }
+  /** Generates a Boolean expression that encodes the concrete `idx` (of `str`) is in this abstract `index`. */
+  def constraint(idx: Expr, str: Expr): List[Expr] = index match
+    case _: BasicIndex | IndexShifted => List(EQ(idx, concretize(str)))
+    case IndexInterval(lb, ub) => List(GE(idx, lb.concretize(str)), LE(idx, ub.concretize(str)))
 
-  private def convert(idx: Expr, str: Expr): Option[Index] = idx match
-    case Const(n: Int) if n >= 0 => Some(IndexL(n))
-    case Length(e) if e == str => Some(IndexR(0))
-    case Arith(SUB, Length(e), Const(n: Int)) if e == str && n > 0 => Some(IndexR(n))
-    case Find(e, Const("")) => Some(IndexL(0))
-    case Find(e, Const(t: String)) if e == str => Some(IndexAt(t))
-    case Arith(op, Find(e, Const(t: String)), Const(k: Int)) if e == str && k > 0 =>
-      Some(IndexShifted(IndexAt(t), if op == ADD then k else -k))
-    case _ => None
+/** Index Inference. */
+class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
+  /** Infer an abstract index for a given `idx` of `str`. */
+  def infer(idx: Expr, str: Expr): Index = idx match
+    case Const(n: Int) if n >= 0 => IndexL(n)
+    case Length(e) if e == str => IndexR(0)
+    case Arith(SUB, Length(e), Const(n: Int)) if e == str && n > 0 => IndexR(n)
+    case Find(e, Const(t: String)) if e == str => IndexAt(t)
+    case Arith(op, Find(e, Const(t: String)), Const(k: Int)) if e == str =>
+      IndexShifted(IndexAt(t), if op == ADD then k else -k)
+    case Var(x) => solve(x, str)
+    case Arith(ADD, Var(x), Const(k: Int)) => solve(x, str).shift(k)
+    case Arith(SUB, Var(x), Const(k: Int)) => solve(x, str).shift(-k)
+    case _ => throw UnsupportedOperationException(idx.toString)
 
   private def solve(x: String, str: Expr): Index =
-    val constraints = ctx.collect(unlift {
-      case cond: Cmp => Rewriter.push(Var(x), cond)
-      case _ => None
-    })
-
-    val eqs = constraints.flatMap {
-      case (EQ, e) => convert(e, str)
-      case _ => None
-    }.distinct
-    if eqs.nonEmpty then
-      require(eqs.length == 1, s"multiple EQ: $eqs")
-      return eqs.head
-    val lbs = constraints.flatMap {
-      case (GE, e) => convert(e, str)
-      case (GT, e) => convert(e, str).map(_.shift(1))
-      case _ => None
-    }
-    val ubs = constraints.flatMap {
-      case (LE, e) => convert(e, str)
-      case (LT, e) => convert(e, str).map(_.shift(-1))
-      case _ => None
-    }
-    val common = lbs.toSet & ubs.toSet
-    if common.nonEmpty then
-      require(common.size == 1, s"multiple EQ: $common")
-      return common.head
-
-    val lb = tryAll(
-      () => lbs.find(i => i.isInstanceOf[IndexAt] ||
-        i.isInstanceOf[IndexShifted] && i.asInstanceOf[IndexShifted].base.isInstanceOf[IndexAt]),
-      () => lbs.filter {
-        case IndexShifted(IndexL(_), _) => true
-        case _ => false
-      }.maxByOption(_.asInstanceOf[IndexShifted].offset),
-      () => lbs.minByOption(_.getOffset)
-    ).getOrElse(IndexL(0))
-    val ub = tryAll(
-      () => ubs.find(i => i.isInstanceOf[IndexAt] ||
-        i.isInstanceOf[IndexShifted] && i.asInstanceOf[IndexShifted].base.isInstanceOf[IndexAt]),
-      () => ubs.filter {
-        case IndexShifted(IndexL(_), _) => true
-        case _ => false
-      }.minByOption(_.asInstanceOf[IndexShifted].offset),
-      () => ubs.maxByOption(_.getOffset)
-    ).getOrElse(IndexR(1))
+    val idx = Var(x)
+    val constraints = ctx.hypotheses.collect { case c@Cmp(op, _, _) if op != NE && c.collectVars.contains(x) => c }
+    val solver = LPSolver(constraints)
+    // High priority: IndexAt (with potential shift)
+    val of = constraints.flatMap(c => List(c.left, c.right)).collectFirst:
+      case f@Find(e, Const(t: String)) if e == str => (f, t)
+    val (lbA, ubA) = of match
+      case Some(f, t) =>
+        val (minK, maxK) = solver.solve(SUB(idx, f))
+        if minK.isDefined && minK == maxK then
+          return IndexAt(t).shift(minK.get)
+        (minK.map(IndexAt(t).shift), maxK.map(IndexAt(t).shift))
+      case None => (None, None)
+    // Middle priority: IndexL
+    val (minL, maxL) = solver.solve(idx)
+    if minL.isDefined && minL == maxL then
+      return IndexL(minL.get)
+    val (lbL, ubL) = (minL.map(IndexL(_)), maxL.map(IndexL(_)))
+    // Low priority: IndexR
+    val (minR, maxR) = solver.solve(SUB(Length(str), idx))
+    if minR.isDefined && minR == maxR then
+      return IndexR(minR.get)
+    val (lbR, ubR) = (maxR.map(IndexR(_)), minR.map(IndexR(_)))
+    // Choose interval bounds
+    val lb = (lbA, lbL, lbR) match
+      case (Some(i), None | Some(IndexL(0)), None) => i
+      case (None, Some(i), None) => i
+      case (None, None | Some(IndexL(0)), Some(i)) => i
+      case (None, None, None) => IndexL(0)
+      case _ => throw UnsupportedOperationException(s"solve $x: ambiguous choice of lb from $lbA, $lbL, $lbR")
+    val ub = (ubA, ubL, ubR) match
+      case (Some(i), None, None | Some(IndexR(1))) => i
+      case (None, Some(i), None | Some(IndexR(1))) => i
+      case (None, None, Some(i)) => i
+      case (None, None, None) => IndexR(0)
+      case _ => throw UnsupportedOperationException(s"solve $x: ambiguous choice of ub from $ubA, $ubL, $ubR")
     IndexInterval(lb, ub)

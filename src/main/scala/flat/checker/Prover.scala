@@ -10,7 +10,7 @@ import flat.regex.RegEx
 import scala.annotation.tailrec
 
 /** Prover: prove verification conditions, or answer type queries. */
-final class Prover(using types: Types, config: Config) extends LazyLogging:
+final class Prover(using config: Config, types: Types) extends LazyLogging:
   /** Proves that `conclusion` is valid under `ctx`. */
   def prove(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
     if smtSolver.canProve(Const(false))(using ctx) then
@@ -26,7 +26,7 @@ final class Prover(using types: Types, config: Config) extends LazyLogging:
 
   /** Infers the type of `value` under `ctx`. */
   def infer(value: Expr, ctx: PrfCtx): RegEx =
-    val inferer = new Inferer(using ctx)
+    val inferer = new Inferer(using ctx = ctx)
     inferer.inferLang(value)
 
   private def split(conclusion: Expr, ctx: PrfCtx): List[(Expr, PrfCtx)] = conclusion match
@@ -158,13 +158,16 @@ final class Prover(using types: Types, config: Config) extends LazyLogging:
       case _ => Sort.Bot
 
   private def collectSketches(seed: Expr, ctx: PrfCtx): List[syn.Sketch] =
-    val sss = seed.collect:
+    val ss = seed.collect:
       case Cmp(op@(EQ | NE), ec@CharAt(es, ei@Var(_)), Const(t: String)) if t.length == 1 =>
-        List(syn.InferLang(ec, target = Some(t)), syn.InferIndex(op, es, ei, t.head))
+        val c = t.head
+        List(syn.InferLang(ec, target = Some(t)), syn.InferIndex(op, es, ei, c))
       case Cmp(EQ | NE, es, Const(t: String)) => List(syn.InferLang(es, target = Some(t)))
       case Cmp(EQ | NE, es1, es2) if es1.getSort == Sort.String && es2.getSort == Sort.String =>
         List(syn.InferLang(es1), syn.InferLang(es2))
+      case e@PrefixOf(_, _) => List(syn.InferTest(e))
       case e@InfixOf(_, _) => List(syn.InferTest(e))
+      case e@SuffixOf(_, _) => List(syn.InferTest(e))
       case Length(es) => List(syn.InferLength(es))
       case Find(es, Const(t: String)) => List(syn.InferFirstIndexOf(es, t))
-    sss.flatten
+    ss.flatten

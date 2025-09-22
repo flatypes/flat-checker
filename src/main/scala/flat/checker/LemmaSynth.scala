@@ -50,7 +50,7 @@ class LemmaSynth(using config: Config) extends LazyLogging:
       case REUnion(r1, r2) => r1.words | r2.words
       case REStar(_) => Set.empty
 
-  final case class InferTest(test: InfixOf) extends Sketch:
+  final case class InferTest(test: Expr) extends Sketch:
     def apply(using ctx: PrfCtx): Expr =
       val inferer = new Inferer
       inferer.inferTest(test) match
@@ -76,9 +76,6 @@ class LemmaSynth(using config: Config) extends LazyLogging:
     case Interval(n1, Inf) => GE(expr, n1)
     case Interval(n1, n2: Int) => And(GE(expr, n1), LE(expr, n2))
 
-  private def firstOccurBefore(r: RegEx, c1: Char, c2: Char): Boolean =
-    !r.findPrefix(c1).alphabet.contains(c2)
-
   final case class InferFirstIndexOf(str: Expr, pat: String) extends Sketch:
     def apply(using ctx: PrfCtx): Expr =
       val idx = Find(str, pat)
@@ -88,19 +85,6 @@ class LemmaSynth(using config: Config) extends LazyLogging:
         case BoolSet.True => mkAnd(indices.flatMap(_.constraint(idx, str)))
         case BoolSet.False => EQ(idx, -1)
         case BoolSet.All => Or(EQ(idx, -1), mkAnd(indices.flatMap(_.constraint(idx, str))))
-
-  extension (index: Index)
-    private def concretize(str: Expr): Expr = index match
-      case IndexL(k) => k
-      case IndexR(k) => SUB(Length(str), k)
-      case IndexAt(t) => Find(str, t)
-      case IndexShifted(b, k) => ADD(b.concretize(str), k)
-      case IndexInterval(lb, ub) => throw IllegalArgumentException(s"cannot concretize $index")
-
-    /** Generates a Boolean expression that encodes the concrete `idx` (of `str`) is in this abstract `index`. */
-    private def constraint(idx: Expr, str: Expr): List[Expr] = index match
-      case _: BasicIndex | IndexShifted => List(EQ(idx, concretize(str)))
-      case IndexInterval(lb, ub) => List(GE(idx, lb.concretize(str)), LE(idx, ub.concretize(str)))
 
   final case class InferIndex(eq: EQ.type | NE.type, str: Expr, idx: Expr, c: Char) extends Sketch:
     def apply(using ctx: PrfCtx): Expr =
