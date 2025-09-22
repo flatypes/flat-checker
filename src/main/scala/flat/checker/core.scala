@@ -361,17 +361,17 @@ object core:
 
     override def toString: String = s"$str[$index]"
 
-  final case class Substr(str: Expr, fromIndex: Expr, untilIndex: Expr) extends Expr:
+  final case class Substr(str: Expr, startIndex: Expr, endIndex: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrSlice(this, ctx)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => Substr(str.transform(pf), fromIndex.transform(pf), untilIndex.transform(pf))
+        case None => Substr(str.transform(pf), startIndex.transform(pf), endIndex.transform(pf))
 
-    override def toString: String = untilIndex match
-      case Length(s) if s == str => s"$str[$fromIndex:]"
-      case _ => s"$str[$fromIndex:$untilIndex]"
+    override def toString: String = endIndex match
+      case Length(s) if s == str => s"$str[$startIndex:]"
+      case _ => s"$str[$startIndex:$endIndex]"
 
   final case class PrefixOf(prefix: Expr, str: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrStartsWith(this, ctx)

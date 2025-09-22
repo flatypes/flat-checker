@@ -2,8 +2,8 @@ package flat.checker
 
 import flat.Ops
 import flat.Ops.CmpOp.*
+import flat.checker.ExprOps.*
 import flat.checker.core.*
-import flat.checker.core.ArithOp.*
 import org.apache.commons.math.optimization.GoalType
 import org.apache.commons.math.optimization.linear.*
 
@@ -11,17 +11,6 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters.*
 import scala.util.{Success, Try}
-
-extension (expr: Expr)
-  def negated: Expr = expr match
-    case Negate(e) => e
-    case Const(n: Int) => Const(-n)
-    case e => Negate(e)
-
-  def summands: List[Expr] = expr match
-    case Arith(ADD, e1, e2) => e1.summands ++ e2.summands
-    case Arith(SUB, e1, e2) => e1.summands ++ e2.summands.map(_.negated)
-    case e => List(e)
 
 class LPSolver(constraints: List[Cmp]):
   private val variables = ListBuffer.empty[Expr]

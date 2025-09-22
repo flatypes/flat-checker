@@ -3,9 +3,9 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
+import flat.checker.ExprOps.*
 import flat.checker.core.*
 import flat.checker.core.ArithOp.*
-import flat.checker.summands
 import flat.regex.*
 import flat.regex.AOps.*
 
@@ -21,7 +21,7 @@ enum BoolSet:
   /** The full set {true, false}. */
   case All
 
-/** Type Inferer. */
+/** Type Inference. */
 class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
   private val indexInferer = new IndexInferer
 
@@ -63,8 +63,8 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     // - If `end` equals to `base + kj` for some constant kj >= 0, then it suffices to infer `r[ki:kj]`.
     val rOpt = for
       (base, r) <- ctx.lookupSuffixLang(str)
-      ki <- computeConstOffset(start, base)
-      j <- if end == Length(str) then Some(IndexR(0)) else computeConstOffset(end, base).map(IndexR(_))
+      ki <- start.diffNonneg(base)
+      j <- if end == Length(str) then Some(IndexR(0)) else end.diffNonneg(base).map(IndexR(_))
     yield substr(r, IndexL(ki), j)(using Substr(str, base, Length(str)))
 
     // Ordinary attempt in a compositional manner.
@@ -75,15 +75,6 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
 
     // Return both results.
     (rOpt, rOrd)
-
-  private def computeConstOffset(expr: Expr, base: Expr): Option[Int] =
-    var unexpected = false
-    var baseCount = 0
-    var sum = 0
-    expr.summands.foreach:
-      case Const(n: Int) => sum += n
-      case e => if e == base then baseCount += 1 else unexpected = true
-    if !unexpected && baseCount == 1 && sum >= 0 then Some(sum) else None
 
   private def substr(r: RegEx, startIndex: Index, endIndex: Index,
                      startIdx: Option[Expr] = None, endIdx: Option[Expr] = None)(using str: Expr): RegEx =

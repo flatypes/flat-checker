@@ -7,6 +7,7 @@ import flat.checker.core.*
 import flat.checker.core.ArithOp.*
 import flat.regex.*
 import flat.regex.AOps.*
+import flat.regex.NarrowOps.*
 import flat.regex.RegEx.*
 
 /** Lemma Synthesizer. */
@@ -65,7 +66,7 @@ class LemmaSynth(using config: Config) extends LazyLogging:
       val len = Length(str)
       ctx.lookupSuffixLang(str) match
         case Some((eb, r)) if smtSolver.canProve(And(GE(eb, 0), LT(eb, len))) =>
-          val r1 = RERefiner.refineByLen(r, (GT, 0))
+          val r1 = r.narrowByLength(Interval(lb = 1))
           inInterval(SUB(len, eb), r1.length)
         case _ =>
           val inferer = new Inferer

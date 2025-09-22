@@ -1,8 +1,8 @@
 package flat.regex
 
 import flat.Ops.CmpOp.*
+import flat.regex.NarrowOps.*
 import flat.regex.REParser.parse as re
-import flat.regex.RERefiner.*
 import org.scalatest.funspec.AnyFunSpec
 
 class RefineTest extends AnyFunSpec:

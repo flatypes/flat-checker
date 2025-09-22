@@ -227,8 +227,8 @@ class SMTSolver(using config: Config) extends LazyLogging:
 
     override def visitStrSlice(node: Substr, ctx: Ctx): Term =
       val s = node.str.accept(this, ctx)
-      val i = node.fromIndex.accept(this, ctx)
-      val j = node.untilIndex.accept(this, ctx)
+      val i = node.startIndex.accept(this, ctx)
+      val j = node.endIndex.accept(this, ctx)
       val l = smt.mkTerm(Kind.SUB, j, i)
       // If the start index `i` is negative or greater than the length of the string `s`,
       // or the length `l` is negative, the result is the empty string.

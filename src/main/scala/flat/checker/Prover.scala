@@ -97,7 +97,8 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
       logger.debug("PROVED by SMT")
       return Right(())
 
-    val ctx1 = Refiner.refine(ctx)
+    val narrower = new Narrower
+    val ctx1 = narrower.narrow(ctx)
     val noneStr = ctx1.hypotheses.collectFirst { case TypeTest(e, LangType(RegEx.RENone)) => e }
     if noneStr.isDefined then
       logger.debug(s"PROVED by ${noneStr.get} : ∅ after type narrowing")

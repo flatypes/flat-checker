@@ -4,12 +4,6 @@ case object Inf:
   override def toString: String = "∞"
 
 final case class Interval(lb: Int = 0, ub: Int | Inf.type = Inf):
-  require(lb >= 0)
-  require:
-    ub match
-      case n: Int => n >= 0
-      case _ => true
-
   def isEmpty: Boolean = ub match
     case n: Int => lb > n
     case _ => false

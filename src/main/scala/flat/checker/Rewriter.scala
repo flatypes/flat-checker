@@ -3,8 +3,6 @@ package flat.checker
 import flat.checker.core.*
 
 object Rewriter:
-  def strSlice(str: Expr, fromIndex: Expr): Substr = Substr(str, fromIndex, Length(str))
-
   def simplifyCond(expr: Expr): Expr =
     expr match
       case And(e1, e2) => And(simplifyCond(e1), simplifyCond(e2))
@@ -25,10 +23,6 @@ object Rewriter:
     expr match
       case Or(e1, e2) => destructOr(e1) ++ destructOr(e2)
       case e => List(e)
-
-  def destructOrClassical(expr: Expr): List[Expr] =
-    val es = destructOr(expr)
-    List.from(for i <- es.indices yield mkAnd(es.take(i).map(Not.apply) :+ es(i)))
 
   import CmpOp.*
 
@@ -73,28 +67,3 @@ object Rewriter:
     }.sum
     val const = if k == 0 then Nil else if k > 0 then List(Const(k)) else List(Negate(Const(-k)))
     add(vars ++ const)
-
-  def push(variable: Expr, cond: Cmp): Option[(CmpOp, Expr)] =
-    val allTerms = toANF(cond.left) ++ toANF(cond.right).map(negate)
-    val (varTerms, otherTerms) = allTerms.partition {
-      case e if e == variable => true
-      case Negate(e) if e == variable => true
-      case _ => false
-    }
-    varTerms match
-      case Negate(_) :: Nil => Some(reverse(cond.op) -> add(otherTerms))
-      case _ :: Nil => Some(cond.op -> add(otherTerms.map(negate)))
-      case _ => None
-
-  def forallIntConst(exprs: List[Expr]): Option[List[Int]] = exprs match
-    case Nil => Some(Nil)
-    case Const(n: Int) :: es => forallIntConst(es).map(n :: _)
-    case _ => None
-
-  def tryGetConstDiff(expr: Expr, baseExpr: Expr): Option[Int] =
-    val (baseTerms, otherTerms) = toANF(expr).partition(_ == baseExpr)
-    for
-      _ <- Some(())
-      if baseTerms.length == 1
-      ns <- forallIntConst(otherTerms)
-    yield ns.sum
