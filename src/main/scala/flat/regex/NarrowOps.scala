@@ -43,23 +43,25 @@ object NarrowOps extends LazyLogging:
       yield r1 ++ rr
       union(cases).extractCommonFactor
 
-    /** Narrows by the constraint that `s[i] = c` for some `i`. Or, `s` contains `c`. */
-    def narrowBySomeCharEq(c: Char): RegEx =
+    /** Narrows by the constraint that `s` contains `c`, i.e., `s[i] = c` for some valid index `i`. */
+    def narrowByContain(c: Char): RegEx =
       union(re.find(c).map(_ ++ _)).extractCommonFactor
 
-    /** Narrows by the constraint that `s[i] != c` for some `i`. */
-    def narrowBySomeCharNotEq(c: Char): RegEx = re match
-      case REUnion(r1, r2) => r1.narrowBySomeCharNotEq(c) | r2.narrowBySomeCharNotEq(c)
+    /** Narrows by the constraint that `s` does ''not'' contain `c`. */
+    def narrowByNotContain(c: Char): RegEx = re match
+      case RELit(cs) => fromCharSet(cs - c)
+      case REConcat(r1, r2) => r1.narrowByNotContain(c) ++ r2.narrowByNotContain(c)
+      case REUnion(r1, r2) => r1.narrowByNotContain(c) | r2.narrowByNotContain(c)
+      case REStar(r) => r.narrowByNotContain(c).*
+      case _ => re
+
+    /** Narrows by the constraint that `s` contains some character that is ''not'' the given `c`,
+     * i.e., `s[i] != c` for some valid index `i`. */
+    def narrowByContainNot(c: Char): RegEx = re match
+      case REUnion(r1, r2) => r1.narrowByContainNot(c) | r2.narrowByContainNot(c)
       case r =>
         val cs = r.alphabet
         if cs.isSingleton && cs.contains(c) then RENone else r
-
-    /** Narrows by the constraint that `s[i]` does not contain `c`. */
-    def narrowByNotFound(c: Char): RegEx = re match
-      case RELit(cs) => fromCharSet(cs - c)
-      case REConcat(r1, r2) => r1.narrowByNotFound(c) ++ r2.narrowByNotFound(c)
-      case REUnion(r1, r2) => r1.narrowByNotFound(c) | r2.narrowByNotFound(c)
-      case _ => re
 
     /** Narrows by the constraint that `s[k]` is in `charSet`. */
     def narrowByChatAt(k: Int, charSet: CharSet): RegEx =

@@ -83,14 +83,6 @@ enum RegEx:
     case REStar(r) => r.+
     case _ => this
 
-  /** Normalizes this regex into one without redundant `RENone` and `RENull`. */
-  def norm: RegEx = this match
-    case RENone | RENull => this
-    case RELit(cs) => if cs.isEmpty then RENone else this
-    case REConcat(r1, r2) => r1.norm ++ r2.norm
-    case REUnion(r1, r2) => r1.norm | r2.norm
-    case REStar(r) => r.norm.*
-
   /** Returns the ''first set'' of this regex. */
   def first: CharSet = this match
     case RENone => CharSet.empty
@@ -131,10 +123,13 @@ enum RegEx:
   def derivative(s: String): RegEx = if s.isEmpty then this else derivative(s.head).derivative(s.tail)
 
   /** Tests if `s` is a member of this language. */
-  def contains(s: String): Boolean = derivative(s) == RENull
+  def contains(s: String): Boolean = derivative(s).nullable
 
   /** Tests if this language is a subset of `that` language. */
-  def subsetOf(that: RegEx): Boolean = RESub.check(this, that)
+  infix def subsetOf(that: RegEx): Boolean = RESub.check(this, that)
+
+  /** Tests if this RE is ''semantically'' equivalent to `that`. */
+  infix def equiv(that: RegEx): Boolean = this.subsetOf(that) && that.subsetOf(this)
 
   override def toString: String = this match
     case RENone => "∅"
@@ -167,10 +162,8 @@ object RegEx:
 
   def concat(parts: RegEx*): RegEx = concat(parts.toList)
 
-  /** Creates a singleton language of the singleton string `c`. */
   def fromChar(c: Char): RegEx = RELit(CharSet(c))
 
-  /** Creates a singleton language of the string `s`. */
   def fromString(s: String): RegEx = concat(s.map(fromChar).toList)
 
   def fromCharSet(cs: CharSet): RegEx = if cs.isEmpty then RENone else RELit(cs)

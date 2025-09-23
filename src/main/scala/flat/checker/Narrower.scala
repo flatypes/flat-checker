@@ -52,7 +52,7 @@ class Narrower(using config: Config) extends LazyLogging:
           case List(interval) => r.narrowByFirstIndexOf(c, interval)
           case List(interval1, interval2) => r.narrowByFirstIndexOf(c, interval1).narrowByFirstIndexOf(c, interval2)
           case _ => assert(false)
-        val r2 = r1 | (if notFound then r.narrowByNotFound(c) else RENone)
+        val r2 = r1 | (if notFound then r.narrowByNotContain(c) else RENone)
         res + (es -> r2)
       case Cmp(op@(EQ | NE), CharAt(es@Var(_), ei), Const(t: String)) if t.length == 1 =>
         val c = t.head
@@ -73,8 +73,8 @@ class Narrower(using config: Config) extends LazyLogging:
           case IndexR(k) if k > 0 => r.reverse.narrowByChatAt(k - 1, cs).reverse
           case _: IndexInterval =>
             op match
-              case EQ => r.narrowBySomeCharEq(c)
-              case NE => r.narrowBySomeCharNotEq(c)
+              case EQ => r.narrowByContain(c)
+              case NE => r.narrowByContainNot(c)
           case _ => r
         res + (es -> r1)
       case Cmp(op@(EQ | NE), es@Var(_), Const(t: String)) =>

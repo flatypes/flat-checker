@@ -28,6 +28,21 @@ object simpl:
       case REUnion(r1, r2) => r1.cases ++ r2.cases
       case _ => List(re)
 
+    infix def equalsRE(other: RegEx): Boolean =
+      if re == other then true
+      else (re, other) match
+        case (_: REConcat, _: REConcat) =>
+          val rs1 = re.parts
+          val rs2 = other.parts
+          rs1.length == rs2.length && rs1.zip(rs2).forall(_ equalsRE _)
+        case (_: REUnion, _: REUnion) =>
+          val rs1 = re.cases.sortBy(_.hashCode)
+          val rs2 = other.cases.sortBy(_.hashCode)
+          rs1.length == rs2.length && rs1.zip(rs2).forall(_ equalsRE _)
+        case _ => false
+
+    infix def equalsRE(regex: String): Boolean = re equalsRE REParser.parse(regex)
+
     def extractCommonFactor: RegEx =
       val rss = re.cases.map(_.parts)
       if rss.isEmpty then RENone

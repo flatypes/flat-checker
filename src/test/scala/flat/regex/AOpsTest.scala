@@ -1,35 +1,33 @@
 package flat.regex
 
 import flat.regex.AOps.*
-import flat.regex.REParser.parse as re
-import flat.regex.RegEx.RENull
 import org.scalatest.funspec.AnyFunSpec
 
-class AOpsTest extends AnyFunSpec:
+class AOpsTest extends AnyFunSpec, REAssertions:
   describe("abc"):
     val r = re("abc")
 
     it("drop"):
-      assert(r.drop(0) == r)
-      assert(r.drop(1) == re("bc"))
-      assert(r.drop(2) == re("c"))
-      assert(r.drop(3) == RENull)
-      assert(r.drop(4) == RENull)
+      assertEqual(r.drop(0), r)
+      assertEqual(r.drop(1), "bc")
+      assertEqual(r.drop(2), "c")
+      assertEqual(r.drop(3), "")
+      assertEqual(r.drop(4), "")
 
     it("take"):
-      assert(r.take(0) == RENull)
-      assert(r.take(1) == re("a"))
-      assert(r.take(2) == re("ab"))
-      assert(r.take(3) == re("abc"))
-      assert(r.take(4) == re("abc"))
+      assertEqual(r.take(0), "")
+      assertEqual(r.take(1), "a")
+      assertEqual(r.take(2), "ab")
+      assertEqual(r.take(3), "abc")
+      assertEqual(r.take(4), "abc")
 
     it("split"):
-      assert(r.splitPrefix('a') == RENull)
-      assert(r.splitSuffix('a') == r)
-      assert(r.splitPrefix('b') == re("a"))
-      assert(r.splitSuffix('b') == re("bc"))
-      assert(r.splitPrefix('c') == re("ab"))
-      assert(r.splitSuffix('c') == re("c"))
+      assertEqual(r.splitPrefix('a'), "")
+      assertEqual(r.splitSuffix('a'), r)
+      assertEqual(r.splitPrefix('b'), "a")
+      assertEqual(r.splitSuffix('b'), "bc")
+      assertEqual(r.splitPrefix('c'), "ab")
+      assertEqual(r.splitSuffix('c'), "c")
 
     it("length"):
       assert(r.length == Interval.at(3))
@@ -38,26 +36,26 @@ class AOpsTest extends AnyFunSpec:
     val r = re("ab*")
 
     it("drop"):
-      assert(r.drop(1) == re("b*"))
-      assert(r.drop(2) == re("b*"))
-      assert(r.drop(3) == re("b*"))
+      assertEqual(r.drop(1), "b*")
+      assertEqual(r.drop(2), "b*")
+      assertEqual(r.drop(3), "b*")
 
     it("take"):
-      assert(r.take(1) == re("a"))
-      assert(r.take(2) == re("ab?"))
-      assert(r.take(3) == re("ab?b?"))
+      assertEqual(r.take(1), "a")
+      assertEqual(r.take(2), "ab?")
+      assertEqual(r.take(3), "ab?b?")
 
     it("split"):
-      assert(r.splitPrefix('a') == RENull)
-      assert(r.splitSuffix('a') == r)
-      assert(r.splitPrefix('b') == r)
-      assert(r.splitSuffix('b') == re("bb*"))
-      assert(r.splitPrefix('c').isEmpty)
-      assert(r.splitSuffix('c').isEmpty)
+      assertEqual(r.splitPrefix('a'), "")
+      assertEqual(r.splitSuffix('a'), r)
+      assertEqual(r.splitPrefix('b'), r)
+      assertEqual(r.splitSuffix('b'), "bb*")
+      assertEmpty(r.splitPrefix('c'))
+      assertEmpty(r.splitSuffix('c'))
 
     it("find"):
-      assert(r.findPrefix('b') == re("a"))
-      assert(r.findSuffix('b') == re("bb*"))
+      assertEqual(r.findPrefix('b'), "a")
+      assertEqual(r.findSuffix('b'), "bb*")
 
     it("length"):
       assert(r.length == Interval(lb = 1))
@@ -66,42 +64,42 @@ class AOpsTest extends AnyFunSpec:
     val r = re("a|b*")
 
     it("drop"):
-      assert(r.drop(1) == re("|b*"))
-      assert(r.drop(2) == re("|b*"))
+      assertEqual(r.drop(1), "|b*")
+      assertEqual(r.drop(2), "|b*")
 
     it("take"):
-      assert(r.take(1) == re("a|b?"))
-      assert(r.take(2) == re("(a|b?)b?"))
+      assertEqual(r.take(1), "a|b?")
+      assertEqual(r.take(2), "(a|b?)b?")
 
     it("split"):
-      assert(r.splitPrefix('a') == RENull)
-      assert(r.splitSuffix('a') == re("a"))
-      assert(r.splitPrefix('b') == re("b*"))
-      assert(r.splitSuffix('b') == re("bb*"))
+      assertEqual(r.splitPrefix('a'), "")
+      assertEqual(r.splitSuffix('a'), "a")
+      assertEqual(r.splitPrefix('b'), "b*")
+      assertEqual(r.splitSuffix('b'), "bb*")
 
     it("find"):
-      assert(r.findPrefix('b') == RENull)
-      assert(r.findSuffix('b') == re("bb*"))
+      assertEqual(r.findPrefix('b'), "")
+      assertEqual(r.findSuffix('b'), "bb*")
 
     it("length"):
-      assert(r.length == Interval())
+      assert(r.length == Interval(lb = 0))
 
   describe("a?b"):
     val r = re("a?b")
 
     it("drop"):
-      assert(r.drop(1) == re("b?"))
-      assert(r.drop(2) == RENull)
+      assertEqual(r.drop(1), "b?")
+      assertEqual(r.drop(2), "")
 
     it("take"):
-      assert(r.take(1) == re("a|b"))
-      assert(r.take(2) == re("(a|b)b?")) // NOTE: imprecise
+      assertEqual(r.take(1), "a|b")
+      assertEqual(r.take(2), "(a|b)b?") // NOTE: imprecise
 
     it("split"):
-      assert(r.splitPrefix('a') == RENull)
-      assert(r.splitSuffix('a') == re("ab"))
-      assert(r.splitPrefix('b') == re("a?"))
-      assert(r.splitSuffix('b') == re("b"))
+      assertEqual(r.splitPrefix('a'), "")
+      assertEqual(r.splitSuffix('a'), "ab")
+      assertEqual(r.splitPrefix('b'), "a?")
+      assertEqual(r.splitSuffix('b'), "b")
 
     it("length"):
       assert(r.length == Interval(1, 2))
@@ -110,18 +108,18 @@ class AOpsTest extends AnyFunSpec:
     val r = re("a?b?")
 
     it("drop"):
-      assert(r.drop(1) == re("b?"))
-      assert(r.drop(2) == RENull)
+      assertEqual(r.drop(1), "b?")
+      assertEqual(r.drop(2), "")
 
     it("take"):
-      assert(r.take(1) == re("a|b|"))
-      assert(r.take(2) == re("(a|b|)b?")) // NOTE: imprecise
+      assertEqual(r.take(1), "a|b|")
+      assertEqual(r.take(2), "(a|b|)b?") // NOTE: imprecise
 
     it("split"):
-      assert(r.splitPrefix('a') == RENull)
-      assert(r.splitSuffix('a') == re("ab?"))
-      assert(r.splitPrefix('b') == re("a?"))
-      assert(r.splitSuffix('b') == re("b"))
+      assertEqual(r.splitPrefix('a'), "")
+      assertEqual(r.splitSuffix('a'), "ab?")
+      assertEqual(r.splitPrefix('b'), "a?")
+      assertEqual(r.splitSuffix('b'), "b")
 
     it("length"):
       assert(r.length == Interval(0, 2))
@@ -130,24 +128,24 @@ class AOpsTest extends AnyFunSpec:
     val r = re("(a|b)+")
 
     it("drop"):
-      assert(r.drop(1) == re("(a|b)*"))
-      assert(r.drop(2) == re("(a|b)*"))
+      assertEqual(r.drop(1), "(a|b)*")
+      assertEqual(r.drop(2), "(a|b)*")
 
     it("take"):
-      assert(r.take(1) == re("a|b"))
-      assert(r.take(2) == re("(a|b)(a|b)?"))
+      assertEqual(r.take(1), "a|b")
+      assertEqual(r.take(2), "(a|b)(a|b)?")
 
     it("split"):
-      assert(r.splitPrefix('a') == re("|(a|b)+"))
-      assert(r.splitSuffix('a') == re("a(a|b)*"))
-      assert(r.splitPrefix('b') == re("|(a|b)+"))
-      assert(r.splitSuffix('b') == re("b(a|b)*"))
+      assertEqual(r.splitPrefix('a'), "|(a|b)+")
+      assertEqual(r.splitSuffix('a'), "a(a|b)*")
+      assertEqual(r.splitPrefix('b'), "|(a|b)+")
+      assertEqual(r.splitSuffix('b'), "b(a|b)*")
 
     it("find"):
-      assert(r.findPrefix('a') == re("|b+"))
-      assert(r.findSuffix('a') == re("a(a|b)*"))
-      assert(r.findPrefix('b') == re("|a+"))
-      assert(r.findSuffix('b') == re("b(a|b)*"))
+      assertEqual(r.findPrefix('a'), "|b+")
+      assertEqual(r.findSuffix('a'), "a(a|b)*")
+      assertEqual(r.findPrefix('b'), "|a+")
+      assertEqual(r.findSuffix('b'), "b(a|b)*")
 
     it("length"):
       assert(r.length == Interval(lb = 1))
@@ -156,24 +154,24 @@ class AOpsTest extends AnyFunSpec:
     val r = re("(a|ab)*")
 
     it("drop"):
-      assert(r.drop(1) == re("(|b)(a|ab)*"))
-      assert(r.drop(2) == re("(a|ab)*|(|b)(a|ab)*"))
+      assertEqual(r.drop(1), "(|b)(a|ab)*")
+      assertEqual(r.drop(2), "(a|ab)*|(|b)(a|ab)*")
 
     it("take"):
-      assert(r.take(1) == re("a?"))
-      assert(r.take(2) == re("a?(b|a?)"))
+      assertEqual(r.take(1), "a?")
+      assertEqual(r.take(2), "a?(b|a?)")
 
     it("split"):
-      assert(r.splitPrefix('a') == r)
-      assert(r.splitSuffix('a') == re("a(a|ab)*|(ab)(a|ab)*"))
-      assert(r.splitPrefix('b') == re("(a|ab)*a"))
-      assert(r.splitSuffix('b') == re("b(a|ab)*"))
+      assertEqual(r.splitPrefix('a'), r)
+      assertEqual(r.splitSuffix('a'), "a(a|ab)*|(ab)(a|ab)*")
+      assertEqual(r.splitPrefix('b'), "(a|ab)*a")
+      assertEqual(r.splitSuffix('b'), "b(a|ab)*")
 
     it("find"):
-      assert(r.findPrefix('a') == RENull)
-      assert(r.findSuffix('a') == re("a(a|ab)*|ab(a|ab)*"))
-      assert(r.findPrefix('b') == re("a*a"))
-      assert(r.findSuffix('b') == re("b(a|ab)*"))
+      assertEqual(r.findPrefix('a'), "")
+      assertEqual(r.findSuffix('a'), "a(a|ab)*|ab(a|ab)*")
+      assertEqual(r.findPrefix('b'), "a*a")
+      assertEqual(r.findSuffix('b'), "b(a|ab)*")
 
     it("length"):
-      assert(r.length == Interval())
+      assert(r.length == Interval(lb = 0))
