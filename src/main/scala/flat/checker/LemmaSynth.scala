@@ -74,8 +74,9 @@ class LemmaSynth(using config: Config) extends LazyLogging:
 
   private def inInterval(expr: Expr, interval: Interval): Expr = interval match
     case Interval(0, Inf) => true
-    case Interval(n1, Inf) => GE(expr, n1)
-    case Interval(n1, n2: Int) => And(GE(expr, n1), LE(expr, n2))
+    case Interval(n1: Int, Inf) => GE(expr, n1)
+    case Interval(n1: Int, n2: Int) => And(GE(expr, n1), LE(expr, n2))
+    case _ => assert(false)
 
   final case class InferFirstIndexOf(str: Expr, pat: String) extends Sketch:
     def apply(using ctx: PrfCtx): Expr =

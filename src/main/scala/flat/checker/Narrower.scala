@@ -87,8 +87,8 @@ class Narrower(using config: Config) extends LazyLogging:
 
   private def mkIntervals(op: CmpOp, n: Int): List[Interval] = op match
     case EQ => List(Interval.at(n))
-    case NE => List(Interval(-10, n - 1), Interval(lb = n + 1))
-    case LE => List(Interval(-10, n))
-    case LT => List(Interval(-10, n - 1))
+    case NE => List(Interval(ub = n - 1), Interval(lb = n + 1))
+    case LE => List(Interval(ub = n))
+    case LT => List(Interval(ub = n - 1))
     case GE => List(Interval(lb = n))
     case GT => List(Interval(lb = n + 1))

@@ -183,15 +183,17 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         val r = inferLang(str)
         val results = ListBuffer.empty[Index]
         r.take(IndexAt(pat)).length match
-          case Interval(n1, n2: Int) =>
+          case Interval(n1: Int, n2: Int) =>
             results += (if n1 == n2 then IndexL(n1) else IndexInterval(IndexL(n1), IndexL(n2)))
-          case Interval(n1, Inf) =>
+          case Interval(n1: Int, Inf) =>
             results += IndexInterval(IndexL(n1), IndexR(1))
+          case _ => assert(false)
         r.drop(IndexAt(pat)).length match
-          case Interval(n1, n2: Int) =>
+          case Interval(n1: Int, n2: Int) =>
             results += (if n1 == n2 then IndexR(n1) else IndexInterval(IndexR(n2), IndexR(n1)))
-          case Interval(n1, Inf) =>
+          case Interval(n1: Int, Inf) =>
             results += IndexInterval(IndexL(0), IndexR(n1))
+          case _ => assert(false)
         (bs, results.distinct.toList)
 
   private val smtSolver = new SMTSolver

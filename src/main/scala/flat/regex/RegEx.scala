@@ -56,8 +56,9 @@ enum RegEx:
   /** Loop: repeat a number of times as specified in the `interval`.
    * Require: the lower bound of the interval is nonnegative. */
   def loop(interval: Interval): RegEx = interval match
-    case Interval(m, n: Int) => (this ^ m) ++ RegEx.union((for k <- 0 to (n - m) yield this ^ k).toList)
-    case Interval(m, Inf) => (this ^ m) ++ this.*
+    case Interval(m: Int, n: Int) => (this ^ m) ++ RegEx.union((for k <- 0 to (n - m) yield this ^ k).toList)
+    case Interval(m: Int, Inf) => (this ^ m) ++ this.*
+    case _ => assert(false)
 
   /** Tests if this RE is semantically equivalent to the empty set. */
   def isEmpty: Boolean = this match

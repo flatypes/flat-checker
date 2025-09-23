@@ -17,16 +17,20 @@ object NarrowOps extends LazyLogging:
         case REConcat(r1, r2) =>
           val len1 = r1.length
           val len2 = r2.length
-          if len1.isSingleton && !len2.isSingleton then r1 ++ r2.narrowByLength(len - len1.lb)
-          else if len2.isSingleton && !len1.isSingleton then r1.narrowByLength(len - len2.lb) ++ r2
+          if len1.isSingleton && !len2.isSingleton then
+            val n1 = len1.lb.asInstanceOf[Int]
+            r1 ++ r2.narrowByLength(len + (-n1))
+          else if len2.isSingleton && !len1.isSingleton then
+            val n2 = len2.lb.asInstanceOf[Int]
+            r1.narrowByLength(len + (-n2)) ++ r2
           else re
         case REUnion(r1, r2) => r1.narrowByLength(len) | r2.narrowByLength(len)
         case REStar(r1) =>
           val len1 = r1.length
-          if len1.isSingleton && len1.lb > 0 then
-            val lower = Math.ceilDiv(len.lb, len1.lb)
+          if len1.isSingleton && len1.lb.asInstanceOf[Int] > 0 then
+            val lower = Math.ceilDiv(len.lb.asInstanceOf[Int], len1.lb.asInstanceOf[Int])
             val upper = len.ub match
-              case m: Int => Math.floorDiv(m, len1.lb)
+              case m: Int => Math.floorDiv(m, len1.lb.asInstanceOf[Int])
               case _ => Inf
             val loopRange = Interval(lower, upper)
             if loopRange.isEmpty then RENone else r1.loop(loopRange)

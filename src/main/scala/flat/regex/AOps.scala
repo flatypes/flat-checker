@@ -142,4 +142,4 @@ object AOps extends LazyLogging:
       case RELit(_) => Interval.at(1)
       case REConcat(r1, r2) => r1.length + r2.length
       case REUnion(r1, r2) => r1.length | r2.length
-      case REStar(r) => Interval()
+      case REStar(r) => Interval(lb = 0)
