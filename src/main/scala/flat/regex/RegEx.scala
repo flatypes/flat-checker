@@ -1,7 +1,7 @@
 package flat.regex
 
 /**
- * Regular expressions (regexes):
+ * Regular Expressions (REs):
  *   - `RENone`: the empty set of strings.
  *   - `RENull`: the singleton set of the empty string.
  *   - `RELit(cs)`: the set of singleton strings taken from the charset `cs`.
@@ -17,14 +17,14 @@ enum RegEx:
   case REUnion(left: RegEx, right: RegEx)
   case REStar(part: RegEx)
 
-  // Constructors
-
+  /** Concatenation. */
   def ++(that: RegEx): RegEx = (this, that) match
     case (RENone, _) | (_, RENone) => RENone // ∅ ++ r = r ++ ∅ = ∅
     case (RENull, r) => r // ε ++ r = r
     case (r, RENull) => r // r ++ ε = r
     case (r1, r2) => REConcat(r1, r2)
 
+  /** Union. */
   def |(that: RegEx): RegEx = (this, that) match
     case (RENone, r) => r // ∅ | r = r
     case (r, RENone) => r // r | ∅ = r
@@ -33,31 +33,33 @@ enum RegEx:
     case (r1, r2) if r1 == r2 => r1 // r | r = r
     case (r1, r2) => REUnion(r1, r2)
 
+  /** Kleene star. */
   def * : RegEx = this match
     case RENone => RENull // ∅* = ε
     case RENull => RENull // ε* = ε
     case r => REStar(r)
 
-  /** Kleene plus: repeat this regex at least once. */
+  /** Kleene plus: repeat ''at least'' once. */
   inline def + : RegEx = this ++ this.*
 
-  /** Option: repeat this regex at most once. */
+  /** Optional: repeat ''at most'' once. */
   inline def ? : RegEx = this | RENull
 
-  /** The `n`-th power of this regex: repeat it exactly `n` times. */
+  /** Power: repeat ''exactly'' `n` times.
+   * Require: `n` is nonnegative. */
   def ^(n: Int): RegEx = n match
     case _ if n < 0 => throw IllegalArgumentException("negative exponent")
     case 0 => RENull
     case 1 => this
     case _ => this ++ (this ^ (n - 1))
 
-  /** Repeats this regex at least `m` times and at most `n` times,
-   * where `m` and `n` are the lower and upper bounds of the given `interval`. */
+  /** Loop: repeat a number of times as specified in the `interval`.
+   * Require: the lower bound of the interval is nonnegative. */
   def loop(interval: Interval): RegEx = interval match
     case Interval(m, n: Int) => (this ^ m) ++ RegEx.union((for k <- 0 to (n - m) yield this ^ k).toList)
     case Interval(m, Inf) => (this ^ m) ++ this.*
 
-  /** Tests if this regex denotes the empty set of strings. */
+  /** Tests if this RE is semantically equivalent to the empty set. */
   def isEmpty: Boolean = this match
     case RENone => true
     case RENull => false
@@ -66,7 +68,7 @@ enum RegEx:
     case REUnion(r1, r2) => r1.isEmpty && r2.isEmpty
     case REStar(_) => false
 
-  /** Tests if the empty string is a member of this regex. */
+  /** Tests if the empty string is a member. */
   def nullable: Boolean = this match
     case RENone => false
     case RENull => true
@@ -83,7 +85,7 @@ enum RegEx:
     case REStar(r) => r.+
     case _ => this
 
-  /** Returns the ''first set'' of this regex. */
+  /** Returns the ''first set'': all possible leading characters. */
   def first: CharSet = this match
     case RENone => CharSet.empty
     case RENull => CharSet.empty
@@ -92,7 +94,7 @@ enum RegEx:
     case REUnion(r1, r2) => r1.first | r2.first
     case REStar(r) => r.first
 
-  /** Returns ''all'' chars that any member of this regex may contain. */
+  /** Returns ''all'' possible characters that any member of this RE contains. */
   def alphabet: CharSet = this match
     case RENone => CharSet.empty
     case RENull => CharSet.empty
@@ -101,14 +103,14 @@ enum RegEx:
     case REUnion(r1, r2) => r1.alphabet | r2.alphabet
     case REStar(r) => r.alphabet
 
-  /** Returns the reverse language of this regex. */
+  /** Returns the reverse RE. */
   def reverse: RegEx = this match
     case REConcat(r1, r2) => r2.reverse ++ r1.reverse
     case REUnion(r1, r2) => r1.reverse | r2.reverse
     case REStar(r) => r.reverse.*
     case _ => this
 
-  /** Returns the Brzozowski derivative of this regex at the char `c`. */
+  /** Returns the Brzozowski derivative at the character `c`. */
   def derivative(c: Char): RegEx = this match
     case RENone => RENone
     case RENull => RENone
@@ -119,16 +121,16 @@ enum RegEx:
     case REUnion(r1, r2) => r1.derivative(c) | r2.derivative(c)
     case REStar(r) => r.derivative(c) ++ this
 
-  /** Returns the Brzozowski derivative of this regex at the string `t`. */
-  def derivative(s: String): RegEx = if s.isEmpty then this else derivative(s.head).derivative(s.tail)
+  /** Returns the Brzozowski derivative at the string `t`. */
+  def derivative(t: String): RegEx = if t.isEmpty then this else derivative(t.head).derivative(t.tail)
 
-  /** Tests if `s` is a member of this language. */
+  /** Tests if the given string `s` is a member. */
   def contains(s: String): Boolean = derivative(s).nullable
 
-  /** Tests if this language is a subset of `that` language. */
+  /** Tests if this RE is subset of `that`. */
   infix def subsetOf(that: RegEx): Boolean = RESub.check(this, that)
 
-  /** Tests if this RE is ''semantically'' equivalent to `that`. */
+  /** Tests if this RE is semantically equivalent to `that`. */
   infix def equiv(that: RegEx): Boolean = this.subsetOf(that) && that.subsetOf(this)
 
   override def toString: String = this match
@@ -146,28 +148,34 @@ enum RegEx:
   private def paren(s: String): String = if s.startsWith("(") || s.length == 1 then s else s"($s)"
 
 object RegEx:
-  /** The set of all strings of length 1 (POSIX `.`). */
+  /** RE `.`: the set of all strings of length 1. */
   val allChar: RegEx = RELit(CharSet.full)
 
-  /** The set of all strings (POSIX `.*`). */
+  /** RE `.*`: the full set of strings. */
   val all: RegEx = allChar.*
 
   /** Big union. */
   def union(cases: List[RegEx]): RegEx = if cases.isEmpty then RENone else cases.reduceRight(_ | _)
 
+  /** Big union. */
   def union(cases: RegEx*): RegEx = union(cases.toList)
 
   /** Big concatenation. */
   def concat(parts: List[RegEx]): RegEx = if parts.isEmpty then RENull else parts.reduceRight(_ ++ _)
 
+  /** Big concatenation. */
   def concat(parts: RegEx*): RegEx = concat(parts.toList)
 
+  /** Creates a singleton RE of the singleton string `c`. */
   def fromChar(c: Char): RegEx = RELit(CharSet(c))
 
+  /** Creates a singleton RE of the given string `s`. */
   def fromString(s: String): RegEx = concat(s.map(fromChar).toList)
 
+  /** Creates an RE that matches the given charset `cs`. */
   def fromCharSet(cs: CharSet): RegEx = if cs.isEmpty then RENone else RELit(cs)
 
+  /** Parse an RE from the given `regex` literal. */
   def parse(regex: String): RegEx = REParser.tryParse(regex) match
     case Left(err) => throw IllegalArgumentException(err)
     case Right(r) => r

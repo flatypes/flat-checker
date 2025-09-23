@@ -3,7 +3,7 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
-import flat.checker.Rewriter.destructAnd
+import flat.checker.ExprOps.conjuncts
 import flat.checker.core.*
 import flat.regex.RegEx
 
@@ -111,7 +111,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
           case Right(_) => Right(())
       case _ =>
         proveWithLemmas(conclusion, List(conclusion), ctx1)
-          .orElse(proveWithLemmas(conclusion, ctx1.assumptions, ctx1))
+          .orElse(proveWithLemmas(conclusion, ctx1.hypotheses, ctx1))
 
   private def checkType(expr: Expr, typ: Type)(using ctx: PrfCtx): Either[Type, Unit] = typ match
     case LangType(r2) =>
@@ -140,7 +140,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     val lemmas = syn.synth(sketches)(using ctx)
     if lemmas.nonEmpty then
       logger.debug("Lemmas: " + lemmas.mkString(", "))
-      if lemmas.flatMap(destructAnd).contains(conclusion) then
+      if lemmas.flatMap(_.conjuncts).contains(conclusion) then
         logger.debug(s"PROVED by lemmas")
         return Right(())
 

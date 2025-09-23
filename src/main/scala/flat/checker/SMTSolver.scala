@@ -23,7 +23,7 @@ class SMTSolver(using config: Config) extends LazyLogging:
     slv.setOption("produce-models", "true")
     slv.setOption("tlimit-per", config.smtTimeLimit.toString)
 
-    val vars = (goal :: pCtx.assumptions).flatMap(_.collectVars).toSet
+    val vars = (goal :: pCtx.hypotheses).flatMap(_.collectVars).toSet
     val ctxBuf = mutable.Map.empty[String, Term]
     for x <- vars do
       val s = encodeType(pCtx.types(x))
@@ -34,7 +34,7 @@ class SMTSolver(using config: Config) extends LazyLogging:
           case _ =>
 
     val ctx = ctxBuf.toMap
-    for e <- pCtx.assumptions do slv.assertFormula(encodeExpr(e, ctx))
+    for e <- pCtx.hypotheses do slv.assertFormula(encodeExpr(e, ctx))
     slv.assertFormula(encodeExpr(goal, ctx).notTerm)
     (slv, ctx)
 
@@ -43,7 +43,7 @@ class SMTSolver(using config: Config) extends LazyLogging:
     val result = slv.checkSat()
     if result.isUnsat then Valid
     else if result.isSat then
-      val vars = (goal :: pCtx.assumptions).flatMap(_.collectVars)
+      val vars = (goal :: pCtx.hypotheses).flatMap(_.collectVars)
       val terms = Array.from(for x <- vars yield ctx(x))
       val values = for x <- vars yield x + " = " + slv.getValue(ctx(x)).toString
       Invalid(values.mkString("\n"))
