@@ -59,7 +59,7 @@ object RESub:
         for
           cs <- (next(r1) <| next(r2)).toSeq
           if !cs.isEmpty
-          c = cs.getRepresentative
+          c = cs.representative
           r11 = r1.derivative(c)
           if !r11.isEmpty
           r21 = r2.derivative(c)

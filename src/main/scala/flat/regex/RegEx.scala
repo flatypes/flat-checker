@@ -168,7 +168,7 @@ object RegEx:
   def concat(parts: RegEx*): RegEx = concat(parts.toList)
 
   /** Creates a singleton language of the singleton string `c`. */
-  def fromChar(c: Char): RegEx = RELit(CharSet.fromChar(c))
+  def fromChar(c: Char): RegEx = RELit(CharSet(c))
 
   /** Creates a singleton language of the string `s`. */
   def fromString(s: String): RegEx = concat(s.map(fromChar).toList)

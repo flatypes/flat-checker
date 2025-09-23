@@ -31,7 +31,7 @@ object REParser extends Parsers:
     for
       _ <- '['
       neg <- '^' ^^^ true | success(false)
-      choices <- (charRange | (not("]") | escapeSeq) ^^ (CharSet.of(_))).*
+      choices <- (charRange | (not("]") | escapeSeq) ^^ (CharSet(_))).*
       _ <- ']'
       cs = if choices.isEmpty then CharSet.empty else choices.reduce(_ | _)
     yield RegEx.RELit(if neg then !cs else cs)

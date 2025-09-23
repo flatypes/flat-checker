@@ -1,8 +1,6 @@
 package flat.regex
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.Ops.CmpOp
-import flat.Ops.CmpOp.*
 import flat.regex.AOps.*
 import flat.regex.RegEx.*
 import flat.regex.simpl.extractCommonFactor
@@ -52,8 +50,9 @@ object NarrowOps extends LazyLogging:
     /** Narrows by the constraint that `s[i] != c` for some `i`. */
     def narrowBySomeCharNotEq(c: Char): RegEx = re match
       case REUnion(r1, r2) => r1.narrowBySomeCharNotEq(c) | r2.narrowBySomeCharNotEq(c)
-      case r => if r.alphabet.isSingletonOf(c) then RENone else r
-    // union(List(r1, r2).filter(r => (r.alphabet & CharSet(false, Set(c))).nonEmpty))
+      case r =>
+        val cs = r.alphabet
+        if cs.isSingleton && cs.contains(c) then RENone else r
 
     /** Narrows by the constraint that `s[i]` does not contain `c`. */
     def narrowByNotFound(c: Char): RegEx = re match
@@ -84,7 +83,7 @@ object NarrowOps extends LazyLogging:
         r1 | r2
 
     private def exclude(t: String): RegEx =
-      union(for k <- t.indices.toList yield re.narrowByChatAt(k, CharSet(false, Set(t.charAt(k)))))
+      union(for k <- t.indices.toList yield re.narrowByChatAt(k, CharSet.not(t.charAt(k))))
 
   extension (re: RegEx)
     private def splitAt0: List[(CharSet, RegEx)] = re match

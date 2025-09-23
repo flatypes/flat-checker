@@ -6,12 +6,10 @@ import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
 import flat.checker.core.*
 import flat.regex.*
-import flat.regex.AOps.*
 import flat.regex.NarrowOps.*
 import flat.regex.RegEx.*
 
 import scala.annotation.tailrec
-import scala.collection.mutable
 
 /** Type narrowing. */
 class Narrower(using config: Config) extends LazyLogging:
@@ -59,8 +57,8 @@ class Narrower(using config: Config) extends LazyLogging:
       case Cmp(op@(EQ | NE), CharAt(es@Var(_), ei), Const(t: String)) if t.length == 1 =>
         val c = t.head
         val cs = op match
-          case EQ => CharSet(true, Set(c))
-          case NE => CharSet(false, Set(c))
+          case EQ => CharSet(c)
+          case NE => CharSet.not(c)
         val p = for
           (base, r) <- ctx.lookupSuffixLang(es)
           k <- ei.diffNonneg(base)

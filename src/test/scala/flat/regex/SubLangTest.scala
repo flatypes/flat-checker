@@ -1,8 +1,9 @@
 package flat.regex
 
+import flat.regex.REParser.parse as re
 import org.scalatest.funsuite.AnyFunSuite
 
-class SubLangTest extends RegexTest:
+class SubLangTest extends AnyFunSuite:
   private def positive(left: String, right: String): Unit =
     assert(RESub.check(re(left), re(right)))
 

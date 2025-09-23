@@ -2,7 +2,6 @@ package flat.regex
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.regex.RegEx.*
-import flat.util.cartesianProduct
 
 import scala.annotation.tailrec
 
@@ -24,7 +23,8 @@ object AOps extends LazyLogging:
     @tailrec
     def forallPrefix(t: String): Boolean =
       if t.isEmpty then true
-      else !take1.nullable && take1.first.isSingletonOf(t.head) && re.derivative(t.head).forallPrefix(t.tail)
+      else !take1.nullable && re.first.isSingleton && re.first.contains(t.head) &&
+        re.derivative(t.head).forallPrefix(t.tail)
 
     /** Splits this regex at ''any'' occurrence of the char `c`.
      * Returns a list of splits: each is prefix-suffix pair `(rl, rr)` where `rr` starts with `c`. */
@@ -57,7 +57,7 @@ object AOps extends LazyLogging:
     def forallContains(c: Char): Boolean = re match
       case RENone => false
       case RENull => false
-      case RELit(cs) => cs.isSingletonOf(c)
+      case RELit(cs) => cs.isSingleton && cs.contains(c)
       case REConcat(r1, r2) => r1.forallContains(c) || r2.forallContains(c)
       case REUnion(r1, r2) => r1.forallContains(c) && r2.forallContains(c)
       case REStar(r) => false
@@ -143,26 +143,3 @@ object AOps extends LazyLogging:
       case REConcat(r1, r2) => r1.length + r2.length
       case REUnion(r1, r2) => r1.length | r2.length
       case REStar(r) => Interval()
-
-  def langSet(re: RegEx): Set[String] = re match
-    case RENone => Set.empty
-    case RENull => Set("")
-    case RELit(cs) if cs.polarity => cs.chars.map(_.toString)
-    case REConcat(r1, r2) =>
-      cartesianProduct(langSet(r1), langSet(r2), _ + _)
-    case REUnion(r1, r2) =>
-      langSet(r1) | langSet(r2)
-    case _ => throw IllegalArgumentException()
-
-  private def size(re: RegEx): Option[Int] = re match
-    case RENone => Some(0)
-    case RENull => Some(1)
-    case RELit(cs) => Some(cs.size)
-    case REConcat(r1, r2) =>
-      for x1 <- size(r1); x2 <- size(r2) yield x1 * x2
-    case REUnion(r1, r2) =>
-      for x1 <- size(r1); x2 <- size(r2) yield x1 + x2
-    case REStar(_) => None
-
-  def tryEnumerate(re: RegEx): Option[Set[String]] =
-    if size(re.norm).exists(_ < 20) then Some(langSet(re)) else None
