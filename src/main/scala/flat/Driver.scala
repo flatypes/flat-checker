@@ -49,7 +49,11 @@ object Driver extends LazyLogging:
       else
         val checker = new Checker
         checker.check(program)
+        if checker.issuer.noError then
+          logger.info("Type CHECKED")
         if config.fastExit then
           checker.issuer.ensureNoError()
         else
           checker.issuer.print()
+
+// TODO: 411.neg; 500.pos

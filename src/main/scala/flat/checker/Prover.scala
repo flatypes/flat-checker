@@ -64,8 +64,14 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     if ctx.destructCandidates.isEmpty then proveCase(conclusion, ctx) else destructAndProve(conclusion, ctx)
 
   private def destructAndProve(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
-    val m = ctx.destructCandidates.groupBy(similarity(conclusion, _))
-    val hs = m(m.keySet.max)
+    val candidates = ctx.destructCandidates
+    val similarities = candidates.map(similarity(conclusion, _))
+    val y = similarities.max
+    val hs =
+      for
+        (h, x) <- candidates.zip(similarities)
+        if x == y
+      yield h
     logger.debug("Destruct: " + hs.mkString(", "))
     proveCases(ctx.destruct(hs))(using conclusion)
 

@@ -33,7 +33,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       case Concat(es1, es2) => inferLang(es1) ++ inferLang(es2)
       case Reverse(es) => inferLang(es).reverse
       case CharAt(es, ei) =>
-        // es[ei] = es[ei:].first
+        // es[ei] = es[ei:].take1
         val (rOpt, rOrd) = inferSubstr(es, ei, Length(es))
         val cs = rOpt match
           case Some(r) => // select the more premise one
@@ -41,7 +41,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
             val cs2 = rOrd.first
             if cs1.subsetOf(cs2) then cs1 else cs2
           case None => rOrd.first
-        RegEx.fromCharSet(cs)
+        if cs.isEmpty then RegEx.RENull else RegEx.fromCharSet(cs)
       case Substr(es, ei, Arith(ADD, Find(Substr(e1, e2, Length(e3)), Const(t: String)), e4))
         if e1 == es && e2 == ei && e3 == es && e4 == ei =>
         // Special case: es[ei : (es[ei:].find(t) + ei)] = es[ei : es.find(t, ei)]

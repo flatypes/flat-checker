@@ -6,30 +6,31 @@ import flat.checker.core.*
 import flat.regex.RegEx
 
 class PrfCtx private(val hypotheses: List[Expr])(using val types: Types) extends LazyLogging:
-  def destructCandidates: List[Expr] = hypotheses.collect:
+  def destructCandidates: List[Expr] = (hypotheses.collect:
     case or: Or => or
-    case e if e.collectFirst { case Ite(_, _, _) => () }.isDefined => e
+    case e if e.collectFirst { case Ite(_, _, _) => () }.isDefined => e).distinct
 
   def destruct(candidates: List[Expr]): List[PrfCtxCase] = candidates match
     case Nil => List(PrfCtxCase(this, Nil))
     case b :: bs =>
-      val k = hypotheses.indexOf(b)
-      assert(k >= 0)
-      val cases = b match
-        case or: Or =>
-          val bs = or.disjuncts
-          for i <- bs.indices.toList yield
-            val es1 = conjuncts(bs(i))
-            val es2 = (0 until i).toList.flatMap(j => Not(bs(j)).simpl.conjuncts)
-            PrfCtxCase(PrfCtx(hypotheses.take(k) ++ es1 ++ es2 ++ hypotheses.drop(k + 1)), List(bs(i).toString))
-        case _ =>
-          val cond = b.collectFirst { case Ite(c, _, _) => c }.get
-          val (ctx1, ctx2) = destructIf(cond)
-          List(PrfCtxCase(ctx1, List(cond.toString)), PrfCtxCase(ctx2, List(Not(cond).toString)))
-      for
-        PrfCtxCase(ctx, labels) <- cases
-        PrfCtxCase(ctx1, labels1) <- ctx.destruct(bs)
-      yield PrfCtxCase(ctx1, labels ++ labels1)
+      hypotheses.indexOf(b) match
+        case -1 => destruct(bs)
+        case k =>
+          val cases = b match
+            case or: Or =>
+              val bs = or.disjuncts
+              for i <- bs.indices.toList yield
+                val es1 = conjuncts(bs(i))
+                val es2 = (0 until i).toList.flatMap(j => Not(bs(j)).simpl.conjuncts)
+                PrfCtxCase(PrfCtx(hypotheses.take(k) ++ es1 ++ es2 ++ hypotheses.drop(k + 1)), List(bs(i).toString))
+            case _ =>
+              val cond = b.collectFirst { case Ite(c, _, _) => c }.get
+              val (ctx1, ctx2) = destructIf(cond)
+              List(PrfCtxCase(ctx1, List(cond.toString)), PrfCtxCase(ctx2, List(Not(cond).toString)))
+          for
+            PrfCtxCase(ctx, labels) <- cases
+            PrfCtxCase(ctx1, labels1) <- ctx.destruct(bs)
+          yield PrfCtxCase(ctx1, labels ++ labels1)
 
   def destructIf(cond: Expr): (PrfCtx, PrfCtx) =
     val ctx1 = PrfCtx(hypotheses.map(_.transform { case Ite(b, e, _) if b == cond => e }) :+ cond)

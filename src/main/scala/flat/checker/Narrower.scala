@@ -36,10 +36,9 @@ class Narrower(using config: Config) extends LazyLogging:
     hypothesis match
       case Cmp(op, Length(es@Var(_)), Const(n: Int)) =>
         val r = res(es)
-        val r1 = mkIntervals(op, n).map(_ & Interval()).filterNot(_.isEmpty) match
-          case Nil => RENone
+        val r1 = mkIntervals(op, n) match
           case List(interval) => r.narrowByLength(interval)
-          case List(interval1, interval2) => r.narrowByLength(interval1).narrowByLength(interval2)
+          case List(interval1, interval2) => r.narrowByLength(interval1) | r.narrowByLength(interval2)
           case _ => assert(false)
         res + (es -> r1)
       case Cmp(op, Find(es@Var(_), Const(t: String)), Const(n: Int)) if t.length == 1 =>

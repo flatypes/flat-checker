@@ -40,6 +40,21 @@ object AOps extends LazyLogging:
     def splitPrefix(c: Char): RegEx = union(split(c).map(_._1))
     def splitSuffix(c: Char): RegEx = union(split(c).map(_._2))
 
+    def split(cs: CharSet): List[(RegEx, RegEx)] = re match
+      case RENone => Nil
+      case RENull => Nil
+      case RELit(cs1) =>
+        val cs2 = cs1 & cs
+        if cs2.isEmpty then Nil else List((RENull, RELit(cs2)))
+      case REConcat(r1, r2) =>
+        (for (r1l, r1r) <- r1.split(cs) yield (r1l, r1r ++ r2)) ++
+          (for (r2l, r2r) <- r2.split(cs) yield (r1 ++ r2l, r2r))
+      case REUnion(r1, r2) => r1.split(cs) ++ r2.split(cs)
+      case REStar(r) => for (rl, rr) <- r.split(cs) yield (re ++ rl, rr ++ re)
+
+    def splitPrefix(cs: CharSet): RegEx = union(split(cs).map(_._1))
+    def splitSuffix(cs: CharSet): RegEx = union(split(cs).map(_._2))
+
     /** Splits this regex at ''any'' occurrence of the nonempty string `t`.
      * Returns a list of splits: each is prefix-suffix pair `(rl, rr)` where `rr` starts with `c`. */
     def split(t: String): List[(RegEx, RegEx)] =

@@ -75,6 +75,7 @@ class LemmaSynth(using config: Config) extends LazyLogging:
   private def inInterval(expr: Expr, interval: Interval): Expr = interval match
     case Interval(0, Inf) => true
     case Interval(n1: Int, Inf) => GE(expr, n1)
+    case Interval(n1: Int, n2: Int) if n1 == n2 => EQ(expr, n1)
     case Interval(n1: Int, n2: Int) => And(GE(expr, n1), LE(expr, n2))
     case _ => assert(false)
 
@@ -92,13 +93,14 @@ class LemmaSynth(using config: Config) extends LazyLogging:
     def apply(using ctx: PrfCtx): Expr =
       val inferer = new Inferer
       val r = inferer.inferLang(str)
-      val r1 = r.splitPrefix(c)
-      val r2 = r.splitSuffix(c)
+      val cs = eq match
+        case EQ => CharSet(c)
+        case NE => CharSet.not(c)
+      val r1 = r.splitPrefix(cs)
+      val r2 = r.splitSuffix(cs)
       if !r1.isEmpty && !r2.isEmpty then
         val e1 = inInterval(idx, r1.length)
         val e2 = inInterval(SUB(Length(str), idx), r2.length)
-        eq match
-          case EQ => And(e1, e2)
-          case NE => Or(Not(e1), Not(e2))
+        And(e1, e2)
       else
         true
