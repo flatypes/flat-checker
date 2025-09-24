@@ -8,7 +8,7 @@ import io.github.cvc5
 
 import scala.collection.mutable.ListBuffer
 
-class VCExtract(using config: Config) extends LazyLogging:
+class Extractor(using config: Config) extends LazyLogging:
   def extract(program: Program, input: os.Path): Unit =
     val vc = VCGen.generate(program)
 

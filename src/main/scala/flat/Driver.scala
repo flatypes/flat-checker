@@ -44,22 +44,12 @@ object Driver extends LazyLogging:
     val programs = transpiler.transpile(tree)
     for program <- programs do
       if config.extractMode then
-        val extract = new VCExtract
-        extract.extract(program, path)
+        val extractor = new Extractor
+        extractor.extract(program, path)
       else
         val checker = new Checker
         checker.check(program)
-        if config.fastExit then checker.issuer.ensureNoError()
-        else checker.issuer.print()
-//
-//    try checkPython(path)
-//    catch
-//      case ex: Exception =>
-//        for recorder <- config.recorder do
-//          recorder.append(ujson.Obj(
-//            "file" -> ujson.Str(path.toString),
-//            "success" -> ujson.Bool(false),
-//            "fatal error" -> ujson.Bool(true),
-//          ))
-//        if config.fastExit then throw ex
-//        else ex.printStackTrace()
+        if config.fastExit then
+          checker.issuer.ensureNoError()
+        else
+          checker.issuer.print()

@@ -82,8 +82,8 @@ final class CharSet private(private val set: Set[Char], private val isInc: Boole
     (chars, isInc)
 
   override def toString: String =
-    val (ranges, _) = toSMT
-    val parts = ranges.map:
+    val (chars, _) = toSMT
+    val parts = chars.map:
       case c: Char => escapeJava(c.toString)
       case (c1, c2) => escapeJava(c1.toString) + "-" + escapeJava(c2.toString)
     "[" + (if isInc then "" else "^") + parts.mkString("") + "]"
