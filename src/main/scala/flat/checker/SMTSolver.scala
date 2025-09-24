@@ -28,7 +28,7 @@ class SMTSolver(using config: Config) extends LazyLogging:
     for x <- vars do
       val s = encodeType(pCtx.types(x))
       ctxBuf(x) = smt.mkConst(s, x)
-      if config.extractTo.isDefined then
+      if config.extractMode then
         pCtx.types(x) match
           case LangType(r) => slv.assertFormula(smt.mkTerm(Kind.STRING_IN_REGEXP, ctxBuf(x), encodeRegExpr(r)))
           case _ =>
@@ -126,7 +126,7 @@ class SMTSolver(using config: Config) extends LazyLogging:
       smt.mkTuple(terms.toArray)
 
     override def visitTypeTest(node: TypeTest, ctx: Ctx): Term =
-      if config.extractTo.isDefined then
+      if config.extractMode then
         node.typ match
           case LangType(r) =>
             val t = node.value.accept(this, ctx)

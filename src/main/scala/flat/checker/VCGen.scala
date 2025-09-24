@@ -8,15 +8,15 @@ import flat.checker.core.CmpOp.{GE, LT}
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-enum Formula:
+enum VC:
   case True
   case HasType(value: Expr, typ: Type, loc: Location)
   case InferType(value: Expr, loc: Location)
   case Goal(boolExpr: Expr, err: TypeError)
-  case LAnd(left: Formula, right: Formula)
-  case LImp(premise: Expr, conclusion: Formula)
+  case LAnd(left: VC, right: VC)
+  case LImp(premise: Expr, conclusion: VC)
 
-  def subst(mappings: Map[String, Expr]): Formula = this match
+  def subst(mappings: Map[String, Expr]): VC = this match
     case True => True
     case HasType(e, t, loc) => HasType(e.subst(mappings), t, loc)
     case InferType(e, loc) => InferType(e.subst(mappings), loc)
@@ -32,17 +32,17 @@ enum Formula:
     case LAnd(phi1, phi2) => s"($phi1 ∧ $phi2)"
     case LImp(e, phi) => s"$e ⇒ $phi"
 
-object Formula:
-  def mkLAnd(formulas: List[Formula]): Formula =
+object VC:
+  def mkLAnd(formulas: List[VC]): VC =
     val nontrivial = formulas.filter {
       case True | LImp(_, True) => false
       case _ => true
     }
     if nontrivial.isEmpty then True else nontrivial.reduceRight(LAnd.apply)
 
-  def mkLAnd(formulas: Formula*): Formula = mkLAnd(formulas.toList)
+  def mkLAnd(formulas: VC*): VC = mkLAnd(formulas.toList)
 
-  def mkLImp(premises: List[Expr], conclusion: Formula): Formula = premises match
+  def mkLImp(premises: List[Expr], conclusion: VC): VC = premises match
     case Nil => conclusion
     case _ => LImp(premises.reduce(And(_, _)), conclusion)
 
@@ -68,9 +68,9 @@ class Fresher:
 
 object VCGen extends LazyLogging:
 
-  import Formula.*
+  import VC.*
 
-  def generate(program: Program): Formula =
+  def generate(program: Program): VC =
     given Types = Types.from(program.vars)
 
     given Fresher = new Fresher
@@ -78,8 +78,8 @@ object VCGen extends LazyLogging:
     wlp(program.body, True, True)(using pReturn = True)
 
   /** Compute the weakest liberal pre of a statement `stmt` and a post condition `post`. */
-  private def wlp(stmt: Stmt, post: Formula, body: List[Stmt], pInv: Formula)
-                 (using types: Types, pReturn: Formula, fresher: Fresher): Formula =
+  private def wlp(stmt: Stmt, post: VC, body: List[Stmt], pInv: VC)
+                 (using types: Types, pReturn: VC, fresher: Fresher): VC =
     stmt match
       case Assign(x, e) =>
         val sides = collectSideGoals(e)
@@ -120,8 +120,8 @@ object VCGen extends LazyLogging:
         mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(sides.map(_._1), InferType(e, e.loc)), post)
 
   @tailrec
-  private def wlp(body: List[Stmt], post: Formula, pInv: Formula)
-                 (using types: Types, pReturn: Formula, fresher: Fresher): Formula =
+  private def wlp(body: List[Stmt], post: VC, pInv: VC)
+                 (using types: Types, pReturn: VC, fresher: Fresher): VC =
     if body.isEmpty then post else wlp(body.dropRight(1), wlp(body.last, post, body, pInv), pInv)
 
   private def destruct(cond: Expr): List[Expr] = cond match

@@ -8,13 +8,13 @@ import scala.collection.mutable.ListBuffer
 
 trait VCPrf(path: os.Path)(using types: Types) extends LazyLogging:
 
-  import Formula.*
+  import VC.*
 
   val issuer = new Issuer
 
   private val records = ListBuffer.empty[ujson.Obj]
 
-  def prove(goal: Formula)(using ctx: PrfCtx = PrfCtx.empty): Unit = goal match
+  def prove(goal: VC)(using ctx: PrfCtx = PrfCtx.empty): Unit = goal match
     case True =>
     case g: HasType => proveHasType(g)
     case g: InferType => inferType(g)

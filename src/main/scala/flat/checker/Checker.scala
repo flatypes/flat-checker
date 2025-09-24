@@ -1,26 +1,27 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.Formula.*
+import flat.checker.VC.*
 import flat.checker.core.Program
 import flat.{Config, Issuer}
 
 /** Core Type Checker. */
 class Checker(using config: Config) extends LazyLogging:
+  /** Issuer: maintains the diagnostics during type checking. */
+  val issuer = new Issuer
+
+  private var vcCounter = 1
+
   /** Type-checks a `program` in the core language. */
   def check(program: Program): Unit =
     val vc = VCGen.generate(program)
 
     given types: Types = Types.from(program.vars)
 
+    vcCounter = 1
     discharge(vc, PrfCtx.empty)(using new Prover)
 
-  /** Issuer: maintains the diagnostics during type checking. */
-  val issuer = new Issuer
-
-  private var vcCounter = 1
-
-  private def discharge(vc: Formula, ctx: PrfCtx)(using prover: Prover): Unit = vc match
+  private def discharge(vc: VC, ctx: PrfCtx)(using prover: Prover): Unit = vc match
     case True =>
     case Goal(c, err) =>
       logger.info("")

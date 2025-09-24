@@ -7,8 +7,9 @@ import flat.checker.py.{Transpiler, Unpickler}
 import java.io.File
 import scala.collection.mutable.ListBuffer
 
-final case class Config(inputs: Seq[String] = Seq.empty, smtTimeLimit: Int = 3000, fastExit: Boolean = false,
-                        extractTo: Option[File] = None, recorder: Option[Recorder] = None)
+final case class Config(inputFiles: Seq[String] = Seq.empty, fastExit: Boolean = false, smtTimeLimit: Int = 3000,
+                        extractMode: Boolean = false, extractOutput: File = File(""),
+                        recorder: Option[Recorder] = None)
 
 final class Recorder(output: File):
   private val path = os.Path(output.getAbsolutePath)
@@ -23,31 +24,18 @@ final class Recorder(output: File):
 
 object Driver extends LazyLogging:
   def run(using config: Config): Unit =
-    require(config.inputs.nonEmpty, "no input files")
-    for input <- config.inputs do
+    require(config.inputFiles.nonEmpty, "no input files")
+    for input <- config.inputFiles do
       val path = os.Path(java.nio.file.Paths.get(input).toAbsolutePath)
       if os.isFile(path) then
-        tryCheckPython(path)
+        checkFile(path)
       else if os.isDir(path) then
         for file <- os.list(path).filter(_.ext == "py") do
-          tryCheckPython(file)
+          checkFile(file)
     for recorder <- config.recorder do
       recorder.save()
 
-  private def tryCheckPython(path: os.Path)(using config: Config): Unit =
-    try checkPython(path)
-    catch
-      case ex: Exception =>
-        for recorder <- config.recorder do
-          recorder.append(ujson.Obj(
-            "file" -> ujson.Str(path.toString),
-            "success" -> ujson.Bool(false),
-            "fatal error" -> ujson.Bool(true),
-          ))
-        if config.fastExit then throw ex
-        else ex.printStackTrace()
-
-  private def checkPython(path: os.Path)(using config: Config): Unit =
+  private def checkFile(path: os.Path)(using config: Config): Unit =
     logger.info("")
     logger.info(s"Checking: $path")
     val unpickler = Unpickler(path)
@@ -55,8 +43,23 @@ object Driver extends LazyLogging:
     val transpiler = new Transpiler
     val programs = transpiler.transpile(tree)
     for program <- programs do
-      // TODO: support extract as a different mode
-      val checker = new Checker
-      checker.check(program)
-      if config.fastExit then checker.issuer.ensureNoError()
-      else checker.issuer.print()
+      if config.extractMode then
+        val extract = new VCExtract
+        extract.extract(program, path)
+      else
+        val checker = new Checker
+        checker.check(program)
+        if config.fastExit then checker.issuer.ensureNoError()
+        else checker.issuer.print()
+//
+//    try checkPython(path)
+//    catch
+//      case ex: Exception =>
+//        for recorder <- config.recorder do
+//          recorder.append(ujson.Obj(
+//            "file" -> ujson.Str(path.toString),
+//            "success" -> ujson.Bool(false),
+//            "fatal error" -> ujson.Bool(true),
+//          ))
+//        if config.fastExit then throw ex
+//        else ex.printStackTrace()
