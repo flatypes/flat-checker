@@ -30,11 +30,11 @@ class LemmaSynth(using config: Config) extends LazyLogging:
       mkAnd(e1, e2)
 
   extension (re: RegEx)
-    /** Tests if this regular language is *small*: free of Kleene stars and negative charsets. */
+    /** Tests if this regular language is *small*: free of Kleene stars and big CS. */
     private def isSmall: Boolean = re match
       case RENone => true
       case RENull => true
-      case RELit(cs) => cs.polarity
+      case RELit(cs) => cs.size <= 20
       case REConcat(r1, r2) => r1.isSmall && r2.isSmall
       case REUnion(r1, r2) => r1.isSmall && r2.isSmall
       case REStar(_) => false
@@ -42,7 +42,7 @@ class LemmaSynth(using config: Config) extends LazyLogging:
     private def words: Set[String] = re match
       case RENone => Set.empty
       case RENull => Set("")
-      case RELit(cs) => if cs.polarity then cs.chars.map(_.toString) else Set.empty
+      case RELit(cs) => cs.toSet.map(_.toString)
       case REConcat(r1, r2) =>
         for
           w1 <- r1.words

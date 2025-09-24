@@ -3,18 +3,20 @@ package flat.regex
 import flat.regex.RegEx.*
 
 object simpl:
-  private def longestCommonPrefix[T](xss: List[List[T]]): List[T] = xss match
+  /** Longest common prefix. */
+  private def lcp[T](xss: List[List[T]])(using eq: (T, T) => Boolean): List[T] = xss match
     case Nil => throw IllegalArgumentException("empty cases")
     case _ =>
       if xss.forall(_.nonEmpty) then
         val xs = xss.map(_.head)
-        if xs.distinct.size == 1 then xs.head :: longestCommonPrefix(xss.map(_.tail))
+        if xs.size == 1 || xs.tail.forall(eq(xs.head, _)) then xs.head :: lcp(xss.map(_.tail))
         else Nil
       else Nil
 
-  private def longestCommonSuffix[T](xss: List[List[T]]): List[T] = xss match
+  /** Longest common suffix. */
+  private def lcs[T](xss: List[List[T]])(using eq: (T, T) => Boolean): List[T] = xss match
     case Nil => throw IllegalArgumentException("empty cases")
-    case _ => longestCommonPrefix(xss.map(_.reverse)).reverse
+    case _ => lcp(xss.map(_.reverse)).reverse
 
   extension (re: RegEx)
     def parts: List[RegEx] = re match
@@ -36,8 +38,8 @@ object simpl:
           val rs2 = other.parts
           rs1.length == rs2.length && rs1.zip(rs2).forall(_ equalsRE _)
         case (_: REUnion, _: REUnion) =>
-          val rs1 = re.cases.sortBy(_.hashCode)
-          val rs2 = other.cases.sortBy(_.hashCode)
+          val rs1 = re.cases.sortBy(_.toString)
+          val rs2 = other.cases.sortBy(_.toString)
           rs1.length == rs2.length && rs1.zip(rs2).forall(_ equalsRE _)
         case _ => false
 
@@ -48,8 +50,8 @@ object simpl:
       if rss.isEmpty then RENone
       else if rss.length == 1 then concat(rss.head)
       else
-        val prefix = longestCommonPrefix(rss)
+        val prefix = lcp(rss)(using _ equalsRE _)
         val k1 = prefix.length
-        val suffix = longestCommonSuffix(rss.map(_.drop(k1)))
+        val suffix = lcs(rss.map(_.drop(k1)))(using _ equalsRE _)
         val k2 = suffix.length
         concat(prefix ++ List(union(rss.map(_.drop(k1).dropRight(k2)).map(concat))) ++ suffix)

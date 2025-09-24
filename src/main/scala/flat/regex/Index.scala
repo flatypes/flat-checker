@@ -1,22 +1,24 @@
 package flat.regex
 
+/** Abstract Index. */
 trait Index
 
+/** Basic Abstract Index. */
 sealed trait BasicIndex extends Index
 
-/** Represents the absolute index from left, i.e., `k` itself. */
+/** Absolute index from left: `k`. */
 final case class IndexL(k: Int) extends BasicIndex:
   require(k >= 0, "negative index")
 
 /**
- * Represents the absolute index from right, i.e., `s.length - k` for a string `s`.
+ * Absolute index from right: |s| - `k`.
  *
- * @note `IndexR(1)` represents the last index `s.length - 1`
- * @note `IndexR(0)` represents the end of the string (that is out of the bound)
+ * @note `IndexR(1)` is the last index |s| - 1
+ * @note `IndexR(0)` is the end of the string |s|
  */
 final case class IndexR(k: Int) extends BasicIndex:
   require(k >= 0, "negative index")
 
-/** Represents the relative index whose base is the first occurrence of the nonempty string `t`. */
+/** Relative index that is the first occurrence of the nonempty pattern `t`, i.e., s.find(`t`). */
 final case class IndexAt(t: String) extends BasicIndex:
   require(t.nonEmpty, "empty pattern")

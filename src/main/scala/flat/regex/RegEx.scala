@@ -43,7 +43,7 @@ enum RegEx:
   inline def + : RegEx = this ++ this.*
 
   /** Optional: repeat ''at most'' once. */
-  inline def ? : RegEx = this | RENull
+  inline def ? : RegEx = RENull | this
 
   /** Power: repeat ''exactly'' `n` times.
    * Require: `n` is nonnegative. */
@@ -140,13 +140,14 @@ enum RegEx:
     case RELit(cs) =>
       if cs.isEmpty then "∅"
       else if cs.isFull then "."
-      else if cs.isSingleton then cs.chars.head.toString
-      else "[" + cs.toString + "]"
+      else if cs.isSingleton then cs.head.toString
+      else cs.toString
     case REConcat(r1, r2) => s"$r1$r2"
     case REUnion(r1, r2) => s"($r1|$r2)"
-    case REStar(r) => paren(r.toString) + "*"
-
-  private def paren(s: String): String = if s.startsWith("(") || s.length == 1 then s else s"($s)"
+    case REStar(r) =>
+      val s = r.toString
+      val s1 = if s.startsWith("(") || s.length == 1 then s else "(" + s + ")"
+      s1 + "*"
 
 object RegEx:
   /** RE `.`: the set of all strings of length 1. */

@@ -70,12 +70,15 @@ class SMTSolver(using config: Config) extends LazyLogging:
     case RENone => smt.mkTerm(Kind.REGEXP_NONE)
     case RENull => smt.mkTerm(Kind.STRING_TO_REGEXP, smt.mkString(""))
     case RELit(cs) =>
-      if cs.isFull then smt.mkTerm(Kind.REGEXP_ALLCHAR)
+      if cs.isEmpty then smt.mkTerm(Kind.REGEXP_NONE)
+      else if cs.isFull then smt.mkTerm(Kind.REGEXP_ALLCHAR)
       else
-        val t = cs.chars.map(encodeRegExprChar).reduce(smt.mkTerm(Kind.REGEXP_UNION, _, _))
-        //          if cs.chars.size == 1 then encodeRegExprChar(cs.chars.head)
-        //          else smt.mkTerm(Kind.REGEXP_UNION, .toArray)
-        if cs.polarity then t else smt.mkTerm(Kind.REGEXP_DIFF, smt.mkTerm(Kind.REGEXP_ALLCHAR), t)
+        val (chars, isInc) = cs.toSMT
+        val cases = chars.map:
+          case c: Char => smt.mkTerm(Kind.STRING_TO_REGEXP, smt.mkString(c.toString))
+          case (c1, c2) => smt.mkTerm(Kind.REGEXP_RANGE, smt.mkString(c1.toString), smt.mkString(c2.toString))
+        val t = cases.reduce(smt.mkTerm(Kind.REGEXP_UNION, _, _))
+        if isInc then t else smt.mkTerm(Kind.REGEXP_DIFF, smt.mkTerm(Kind.REGEXP_ALLCHAR), t)
     case REConcat(r1, r2) =>
       val t1 = encodeRegExpr(r1)
       val t2 = encodeRegExpr(r2)
@@ -87,20 +90,6 @@ class SMTSolver(using config: Config) extends LazyLogging:
     case REStar(r) =>
       val t = encodeRegExpr(r)
       smt.mkTerm(Kind.REGEXP_STAR, t)
-  //    case RELoop(range, r) =>
-  //      val t = encodeRegExpr(r)
-  //      range match
-  //        case Interval(0, None) => smt.mkTerm(Kind.REGEXP_STAR, t)
-  //        case Interval(1, None) => smt.mkTerm(Kind.REGEXP_PLUS, t)
-  //        case Interval(0, Some(1)) => smt.mkTerm(Kind.REGEXP_OPT, t)
-  //        case Interval(m, Some(m1)) if m1 == m => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m), t)
-  //        case Interval(m1, Some(m2)) => smt.mkTerm(smt.mkOp(Kind.REGEXP_LOOP, m1, m2), t)
-  //        case Interval(m1, None) => // r^m1 r*
-  //          smt.mkTerm(Kind.REGEXP_CONCAT,
-  //            smt.mkTerm(smt.mkOp(Kind.REGEXP_REPEAT, m1), t), smt.mkTerm(Kind.REGEXP_STAR, t))
-
-  private inline def encodeRegExprChar(char: Char): Term =
-    smt.mkTerm(Kind.STRING_TO_REGEXP, smt.mkString(char.toString))
 
   private type Ctx = Map[String, Term]
 
