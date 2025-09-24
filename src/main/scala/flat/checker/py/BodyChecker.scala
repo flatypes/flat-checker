@@ -142,8 +142,8 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
       val e = checkType(node.test, core.BoolType, ctx)
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, _) = checkBody(realBody, ctx, com)(using insideLoop = true)
-      if node.body.nonEmpty && node.body.last.isInstanceOf[Break] then // this while loop is just an if-statement
-        out += core.IfStmt(e, b, Nil)
+      if b.last.isInstanceOf[core.Break] then // this while loop is just an if-statement
+        out += core.IfStmt(e, b.dropRight(1), Nil)
         if invNodes.nonEmpty then
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else
