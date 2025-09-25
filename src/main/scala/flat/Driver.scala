@@ -47,7 +47,6 @@ object Driver extends LazyLogging:
         val extractor = new Extractor
         extractor.extract(program, path)
       else
-        logger.debug(program.toString)
         val checker = new Checker
         checker.check(program)
         if checker.issuer.noError then
@@ -56,5 +55,3 @@ object Driver extends LazyLogging:
           checker.issuer.ensureNoError()
         else
           checker.issuer.print()
-
-// TODO: 500.pos

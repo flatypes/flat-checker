@@ -172,6 +172,8 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
       case Cmp(EQ | NE, es, Const(t: String)) => List(syn.InferLang(es, target = Some(t)))
       case Cmp(EQ | NE, es1, es2) if es1.getSort == Sort.String && es2.getSort == Sort.String =>
         List(syn.InferLang(es1), syn.InferLang(es2))
+      case Cmp(_, ei@Var(_), Find(es, Const(t: String))) if t.length == 1 =>
+        List(syn.InferIndexCmpFind(ei, es, t.head))
       case e@PrefixOf(_, _) => List(syn.InferTest(e))
       case e@InfixOf(_, _) => List(syn.InferTest(e))
       case e@SuffixOf(_, _) => List(syn.InferTest(e))

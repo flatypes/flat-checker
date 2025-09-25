@@ -10,6 +10,8 @@ import flat.regex.AOps.*
 import flat.regex.NarrowOps.*
 import flat.regex.RegEx.*
 
+import scala.collection.mutable.ListBuffer
+
 /** Lemma Synthesizer. */
 class LemmaSynth(using config: Config) extends LazyLogging:
   /** Lemma Sketch. */
@@ -104,3 +106,21 @@ class LemmaSynth(using config: Config) extends LazyLogging:
         And(e1, e2)
       else
         true
+
+  final case class InferIndexCmpFind(idx: Expr, str: Expr, c: Char) extends Sketch:
+    def apply(using ctx: PrfCtx): Expr =
+      val inferer = new Inferer
+      val r = inferer.inferLang(str)
+      val ls = ListBuffer.empty[Expr]
+      ctx.hypotheses.foreach:
+        case Cmp(_, e1, Find(e2, Const(t: String))) if e1 == idx && e2 == str && t.length == 1 =>
+          val c1 = t.head
+          if findLT(r, c, c1) then
+            ls += LT(Find(str, c.toString), Find(str, c1.toString))
+          else if findLT(r, c1, c) then
+            ls += LT(Find(str, c1.toString), Find(str, c.toString))
+        case _ =>
+      mkAnd(ls.toList)
+
+  /** Tests if the first index of `c1` is always ''less than'' the first occurrence of `c2`. */
+  private def findLT(re: RegEx, c1: Char, c2: Char): Boolean = !re.findPrefix(c1).alphabet.contains(c2)
