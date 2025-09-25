@@ -134,14 +134,13 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         r1
 
   /** Infer the result of a given string `test`. */
-  def inferTest(test: Expr): BoolSet = test match
+  def inferTest(test: StrTest): BoolSet = test match
     case PrefixOf(Const(t: String), es) => prefixOf(t, es)
     case PrefixOf(_, _) => BoolSet.All
     case SuffixOf(Const(t: String), es) => prefixOf(t.reverse, Reverse(es))
     case SuffixOf(_, _) => BoolSet.All
     case InfixOf(Const(t: String), es) => infixOf(t, es)
     case InfixOf(_, _) => BoolSet.All
-    case _ => throw IllegalArgumentException()
 
   private def prefixOf(t: String, str: Expr): BoolSet =
     if t.isEmpty then

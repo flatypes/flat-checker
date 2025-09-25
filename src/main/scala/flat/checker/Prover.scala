@@ -1,13 +1,15 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.Config
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.conjuncts
 import flat.checker.core.*
-import flat.regex.RegEx
+import flat.regex.{CharSet, RegEx}
+import flat.{Config, Ops}
 
 import scala.annotation.tailrec
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 /** Prover: prove verification conditions, or answer type queries. */
 final class Prover(using config: Config, types: Types) extends LazyLogging:
@@ -142,7 +144,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
   private val syn = new LemmaSynth
 
   private def proveWithLemmas(conclusion: Expr, seeds: List[Expr], ctx: PrfCtx): Either[String, Unit] =
-    val sketches = seeds.flatMap(collectSketches(_, ctx)).distinct
+    val sketches = seeds.flatMap(collectSketches(_, ctx)).toSet
     val lemmas = syn.synth(sketches)(using ctx)
     if lemmas.nonEmpty then
       logger.debug("Lemmas: " + lemmas.mkString(", "))
@@ -157,19 +159,27 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     // Otherwise: not proved
     Left("")
 
-  private def collectSketches(seed: Expr, ctx: PrfCtx): List[syn.Sketch] =
-    val ss = seed.collect:
+  private def collectSketches(seed: Expr, ctx: PrfCtx): Set[syn.Sketch] =
+    val ss = ListBuffer.empty[syn.Sketch]
+    seed.collect:
       case Cmp(op@(EQ | NE), ec@CharAt(es, ei@Var(_)), Const(t: String)) if t.length == 1 =>
         val c = t.head
-        List(syn.InferLang(ec, target = Some(t)), syn.InferIndex(op, es, ei, c))
-      case Cmp(EQ | NE, es, Const(t: String)) => List(syn.InferLang(es, target = Some(t)))
+        val cs = op match
+          case EQ => CharSet(c)
+          case NE => CharSet.not(c)
+        ss += syn.InferLang(ec, target = Some(t))
+        ss += syn.InferIndexCharAt(es, ei, cs)
+      case Cmp(EQ | NE, es, Const(t: String)) =>
+        ss += syn.InferLang(es, target = Some(t))
       case Cmp(EQ | NE, es1, es2) if es1.sort == Sort.S && es2.sort == Sort.S =>
-        List(syn.InferLang(es1), syn.InferLang(es2))
+        ss += syn.InferLang(es1)
+        ss += syn.InferLang(es2)
       case Cmp(_, ei@Var(_), Find(es, Const(t: String))) if t.length == 1 =>
-        List(syn.InferIndexCmpFind(ei, es, t.head))
-      case e@PrefixOf(_, _) => List(syn.InferTest(e))
-      case e@InfixOf(_, _) => List(syn.InferTest(e))
-      case e@SuffixOf(_, _) => List(syn.InferTest(e))
-      case Length(es) => List(syn.InferLength(es))
-      case Find(es, Const(t: String)) => List(syn.InferFirstIndexOf(es, t))
-    ss.flatten
+        ss += syn.InferIndexCmpFind(ei, es, t.head)
+      case t: StrTest =>
+        ss += syn.InferTest(t)
+      case Length(es) =>
+        ss += syn.InferLength(es)
+      case Find(es, Const(t: String)) =>
+        ss += syn.InferFind(es, t)
+    ss.toSet

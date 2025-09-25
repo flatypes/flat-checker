@@ -27,11 +27,6 @@ extension (index: Index)
     case IndexShifted(b, k) => ADD(b.concretize(str), k)
     case _: IndexInterval => throw IllegalArgumentException(index.toString)
 
-  /** Generates a Boolean expression that encodes the concrete `idx` (of `str`) is in this abstract `index`. */
-  def constraint(idx: Expr, str: Expr): List[Expr] = index match
-    case _: BasicIndex | IndexShifted => List(EQ(idx, concretize(str)))
-    case IndexInterval(lb, ub) => List(GE(idx, lb.concretize(str)), LE(idx, ub.concretize(str)))
-
 /** Index Inference. */
 class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
   /** Infer an abstract index for a given `idx` of `str`. */
