@@ -52,7 +52,7 @@ final class Types(store: Map[String, Type]):
     val x = if i >= 0 then name.substring(0, i) else name
     store(x)
 
-  def strVars: Set[String] = store.filter(_._2.toSort == Sort.String).keySet
+  def strVars: Set[String] = store.filter(_._2.toSort == Sort.S).keySet
 
 object Types:
   def from(it: IterableOnce[(String, Type)]) = Types(Map.from(it))

@@ -3,9 +3,9 @@ package flat.checker
 enum Sort:
   case Top
   case Bot
-  case Int
-  case Bool
-  case String
+  case I
+  case B
+  case S
   case Tuple(elems: Seq[Sort])
   case Array(elem: Sort)
   case Fun(args: Seq[Sort], returns: Sort)

@@ -19,33 +19,33 @@ class Extractor(using config: Config) extends LazyLogging:
 
   private var vcCounter = 1
 
-  private val smtSolver = new SMTSolver
+  private val slv = new SMTSolver
 
   private def process(vc: VC, ctx: PrfCtx)(using input: os.Path): Unit = vc match
     case True =>
     case Goal(c, _) =>
-      val (slv, m) = smtSolver.create(c)(using ctx)
-      outputQuery(slv, m)
+      val task = slv.create(c)(using ctx)
+      outputQuery(task)
       vcCounter += 1
     case HasType(e, t, _) =>
-      val (slv, m) = smtSolver.create(TypeTest(e, t))(using ctx)
-      outputQuery(slv, m)
+      val task = slv.create(TypeTest(e, t))(using ctx)
+      outputQuery(task)
       vcCounter += 1
     case InferType(e, _) =>
       logger.warn(s"Ignore InferType goal: $e")
     case LAnd(vc1, vc2) => process(vc1, ctx); process(vc2, ctx)
     case LImp(h, vc) => process(vc, ctx + h)
 
-  private def outputQuery(slv: cvc5.Solver, ctx: Map[String, cvc5.Term])(using input: os.Path): Unit =
-    val buf = ListBuffer.empty[String]
-    buf += s"; Input: $input"
-    buf += "(set-logic ALL)"
-    for (x, t) <- ctx do
-      buf += s"(declare-const $x ${t.getSort})"
-    for assertion <- slv.getAssertions do
-      buf += s"(assert $assertion)"
-    buf += "(check-sat)"
-    buf += "(exit)"
+  private def outputQuery(task: slv.Task)(using input: os.Path): Unit =
+    val cmds = ListBuffer.empty[String]
+    cmds += s"; Input: $input"
+    cmds += "(set-logic ALL)"
+    for (x, t) <- task.consts do
+      cmds += s"(declare-const $x ${t.getSort})"
+    for assertion <- task.assertions do
+      cmds += s"(assert $assertion)"
+    cmds += "(check-sat)"
+    cmds += "(exit)"
 
     val outputPath: os.Path = os.Path(config.extractOutput.getAbsolutePath) / input.baseName
-    os.write.over(outputPath / s"$vcCounter.smt2", buf.mkString("\n"), createFolders = true)
+    os.write.over(outputPath / s"$vcCounter.smt2", cmds.mkString("\n"), createFolders = true)

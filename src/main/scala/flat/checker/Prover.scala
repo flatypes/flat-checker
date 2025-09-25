@@ -13,7 +13,7 @@ import scala.annotation.tailrec
 final class Prover(using config: Config, types: Types) extends LazyLogging:
   /** Proves that `conclusion` is valid under `ctx`. */
   def prove(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
-    if smtSolver.canProve(Const(false))(using ctx) then
+    if smtSolver.proves(Const(false))(using ctx) then
       logger.debug("PROVED by contradiction")
       return Right(())
 
@@ -57,7 +57,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
       logger.debug("PROVED trivially")
       return Right(())
 
-    if smtSolver.canProve(conclusion)(using ctx) then
+    if smtSolver.proves(conclusion)(using ctx) then
       logger.debug("PROVED by SMT")
       return Right(())
 
@@ -99,7 +99,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
       logger.debug("PROVED trivially")
       return Right(())
 
-    if smtSolver.canProve(conclusion)(using ctx) then
+    if smtSolver.proves(conclusion)(using ctx) then
       logger.debug("PROVED by SMT")
       return Right(())
 
@@ -150,19 +150,12 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
         logger.debug(s"PROVED by lemmas")
         return Right(())
 
-      if smtSolver.canProve(conclusion)(using ctx ++ lemmas) then
+      if smtSolver.proves(conclusion)(using ctx ++ lemmas) then
         logger.debug(s"PROVED by lemmas + SMT")
         return Right(())
 
     // Otherwise: not proved
     Left("")
-
-  extension (expr: Expr)
-    // NOTE: incomplete
-    def getSort: Sort = expr match
-      case CharAt(_, _) => Sort.String
-      case Substr(_, _, _) => Sort.String
-      case _ => Sort.Bot
 
   private def collectSketches(seed: Expr, ctx: PrfCtx): List[syn.Sketch] =
     val ss = seed.collect:
@@ -170,7 +163,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
         val c = t.head
         List(syn.InferLang(ec, target = Some(t)), syn.InferIndex(op, es, ei, c))
       case Cmp(EQ | NE, es, Const(t: String)) => List(syn.InferLang(es, target = Some(t)))
-      case Cmp(EQ | NE, es1, es2) if es1.getSort == Sort.String && es2.getSort == Sort.String =>
+      case Cmp(EQ | NE, es1, es2) if es1.sort == Sort.S && es2.sort == Sort.S =>
         List(syn.InferLang(es1), syn.InferLang(es2))
       case Cmp(_, ei@Var(_), Find(es, Const(t: String))) if t.length == 1 =>
         List(syn.InferIndexCmpFind(ei, es, t.head))

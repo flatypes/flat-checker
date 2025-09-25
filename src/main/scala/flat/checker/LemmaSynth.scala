@@ -67,7 +67,7 @@ class LemmaSynth(using config: Config) extends LazyLogging:
     def apply(using ctx: PrfCtx): Expr =
       val len = Length(str)
       ctx.lookupSuffixLang(str) match
-        case Some((eb, r)) if smtSolver.canProve(And(GE(eb, 0), LT(eb, len))) =>
+        case Some((eb, r)) if smtSolver.proves(And(GE(eb, 0), LT(eb, len))) =>
           val r1 = r.narrowByLength(Interval(lb = 1))
           inInterval(SUB(len, eb), r1.length)
         case _ =>
@@ -75,7 +75,6 @@ class LemmaSynth(using config: Config) extends LazyLogging:
           inInterval(len, inferer.inferLength(str))
 
   private def inInterval(expr: Expr, interval: Interval): Expr = interval match
-    case Interval(0, Inf) => true
     case Interval(n1: Int, Inf) => GE(expr, n1)
     case Interval(n1: Int, n2: Int) if n1 == n2 => EQ(expr, n1)
     case Interval(n1: Int, n2: Int) => And(GE(expr, n1), LE(expr, n2))
