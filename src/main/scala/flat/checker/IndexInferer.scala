@@ -7,6 +7,8 @@ import flat.checker.core.*
 import flat.checker.core.ArithOp.*
 import flat.regex.*
 
+import scala.collection.mutable.ListBuffer
+
 final case class IndexShifted(base: BasicIndex, offset: Int) extends Index
 
 final case class IndexInterval(lb: Index, ub: Index) extends Index
@@ -44,18 +46,27 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
 
   private def solve(x: String, str: Expr): Index =
     val idx = Var(x)
-    val constraints = ctx.hypotheses.collect { case c@Cmp(op, _, _) if op != NE && c.collectVars.contains(x) => c }
+    val constraints = ctx.stablePremises.collect { case c@Cmp(op, _, _) if op != NE && c.collectVars.contains(x) => c }
     val solver = LPSolver(constraints)
     // High priority: IndexAt (with potential shift)
-    val of = constraints.flatMap(c => List(c.left, c.right)).collectFirst:
+    val finds = constraints.flatMap(c => List(c.left, c.right)).collect:
       case f@Find(e, Const(t: String)) if e == str => (f, t)
-    val (lbA, ubA) = of match
-      case Some(f, t) =>
-        val (minK, maxK) = solver.solve(SUB(idx, f))
-        if minK.isDefined && minK == maxK then
-          return IndexAt(t).shift(minK.get)
-        (minK.map(IndexAt(t).shift), maxK.map(IndexAt(t).shift))
-      case None => (None, None)
+    val lbAs = ListBuffer.empty[Index]
+    val ubAs = ListBuffer.empty[Index]
+    for (f, t) <- finds.distinct do
+      val (minK, maxK) = solver.solve(SUB(idx, f))
+      for k <- minK do lbAs += IndexAt(t).shift(k)
+      for k <- maxK do ubAs += IndexAt(t).shift(k)
+    val lbA = lbAs.length match
+      case 0 => None
+      case 1 => Some(lbAs.head)
+      case _ => throw UnsupportedOperationException(s"solve $x: ambiguous choice of lbA from " + lbAs.mkString(", "))
+    val ubA = ubAs.length match
+      case 0 => None
+      case 1 => Some(ubAs.head)
+      case _ => throw UnsupportedOperationException(s"solve $x: ambiguous choice of lbA from " + lbAs.mkString(", "))
+    if lbA.isDefined && lbA == ubA then
+      return lbA.get
     // Middle priority: IndexL
     val (minL, maxL) = solver.solve(idx)
     if minL.isDefined && minL == maxL then

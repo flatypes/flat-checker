@@ -19,7 +19,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
     def apply(using ctx: PrfCtx): List[Expr]
 
   /** Synthesizes lemmas according to the given `sketches`. */
-  def synth(sketches: Set[Sketch])(using ctx: PrfCtx): List[Expr] = sketches.toList.flatMap(_.apply)
+  def synth(sketches: List[Sketch])(using ctx: PrfCtx): List[Expr] = sketches.flatMap(_.apply)
 
   final case class InferLang(str: Expr, target: Option[String] = None) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
@@ -126,7 +126,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
       val inferer = new Inferer
       val r = inferer.inferLang(str)
       val ls = ListBuffer.empty[Expr]
-      ctx.hypotheses.foreach:
+      ctx.premises.foreach:
         case Cmp(_, e1, Find(e2, Const(t: String))) if e1 == idx && e2 == str && t.length == 1 && t.head != c =>
           val c1 = t.head
           if findLT(r, c, c1) then

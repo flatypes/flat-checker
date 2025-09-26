@@ -5,61 +5,83 @@ import flat.checker.ExprOps.*
 import flat.checker.core.*
 import flat.regex.RegEx
 
-class PrfCtx private(val hypotheses: List[Expr])(using val types: Types) extends LazyLogging:
-  def destructCandidates: List[Expr] = (hypotheses.collect:
-    case or: Or => or
-    case e if e.collectFirst { case Ite(_, _, _) => () }.isDefined => e).distinct
+/** Proof Context. */
+class PrfCtx private(val stablePremises: List[Expr], val unstablePremises: List[Expr])
+                    (using val types: Types) extends LazyLogging:
+  /** Returns all premises in this proof context. */
+  def premises: List[Expr] = stablePremises ++ unstablePremises
 
-  def destruct(candidates: List[Expr]): List[PrfCtxCase] = candidates match
-    case Nil => List(PrfCtxCase(this, Nil))
-    case b :: bs =>
-      hypotheses.indexOf(b) match
-        case -1 => destruct(bs)
-        case k =>
-          val cases = b match
-            case or: Or =>
-              val bs = or.disjuncts
-              for i <- bs.indices.toList yield
-                val es1 = conjuncts(bs(i))
-                val es2 = (0 until i).toList.flatMap(j => Not(bs(j)).simpl.conjuncts)
-                PrfCtxCase(PrfCtx(hypotheses.take(k) ++ es1 ++ es2 ++ hypotheses.drop(k + 1)), List(bs(i).toString))
-            case _ =>
-              val cond = b.collectFirst { case Ite(c, _, _) => c }.get
-              val (ctx1, ctx2) = destructIf(cond)
-              List(PrfCtxCase(ctx1, List(cond.toString)), PrfCtxCase(ctx2, List(Not(cond).toString)))
-          for
-            PrfCtxCase(ctx, labels) <- cases
-            PrfCtxCase(ctx1, labels1) <- ctx.destruct(bs)
-          yield PrfCtxCase(ctx1, labels ++ labels1)
-
-  def destructIf(cond: Expr): (PrfCtx, PrfCtx) =
-    val ctx1 = PrfCtx(hypotheses.map(_.transform { case Ite(b, e, _) if b == cond => e }) :+ cond)
-    val not = Not(cond).simpl.conjuncts
-    val ctx2 = PrfCtx(hypotheses.map(_.transform { case Ite(b, _, e) if b == cond => e }) ++ not)
-    (ctx1, ctx2)
-
-  def getLang(value: Expr): RegEx =
-    hypotheses.reverse.collectFirst {
-      case TypeTest(e, LangType(r)) if e == value => r
+  /** Returns the RE of the given `str`. */
+  def getLang(str: Expr): RegEx =
+    premises.reverse.collectFirst {
+      case TypeTest(e, LangType(r)) if e == str => r
     }.getOrElse {
-      value match
+      str match
         case Var(x) => types(x).asInstanceOf[LangType].re
-        case _ => throw IllegalArgumentException(s"regex not found: $value")
+        case _ => throw IllegalArgumentException(s"regex not found: $str")
     }
 
+  /** If there is a premise that tells the RE of some suffix of `str`, i.e., `str[i:]` has type `r`,
+   * then returns this base index `i` and the RE `r`. */
   def lookupSuffixLang(str: Expr): Option[(Expr, RegEx)] =
-    hypotheses.reverse.collectFirst:
+    premises.reverse.collectFirst:
       case TypeTest(suffix@Substr(e1, ei, Length(e2)), LangType(r)) if e1 == str && e2 == str => (ei, r)
 
-  def +(cond: Expr): PrfCtx =
-    PrfCtx(hypotheses ++ cond.simpl.conjuncts)
+  def destructCandidates: List[Expr] = unstablePremises //.distinct
 
-  def ++(conds: List[Expr]): PrfCtx =
-    PrfCtx(hypotheses ++ conds.map(simpl).flatMap(conjuncts))
+  private def append(cond: Expr): PrfCtx =
+    if PrfCtx.isUnstable(cond) then PrfCtx(stablePremises, unstablePremises :+ cond)
+    else PrfCtx(stablePremises :+ cond, unstablePremises)
 
-  override def toString: String = hypotheses.mkString(" ∧ ")
+  /** Creates a new proof context with given conditions added. */
+  def ++(conds: List[Expr]): PrfCtx = conds.map(simpl).flatMap(conjuncts).foldLeft(this)(_.append(_))
+
+  inline def +(cond: Expr): PrfCtx = ++(List(cond))
+
+  private def destruct(dp: Expr): List[(PrfCtx, List[Expr])] =
+    dp match
+      case _: Or =>
+        assert(unstablePremises.contains(dp))
+        val bs = dp.disjuncts
+        val others = unstablePremises.filter(_ != dp)
+        val ctx = PrfCtx(stablePremises, others)
+        for i <- bs.indices.toList yield
+          val ps = bs(i) :: bs.take(i).map(Not(_))
+          ctx ++ ps -> List(bs(i))
+      case _ =>
+        val b = dp.collectFirst { case Ite(b, _, _) => b }.get
+        destructIf(b)
+
+  /** Splits this proof context by the value of the given ''disjunctive premises'' that are either logical-ORs
+   * or contain `Ite`s.
+   * For a logical-OR with `k` disjuncts, splits into `k` contexts, each of which holds one disjunctive case.
+   * For an `Ite`, splits into two contexts: one assumes that the if-condition is true, and the other false.
+   */
+  def destruct(dps: List[Expr]): List[(PrfCtx, List[Expr])] = dps match
+    case Nil => throw IllegalArgumentException("no candidate")
+    case List(p) => destruct(p)
+    case p :: rest =>
+      for
+        ctx1 -> ps1 <- destruct(p)
+        ctx -> ps <- ctx1.destruct(rest)
+      yield ctx -> (ps1 ++ ps)
+
+  /** Splits this proof context by the value of the given `cond` into two contexts: one assumes that `cond` is true,
+   * and the other false. Only `Ite`s with this `cond` will be replaced by its `then` or `else` branch.
+   */
+  def destructIf(cond: Expr): List[(PrfCtx, List[Expr])] =
+    val (ifs, others) = unstablePremises.partition(_.collectFirst { case Ite(e, _, _) if e == cond => () }.isDefined)
+    val ctx = PrfCtx(stablePremises, others)
+    val ps1 = cond :: ifs.map(_.transform { case Ite(e, e1, _) if e == cond => e1 }) // if true
+    val ps2 = Not(cond) :: ifs.map(_.transform { case Ite(e, _, e2) if e == cond => e2 }) // if false
+    List(ctx ++ ps1 -> List(cond), ctx ++ ps2 -> List(Not(cond)))
+
+  override def toString: String = premises.mkString(" ∧ ")
 
 object PrfCtx:
-  def empty(using types: Types) = PrfCtx(Nil)
+  /** The empty proof context. */
+  def empty(using types: Types) = PrfCtx(Nil, Nil)
 
-final case class PrfCtxCase(ctx: PrfCtx, labels: List[String])
+  private def isUnstable(cond: Expr): Boolean = cond match
+    case _: Or => true
+    case _ => cond.collectFirst { case _: Ite => () }.isDefined

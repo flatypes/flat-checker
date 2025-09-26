@@ -31,35 +31,34 @@ class SMTSolver(using config: Config) extends LazyLogging:
         Left(result.getUnknownExplanation.toString)
 
   /** Creates an SMT solving task from the given proof goal. */
-  def create(conclusion: Expr)(using pCtx: PrfCtx): Task =
+  def create(conclusion: Expr)(using ctx: PrfCtx): Task =
     val slv = cvc5.Solver(smt)
     slv.setLogic("ALL")
     slv.setOption("produce-models", "true")
     slv.setOption("tlimit-per", config.smtTimeLimit.toString)
 
-    given eCtx: ECtx = mutable.Map.empty
-
-    given Counter = new Counter
-
     // 1. Declare variables
+    val vars = mutable.Map.empty[String, cvc5.Term]
     for
-      e <- pCtx.hypotheses :+ conclusion
+      e <- ctx.premises :+ conclusion
       x <- e.collectVars
     do
-      val s = encodeSort(pCtx.types(x).toSort)
+      val s = encodeSort(ctx.types(x).toSort)
       val t = smt.mkConst(s, x)
-      eCtx(Var(x)) = t
+      vars(x) = t
       if config.extractMode then
-        for tp <- encodeHasType(t, pCtx.types(x)) do slv.assertFormula(tp)
+        for tp <- encodeHasType(t, ctx.types(x)) do slv.assertFormula(tp)
+
+    given eCtx: ECtx = vars.toMap
     // 2. Assert hypotheses
-    for h <- pCtx.hypotheses do
+    for h <- ctx.premises do
       val t = encodeExpr(h)
       slv.assertFormula(t)
     // 3. Assert that the conclusion is false
     val t = encodeExpr(conclusion)
     slv.assertFormula(t.notTerm)
-
-    val consts = Map.from(for e -> t <- eCtx yield t.getSymbol -> t)
+    // 4. Creation done
+    val consts = Map.from(for x -> t <- vars yield t.getSymbol -> t)
     Task(slv, consts)
 
   private def encodeSort(sort: Sort): cvc5.Sort = sort match
@@ -100,32 +99,18 @@ class SMTSolver(using config: Config) extends LazyLogging:
       val t = encodeRE(r)
       smt.mkTerm(Kind.REGEXP_STAR, t)
 
-  private type ECtx = mutable.Map[Expr, cvc5.Term]
+  private type ECtx = Map[String, cvc5.Term]
 
-  private class Counter:
-    private var counter = 0
-
-    def next(): Int =
-      counter += 1
-      counter
-
-  private def encodeAbs(expr: Expr)(using eCtx: ECtx, counter: Counter): cvc5.Term = eCtx.get(expr) match
-    case Some(t) => t
-    case None =>
-      val t = smt.mkConst(encodeSort(expr.sort), s"abs@${counter.next()}")
-      eCtx += expr -> t
-      t
-
-  private def encodeExpr(expr: Expr)(using eCtx: ECtx, counter: Counter): cvc5.Term = expr match
+  private def encodeExpr(expr: Expr)(using eCtx: ECtx): cvc5.Term = expr match
     case Const(n: Int) => smt.mkInteger(n)
     case Const(b: Boolean) => smt.mkBoolean(b)
     case Const(s: String) => smt.mkString(s)
-    case ex@Var(_) => eCtx(ex)
+    case Var(x) => eCtx(x)
     case TupleExpr(es) =>
       val ts = es.map(encodeExpr)
       smt.mkTuple(ts.toArray)
     case TypeTest(e, t) =>
-      if config.extractMode then encodeTypeTest(e, t) else encodeAbs(expr)
+      if config.extractMode then encodeTypeTest(e, t) else smt.mkConst(smt.getBooleanSort)
 
     // Boolean operations
     case And(b1, b2) =>
@@ -231,9 +216,9 @@ class SMTSolver(using config: Config) extends LazyLogging:
       smt.mkTerm(Kind.SELECT, ta, ti)
 
     // Others
-    case _ => encodeAbs(expr)
+    case _ => smt.mkConst(encodeSort(expr.sort))
 
-  private def encodeTypeTest(value: Expr, typ: Type)(using eCtx: ECtx, counter: Counter): cvc5.Term = typ match
+  private def encodeTypeTest(value: Expr, typ: Type)(using eCtx: ECtx): cvc5.Term = typ match
     case LangType(r) =>
       val t = encodeExpr(value)
       smt.mkTerm(Kind.STRING_IN_REGEXP, t, encodeRE(r))
@@ -259,6 +244,6 @@ class SMTSolver(using config: Config) extends LazyLogging:
     val task = create(conclusion)
     task.proves()
 
-  def solve(conclusion: Expr)(using pCtx: PrfCtx): Either[String, Unit] =
+  def solve(conclusion: Expr)(using ctx: PrfCtx): Either[String, Unit] =
     val task = create(conclusion)
     task.solve()

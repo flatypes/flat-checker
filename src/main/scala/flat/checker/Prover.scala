@@ -20,7 +20,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
       return Right(())
 
     // Split the conclusion into multiple goals and prove each of them
-    proveGoals(split(conclusion, ctx))
+    proveGoals(split(conclusion, ctx, Nil))
 
   /** Proves that `value` has the `expected` type under `ctx`. */
   def check(value: Expr, expected: Type, ctx: PrfCtx): Either[String, Unit] =
@@ -31,31 +31,32 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     val inferer = new Inferer(using ctx = ctx)
     inferer.inferLang(value)
 
-  private def split(conclusion: Expr, ctx: PrfCtx): List[(Expr, PrfCtx)] = conclusion match
-    case And(e1, e2) => split(e1, ctx) ++ split(e2, ctx)
-    case Or(e1, e2) => split(e2, ctx + Not(e1))
-    case e =>
-      e.collectFirst { case ite: Ite => ite } match
-        case Some(Ite(cond, _, _)) =>
-          val (ctx1, ctx2) = ctx.destructIf(cond)
-          val e1 = e.transform { case Ite(b, e, _) if b == cond => e }
-          val e2 = e.transform { case Ite(b, _, e) if b == cond => e }
-          split(e1, ctx1) ++ split(e2, ctx2)
-        case None => List((e, ctx))
+  private def split(conclusion: Expr, ctx: PrfCtx, labels: List[Expr]): List[(Expr, PrfCtx, List[Expr])] =
+    conclusion match
+      case And(e1, e2) => split(e1, ctx, labels) ++ split(e2, ctx, labels)
+      case Or(e1, e2) => split(e2, ctx + Not(e1), labels :+ Not(e1))
+      case e =>
+        e.collectFirst { case ite: Ite => ite } match
+          case Some(Ite(b, _, _)) =>
+            val List(ctx1 -> ls1, ctx2 -> ls2) = ctx.destructIf(b)
+            val e1 = e.transform { case Ite(e0, e1, _) if e0 == b => e1 }
+            val e2 = e.transform { case Ite(e0, _, e2) if e0 == b => e2 }
+            split(e1, ctx1, labels ++ ls1) ++ split(e2, ctx2, labels ++ ls2)
+          case None => List((e, ctx, labels))
 
   @tailrec
-  private def proveGoals(goals: List[(Expr, PrfCtx)], processed: Int = 0): Either[String, Unit] = goals match
+  private def proveGoals(goals: List[(Expr, PrfCtx, List[Expr])]): Either[String, Unit] = goals match
     case Nil => Right(())
-    case (e, ctx) :: rest =>
-      logger.debug(s"Goal ${processed + 1}: ⇒ $e")
+    case (e, ctx, ls) :: rest =>
+      logger.debug("Goal: " + ls.mkString(", ") + (if ls.isEmpty then "" else " ") + s"⇒ $e")
       proveGoal(e, ctx) match
         case Left(err) =>
-          logger.debug(s"[X] Goal ${processed + 1} FAILED")
+          logger.debug("[X] Goal FAILED")
           Left(err)
-        case Right(_) => proveGoals(rest, processed + 1)
+        case Right(_) => proveGoals(rest)
 
   private def proveGoal(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
-    if ctx.hypotheses.contains(conclusion) then
+    if ctx.premises.contains(conclusion) then
       logger.debug("PROVED trivially")
       return Right(())
 
@@ -78,14 +79,14 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     proveCases(ctx.destruct(hs))(using conclusion)
 
   private def similarity(conclusion: Expr, hypothesis: Expr): Int =
-    val xs = conclusion.collectVars
-    (hypothesis.collectVars & xs).size
+    (hypothesis.collectVars & conclusion.collectVars).size
 
   @tailrec
-  private def proveCases(cases: List[PrfCtxCase])(using conclusion: Expr): Either[String, Unit] = cases match
+  private def proveCases(cases: List[(PrfCtx, List[Expr])])(using conclusion: Expr): Either[String, Unit] = cases match
     case Nil => Right(())
-    case PrfCtxCase(ctx, labels) :: rest =>
-      logger.debug("Case " + labels.mkString(", ") + ":")
+    case (ctx, ls) :: rest =>
+      logger.debug("Case " + ls.mkString(", ") + ":")
+//      logger.debug("Full ctx: " + ctx.toString)
       var result = proveCase(conclusion, ctx)
       if result.isLeft && ctx.destructCandidates.nonEmpty then
         logger.debug("Try destruct more hypotheses")
@@ -97,7 +98,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
         case Right(_) => proveCases(rest)
 
   private def proveCase(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
-    if ctx.hypotheses.contains(conclusion) then
+    if ctx.premises.contains(conclusion) then
       logger.debug("PROVED trivially")
       return Right(())
 
@@ -107,7 +108,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
 
     val narrower = new Narrower
     val ctx1 = narrower.narrow(ctx)
-    val noneStr = ctx1.hypotheses.collectFirst { case TypeTest(e, LangType(RegEx.RENone)) => e }
+    val noneStr = ctx1.premises.collectFirst { case TypeTest(e, LangType(RegEx.RENone)) => e }
     if noneStr.isDefined then
       logger.debug(s"PROVED by ${noneStr.get} : ∅ after type narrowing")
       return Right(())
@@ -119,7 +120,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
           case Right(_) => Right(())
       case _ =>
         proveWithLemmas(conclusion, List(conclusion), ctx1)
-          .orElse(proveWithLemmas(conclusion, ctx1.hypotheses, ctx1))
+          .orElse(proveWithLemmas(conclusion, ctx1.premises, ctx1))
 
   private def checkType(expr: Expr, typ: Type)(using ctx: PrfCtx): Either[Type, Unit] = typ match
     case LangType(r2) =>
@@ -144,7 +145,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
   private val syn = new LemmaSynth
 
   private def proveWithLemmas(conclusion: Expr, seeds: List[Expr], ctx: PrfCtx): Either[String, Unit] =
-    val sketches = seeds.flatMap(collectSketches(_, ctx)).toSet
+    val sketches = seeds.flatMap(collectSketches(_, ctx)).distinct
     val lemmas = syn.synth(sketches)(using ctx)
     if lemmas.nonEmpty then
       logger.debug("Lemmas: " + lemmas.mkString(", "))
@@ -159,7 +160,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     // Otherwise: not proved
     Left("")
 
-  private def collectSketches(seed: Expr, ctx: PrfCtx): Set[syn.Sketch] =
+  private def collectSketches(seed: Expr, ctx: PrfCtx): List[syn.Sketch] =
     val ss = ListBuffer.empty[syn.Sketch]
     seed.collect:
       case Cmp(op@(EQ | NE), ec@CharAt(es, ei@Var(_)), Const(t: String)) if t.length == 1 =>
@@ -182,4 +183,4 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
         ss += syn.InferLength(es)
       case Find(es, Const(t: String)) =>
         ss += syn.InferFind(es, t)
-    ss.toSet
+    ss.toList
