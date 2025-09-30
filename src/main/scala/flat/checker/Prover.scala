@@ -7,45 +7,46 @@ import flat.checker.core.*
 import flat.regex.{CharSet, RegEx}
 import flat.{Config, Ops}
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 /** Prover: prove verification conditions, or answer type queries. */
 final class Prover(using config: Config, types: Types) extends LazyLogging:
   /** Proves that `conclusion` is valid under `ctx`. */
-  def prove(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
-    if smtProves(Const(false))(using ctx) then
-      logger.debug("PROVED by contradiction")
-      return Right(())
+  def prove(conclusion: Expr, ctx: PrfCtx): Boolean =
+    // Above all, try naive prover.
+    naive(conclusion)(using ctx) match
+      case Right(kind) =>
+        logger.debug("PROVED by " + (if kind == 0 then "naive" else "SMT"))
+        return true
+      case _ =>
 
-    // Split the conclusion into multiple goals and prove each of them
-    proveGoals(split(conclusion, ctx, Nil))
+    // Split the conclusion into multiple goals and try naive prover on each of them.
+    val attempts = for (c, ctx, ls) <- split(conclusion, ctx, Nil) yield (c, ctx, ls, naive(c)(using ctx))
+    val (success, failure) = attempts.partition(_._4.isRight)
+    for (c, ctx, ls, res) <- success do
+      logger.debug("Goal " + ls.mkString(", ") + s" ⇒ $c")
+      logger.debug("PROVED by " + (if res == Right(0) then "naive" else "SMT" + " after split"))
+
+    // Try destruct and lemmas for each failing goals.
+    val results = for (c, ctx, ls, _) <- failure yield
+      logger.debug("Goal " + ls.mkString(", ") + s" ⇒ $c")
+      if ctx.destructCandidates.nonEmpty then destruct(c, ctx) else narrowAndInfer(c, ctx)
+    results.forall(_ == true)
 
   private val smtSolver = new SMTSolver
 
-  private def smtProves(conclusion: Expr)(using ctx: PrfCtx): Boolean =
+  private def naive(conclusion: Expr)(using ctx: PrfCtx): Either[Unit, Int] =
+    if ctx.premises.contains(conclusion) then
+      return Right(0)
+
     for mc <- config.metrics do
+      mc.count("smt queries")
       mc.timeStart("time/verif/smt")
-    val isValid = smtSolver.proves(conclusion)(using ctx)
+    val valid = smtSolver.proves(conclusion)(using ctx)
     for mc <- config.metrics do
       mc.timePause("time/verif/smt")
-      mc.count("smt queries")
-    isValid
-
-  /** Proves that `value` has the `expected` type under `ctx`. */
-  def check(value: Expr, expected: Type, ctx: PrfCtx): Either[String, Unit] =
-    prove(TypeTest(value, expected), ctx)
-
-  /** Infers the type of `value` under `ctx`. */
-  def infer(value: Expr, ctx: PrfCtx): RegEx =
-    for mc <- config.metrics do
-      mc.timeStart("time/verif/type")
-    val inferer = new Inferer(using ctx = ctx)
-    val r = inferer.inferLang(value)
-    for mc <- config.metrics do
-      mc.timePause("time/verif/type")
-    r
+    if valid then Right(1) else Left(())
 
   private def split(conclusion: Expr, ctx: PrfCtx, labels: List[Expr]): List[(Expr, PrfCtx, List[Expr])] =
     conclusion match
@@ -60,77 +61,60 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
             split(e1, ctx1, labels ++ ls1) ++ split(e2, ctx2, labels ++ ls2)
           case None => List((e, ctx, labels))
 
-  @tailrec
-  private def proveGoals(goals: List[(Expr, PrfCtx, List[Expr])]): Either[String, Unit] = goals match
-    case Nil => Right(())
-    case (e, ctx, ls) :: rest =>
-      logger.debug("Goal: " + ls.mkString(", ") + (if ls.isEmpty then "" else " ") + s"⇒ $e")
-      proveGoal(e, ctx) match
-        case Left(err) =>
-          logger.debug("[X] Goal FAILED")
-          Left(err)
-        case Right(_) => proveGoals(rest)
-
-  private def proveGoal(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
-    if ctx.premises.contains(conclusion) then
-      logger.debug("PROVED trivially")
-      return Right(())
-
-    if smtProves(conclusion)(using ctx) then
-      logger.debug("PROVED by SMT")
-      return Right(())
-
-    if ctx.destructCandidates.isEmpty then proveCase(conclusion, ctx) else destructAndProve(conclusion, ctx)
-
-  private def destructAndProve(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
-    val candidates = ctx.destructCandidates
-    val similarities = candidates.map(similarity(conclusion, _))
-    val y = similarities.max
-    val hs =
+  private def destruct(conclusion: Expr, ctx: PrfCtx): Boolean =
+    // Decide which premises to destruct.
+    val ps = ctx.destructCandidates
+    val ys = ps.map(similarity(conclusion, _))
+    val y = ys.max
+    val dps =
       for
-        (h, x) <- candidates.zip(similarities)
+        (p, x) <- ps.zip(ys)
         if x == y
-      yield h
-    logger.debug("Destruct: " + hs.mkString(", "))
-    proveCases(ctx.destruct(hs))(using conclusion)
+      yield p
+
+    // Destruct the context into multiple and try naive prover on each.
+    logger.debug("Destruct: " + dps.mkString(", "))
+    val attempts = for (ctx, ls) <- ctx.destruct(dps) yield (ctx, ls, naive(conclusion)(using ctx))
+    val (success, failure) = attempts.partition(_._3.isRight)
+    for (ctx, ls, res) <- success do
+      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("PROVED by " + (if res == Right(0) then "naive" else "SMT" + " after destruct"))
+
+    // Try type narrowing and inference for each failing goals.
+    val attempts1 = for (ctx, ls, _) <- failure yield (ctx, ls, narrowAndInfer(conclusion, ctx))
+    val (success1, failure1) = attempts1.partition(_._3 == true)
+    for (ctx, ls, _) <- success1 do
+      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("PROVED by lemmas")
+
+    // If there are still failing goals, try destruct again.
+    val results = for (ctx, ls, _) <- failure1 yield
+      logger.debug("Case " + ls.mkString(", ") + ":")
+      if ctx.destructCandidates.nonEmpty then
+        logger.debug("Try destruct more hypotheses")
+        destruct(conclusion, ctx)
+      else
+        logger.debug(s"[X] Case FAILED")
+        false
+    results.forall(_ == true)
 
   private def similarity(conclusion: Expr, hypothesis: Expr): Int =
     (hypothesis.collectVars & conclusion.collectVars).size
 
-  @tailrec
-  private def proveCases(cases: List[(PrfCtx, List[Expr])])(using conclusion: Expr): Either[String, Unit] = cases match
-    case Nil => Right(())
-    case (ctx, ls) :: rest =>
-      logger.debug("Case " + ls.mkString(", ") + ":")
-      var result = proveCase(conclusion, ctx)
-      if result.isLeft && ctx.destructCandidates.nonEmpty then
-        logger.debug("Try destruct more hypotheses")
-        result = destructAndProve(conclusion, ctx)
-      result match
-        case Left(msg) =>
-          logger.debug(s"[X] Case FAILED")
-          Left(msg)
-        case Right(_) => proveCases(rest)
-
-  private def proveCase(conclusion: Expr, ctx: PrfCtx): Either[String, Unit] =
-    if ctx.premises.contains(conclusion) then
-      logger.debug("PROVED trivially")
-      return Right(())
-
-    if smtProves(conclusion)(using ctx) then
-      logger.debug("PROVED by SMT")
-      return Right(())
-
+  private def narrowAndInfer(conclusion: Expr, ctx: PrfCtx): Boolean =
+    // Perform type narrowing.
     for mc <- config.metrics do
       mc.timeStart("time/verif/narrow")
     val narrower = new Narrower
     val ctx1 = narrower.narrow(ctx)
     for mc <- config.metrics do
       mc.timePause("time/verif/narrow")
+
+    // Try finding inconsistency.
     val noneStr = ctx1.premises.collectFirst { case TypeTest(e, LangType(RegEx.RENone)) => e }
     if noneStr.isDefined then
       logger.debug(s"PROVED by ${noneStr.get} : ∅ after type narrowing")
-      return Right(())
+      return true
 
     conclusion match
       case TypeTest(e, t) =>
@@ -139,14 +123,11 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
         val result = checkType(e, t)(using ctx1)
         for mc <- config.metrics do
           mc.timePause("time/verif/type")
-        result match
-          case Left(ta) => Left(ta.toString)
-          case Right(_) => Right(())
+        result.isRight
       case Const(false) =>
-        proveWithLemmas(conclusion, ctx1.premises, ctx1)
+        withLemmas(conclusion, ctx1.premises, ctx1)
       case _ =>
-        proveWithLemmas(conclusion, List(conclusion), ctx1)
-          .orElse(proveWithLemmas(conclusion, ctx1.premises, ctx1))
+        withLemmas(conclusion, List(conclusion), ctx1) || withLemmas(conclusion, ctx1.premises, ctx1)
 
   private def checkType(expr: Expr, typ: Type)(using ctx: PrfCtx): Either[Type, Unit] = typ match
     case LangType(r2) =>
@@ -169,7 +150,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
 
   private val syn = new LemmaSynth
 
-  private def proveWithLemmas(conclusion: Expr, seeds: List[Expr], ctx: PrfCtx): Either[String, Unit] =
+  private def withLemmas(conclusion: Expr, seeds: List[Expr], ctx: PrfCtx): Boolean =
     for mc <- config.metrics do
       mc.timeStart("time/verif/type")
     val sketches = seeds.flatMap(collectSketches(_, ctx)).distinct
@@ -178,20 +159,20 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
       mc.timePause("time/verif/type")
 
     if lemmas.nonEmpty then
-      logger.debug("Lemmas: " + lemmas.mkString(", "))
+      //      logger.debug("Lemmas: " + lemmas.mkString(", "))
       for mc <- config.metrics do
         mc.count("lemmas", lemmas.length)
 
       if lemmas.flatMap(conjuncts).contains(conclusion) then
-        logger.debug(s"PROVED by lemmas")
-        return Right(())
+        //        logger.debug(s"PROVED by lemmas")
+        return true
 
-      if smtProves(conclusion)(using ctx ++ lemmas) then
-        logger.debug(s"PROVED by lemmas + SMT")
-        return Right(())
+      if naive(conclusion)(using ctx ++ lemmas).isRight then
+        //        logger.debug(s"PROVED by lemmas + SMT")
+        return true
 
     // Otherwise: not proved
-    Left("")
+    false
 
   private def collectSketches(seed: Expr, ctx: PrfCtx): List[syn.Sketch] =
     val ss = ListBuffer.empty[syn.Sketch]
@@ -217,3 +198,26 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
       case Find(es, Const(t: String)) =>
         ss += syn.InferFind(es, t)
     ss.toList
+
+  /** Proves that `value` has the `expected` type under `ctx`. */
+  def check(value: Expr, expected: Type, ctx: PrfCtx): Either[String, Unit] =
+    if prove(TypeTest(value, expected), ctx) then
+      return Right(())
+
+    for mc <- config.metrics do
+      mc.timeStart("time/verif/type")
+    val inferer = new Inferer(using ctx = ctx)
+    val r = inferer.inferLang(value)
+    for mc <- config.metrics do
+      mc.timePause("time/verif/type")
+    Left(r.toString)
+
+  /** Infers the type of `value` under `ctx`. */
+  def infer(value: Expr, ctx: PrfCtx): RegEx =
+    for mc <- config.metrics do
+      mc.timeStart("time/verif/type")
+    val inferer = new Inferer(using ctx = ctx)
+    val r = inferer.inferLang(value)
+    for mc <- config.metrics do
+      mc.timePause("time/verif/type")
+    r

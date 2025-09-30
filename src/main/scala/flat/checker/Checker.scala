@@ -46,19 +46,18 @@ class Checker(using config: Config) extends LazyLogging:
 
       val succeed = vc match
         case Goal(c, err) =>
-          prover.prove(c, ctx) match
-            case Left(_) =>
-              logger.info(s"VC $vcCounter NOT PROVED")
-              issuer.report(err)
-              false
-            case Right(_) => true
+          if prover.prove(c, ctx) then true
+          else
+            logger.info(s"VC $vcCounter NOT PROVED")
+            issuer.report(err)
+            false
         case HasType(e, t, _) =>
           prover.check(e, t, ctx) match
+            case Right(_) => true
             case Left(actual) =>
               logger.info(s"VC $vcCounter NOT PROVED")
               issuer.report(TypeMayMismatch(t.toString, actual, e.loc))
               false
-            case Right(_) => true
         case InferType(e, _) =>
           val r = prover.infer(e, ctx)
           issuer.report(TypeInferred(r.toString, e.loc))
