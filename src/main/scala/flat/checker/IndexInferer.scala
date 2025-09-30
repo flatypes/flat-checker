@@ -46,7 +46,7 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
 
   private def solve(x: String, str: Expr): Index =
     val idx = Var(x)
-    val constraints = ctx.stablePremises.collect { case c@Cmp(op, _, _) if op != NE && c.collectVars.contains(x) => c }
+    val constraints = ctx.premises.collect { case c@Cmp(op, _, _) if op != NE && c.collectVars.contains(x) => c }
     val solver = LPSolver(constraints)
     // High priority: IndexAt (with potential shift)
     val finds = constraints.flatMap(c => List(c.left, c.right)).collect:

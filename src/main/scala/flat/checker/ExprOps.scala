@@ -5,7 +5,6 @@ import flat.checker.core.ArithOp.*
 
 object ExprOps:
   extension (expr: Expr)
-  // Boolean
     /** Simplifies this condition. */
     def simpl: Expr = expr match
       case And(b1, b2) => And(b1.simpl, b2.simpl)
@@ -21,12 +20,14 @@ object ExprOps:
     def conjuncts: List[Expr] =
       expr match
         case And(e1, e2) => e1.conjuncts ++ e2.conjuncts
+        case Const(true) => Nil
         case _ => List(expr)
 
     /** Returns all disjuncts. */
     def disjuncts: List[Expr] =
       expr match
         case Or(e1, e2) => e1.disjuncts ++ e2.disjuncts
+        case Const(false) => Nil
         case _ => List(expr)
 
     // Arithmetic
@@ -41,6 +42,7 @@ object ExprOps:
     def summands: List[Expr] = expr match
       case Arith(ADD, e1, e2) => e1.summands ++ e2.summands
       case Arith(SUB, e1, e2) => e1.summands ++ e2.summands.map(_.negation)
+      case Const(0) => Nil
       case e => List(e)
 
     /** Returns the difference `expr - base` if it is a nonnegative constant. */

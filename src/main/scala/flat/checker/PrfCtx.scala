@@ -6,35 +6,33 @@ import flat.checker.core.*
 import flat.regex.RegEx
 
 /** Proof Context. */
-class PrfCtx private(val stablePremises: List[Expr], val unstablePremises: List[Expr])
+class PrfCtx private(private val stablePremises: List[Expr], private val unstablePremises: List[Expr])
                     (using val types: Types) extends LazyLogging:
   /** Returns all premises in this proof context. */
   def premises: List[Expr] = stablePremises ++ unstablePremises
 
   /** Returns the RE of the given `str`. */
   def getLang(str: Expr): RegEx =
-    premises.reverse.collectFirst {
-      case TypeTest(e, LangType(r)) if e == str => r
-    }.getOrElse {
-      str match
-        case Var(x) => types(x).asInstanceOf[LangType].re
-        case _ => throw IllegalArgumentException(s"regex not found: $str")
-    }
+    stablePremises.reverse.collectFirst { case TypeTest(e, LangType(r)) if e == str => r }
+      .getOrElse:
+        str match
+          case Var(x) => types(x).asInstanceOf[LangType].re
+          case _ => throw IllegalArgumentException(s"regex not found: $str")
 
   /** If there is a premise that tells the RE of some suffix of `str`, i.e., `str[i:]` has type `r`,
    * then returns this base index `i` and the RE `r`. */
   def lookupSuffixLang(str: Expr): Option[(Expr, RegEx)] =
-    premises.reverse.collectFirst:
+    stablePremises.reverse.collectFirst:
       case TypeTest(suffix@Substr(e1, ei, Length(e2)), LangType(r)) if e1 == str && e2 == str => (ei, r)
 
   def destructCandidates: List[Expr] = unstablePremises //.distinct
 
-  private def append(cond: Expr): PrfCtx =
-    if PrfCtx.isUnstable(cond) then PrfCtx(stablePremises, unstablePremises :+ cond)
-    else PrfCtx(stablePremises :+ cond, unstablePremises)
-
   /** Creates a new proof context with given conditions added. */
-  def ++(conds: List[Expr]): PrfCtx = conds.map(simpl).flatMap(conjuncts).foldLeft(this)(_.append(_))
+  def ++(conds: List[Expr]): PrfCtx =
+    val (bs1, bs2) = conds.map(simpl).flatMap(conjuncts).partition:
+      case _: Or => false
+      case b => b.collectFirst { case _: Ite => () }.isEmpty
+    PrfCtx(stablePremises ++ bs1, unstablePremises ++ bs2)
 
   inline def +(cond: Expr): PrfCtx = ++(List(cond))
 
@@ -81,7 +79,3 @@ class PrfCtx private(val stablePremises: List[Expr], val unstablePremises: List[
 object PrfCtx:
   /** The empty proof context. */
   def empty(using types: Types) = PrfCtx(Nil, Nil)
-
-  private def isUnstable(cond: Expr): Boolean = cond match
-    case _: Or => true
-    case _ => cond.collectFirst { case _: Ite => () }.isDefined

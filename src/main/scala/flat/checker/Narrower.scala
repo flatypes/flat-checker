@@ -16,7 +16,7 @@ class Narrower(using config: Config) extends LazyLogging:
   /** Performs type narrowing on the given `ctx`. */
   def narrow(ctx: PrfCtx): PrfCtx =
     val res: Map[Expr, RegEx] = Map.from(for x <- ctx.types.strVars yield Var(x) -> ctx.getLang(Var(x)))
-    val res1 = iterate(ctx.stablePremises, res)(using ctx)
+    val res1 = iterate(ctx.premises, res)(using ctx)
     ctx ++ List.from(for es -> r <- res1 yield TypeTest(es, LangType(r)))
 
   @tailrec

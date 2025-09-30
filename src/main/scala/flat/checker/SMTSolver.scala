@@ -241,8 +241,16 @@ class SMTSolver(using config: Config) extends LazyLogging:
       throw UnsupportedOperationException(value.toString + " is " + typ.toString)
 
   def proves(conclusion: Expr)(using ctx: PrfCtx): Boolean =
+    for mc <- config.metrics do
+      mc.timeStart("time/verif/smt/encode")
     val task = create(conclusion)
-    task.proves()
+    for mc <- config.metrics do
+      mc.timePause("time/verif/smt/encode")
+      mc.timeStart("time/verif/smt/solve")
+    val result = task.proves()
+    for mc <- config.metrics do
+      mc.timePause("time/verif/smt/solve")
+    result
 
   def solve(conclusion: Expr)(using ctx: PrfCtx): Either[String, Unit] =
     val task = create(conclusion)

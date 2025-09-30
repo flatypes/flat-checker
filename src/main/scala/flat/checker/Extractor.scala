@@ -47,5 +47,5 @@ class Extractor(using config: Config) extends LazyLogging:
     cmds += "(check-sat)"
     cmds += "(exit)"
 
-    val outputPath: os.Path = os.Path(config.extractOutput.getAbsolutePath) / input.baseName
+    val outputPath = config.extractOutput.get / input.baseName
     os.write.over(outputPath / s"$vcCounter.smt2", cmds.mkString("\n"), createFolders = true)

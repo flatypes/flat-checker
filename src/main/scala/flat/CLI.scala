@@ -1,8 +1,9 @@
 package flat
 
+import flat.util.{Aggregator, MetricCollector}
 import scopt.OParser
 
-import java.io.File
+import java.nio.file.Path
 
 object CLI:
   private val builder = OParser.builder[Config]
@@ -13,20 +14,21 @@ object CLI:
       programName("flat-checker"),
       head("flat-checker", "dev"),
       // arg: input files
-      arg[String]("<file>...")
+      arg[Path]("<file>...")
         .unbounded()
         .required()
-        .action { (f, c) => c.copy(inputFiles = c.inputFiles :+ f) }
+        .action { (p, c) => c.copy(inputs = c.inputs :+ os.Path(p.toAbsolutePath)) }
         .text("input files/dirs"),
       // option --fast-exit
       opt[Unit]("fast-exit")
         .action { (_, c) => c.copy(fastExit = true) }
         .text("immediately exit upon the first error occurred"),
-      // option --stat
-      opt[File]("stat")
-        .action { (f, c) => c.copy(recorder = Some(Recorder(f))) }
+      // option --metrics
+      opt[Path]("metrics")
+        .action: (p, c) =>
+          c.copy(metrics = Some(MetricCollector(os.Path(p.toAbsolutePath), Aggregator.AllCount, Aggregator.AllTime)))
         .valueName("<file>")
-        .text("save statistics to a JSON file"),
+        .text("collect and save statistical metrics to a JSON file"),
       // option --smt-time-limit
       opt[Int]("smt-time-limit")
         .action { (n, c) => c.copy(smtTimeLimit = n) }
@@ -40,9 +42,9 @@ object CLI:
         .text("Extract VCs only, without doing type checking")
         .action((_, c) => c.copy(extractMode = true))
         .children(
-          opt[File]('o', "output")
+          opt[Path]('o', "output")
             .required()
-            .action { (f, c) => c.copy(extractOutput = f) }
+            .action { (p, c) => c.copy(extractOutput = Some(os.Path(p.toAbsolutePath))) }
             .valueName("<dir>")
             .text("extract to this directory"),
         )
