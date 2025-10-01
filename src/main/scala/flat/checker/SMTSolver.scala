@@ -10,18 +10,26 @@ import io.github.cvc5.Kind
 
 import scala.collection.mutable
 
-class SMTSolver(using config: Config) extends LazyLogging:
+final class SMTSolver(using config: Config) extends LazyLogging:
   private val smt = cvc5.TermManager()
 
-  class Task(private val slv: cvc5.Solver, val consts: Map[String, cvc5.Term]):
+  final class Task(val slv: cvc5.Solver, val consts: Map[String, cvc5.Term]):
     def assertions: List[cvc5.Term] = slv.getAssertions.toList
 
-    def proves(): Boolean =
+    private def smtSolve(conclusion: Expr): cvc5.Result =
+      slv.push()
+      val t = encodeExpr(conclusion)(using consts)
+      slv.assertFormula(t.notTerm)
       val result = slv.checkSat()
+      slv.pop()
+      result
+
+    def proves(conclusion: Expr): Boolean =
+      val result = smtSolve(conclusion)
       result.isUnsat
 
-    def solve(): Either[String, Unit] =
-      val result = slv.checkSat()
+    def solve(conclusion: Expr): Either[String, Unit] =
+      val result = smtSolve(conclusion)
       if result.isUnsat then
         Right(())
       else if result.isSat then
@@ -30,36 +38,36 @@ class SMTSolver(using config: Config) extends LazyLogging:
       else
         Left(result.getUnknownExplanation.toString)
 
-  /** Creates an SMT solving task from the given proof goal. */
-  def create(conclusion: Expr)(using ctx: PrfCtx): Task =
-    val slv = cvc5.Solver(smt)
-    slv.setLogic("ALL")
-    slv.setOption("produce-models", "true")
-    slv.setOption("tlimit-per", config.smtTimeLimit.toString)
+  /** Creates an SMT solving task from the given proof context. */
+  def create(ctx: PrfCtx): Task =
+    cache.get(ctx) match
+      case Some(task) => task
+      case None =>
+        val slv = cvc5.Solver(smt)
+        slv.setLogic("ALL")
+        slv.setOption("produce-models", "true")
+        slv.setOption("tlimit-per", config.smtTimeLimit.toString)
+        // 1. Declare variables
+        val vars = mutable.Map.empty[String, cvc5.Term]
+        for x <- ctx.types.strVars | ctx.premises.flatMap(_.collectVars).toSet do
+          val s = encodeSort(ctx.types(x).toSort)
+          val t = smt.mkConst(s, x)
+          vars(x) = t
+          if config.extractMode then
+            for tp <- encodeHasType(t, ctx.types(x)) do slv.assertFormula(tp)
 
-    // 1. Declare variables
-    val vars = mutable.Map.empty[String, cvc5.Term]
-    for
-      e <- ctx.premises :+ conclusion
-      x <- e.collectVars
-    do
-      val s = encodeSort(ctx.types(x).toSort)
-      val t = smt.mkConst(s, x)
-      vars(x) = t
-      if config.extractMode then
-        for tp <- encodeHasType(t, ctx.types(x)) do slv.assertFormula(tp)
+        given eCtx: ECtx = vars.toMap
+        // 2. Assert hypotheses
+        for h <- ctx.premises do
+          val t = encodeExpr(h)
+          slv.assertFormula(t)
+        // 3. Done
+        val consts = Map.from(for x -> t <- vars yield t.getSymbol -> t)
+        val task = Task(slv, consts)
+        cache(ctx) = task
+        task
 
-    given eCtx: ECtx = vars.toMap
-    // 2. Assert hypotheses
-    for h <- ctx.premises do
-      val t = encodeExpr(h)
-      slv.assertFormula(t)
-    // 3. Assert that the conclusion is false
-    val t = encodeExpr(conclusion)
-    slv.assertFormula(t.notTerm)
-    // 4. Creation done
-    val consts = Map.from(for x -> t <- vars yield t.getSymbol -> t)
-    Task(slv, consts)
+  private val cache = mutable.Map.empty[PrfCtx, Task]
 
   private def encodeSort(sort: Sort): cvc5.Sort = sort match
     case Sort.Top | Sort.Bot => assert(false)
@@ -101,7 +109,7 @@ class SMTSolver(using config: Config) extends LazyLogging:
 
   private type ECtx = Map[String, cvc5.Term]
 
-  private def encodeExpr(expr: Expr)(using eCtx: ECtx): cvc5.Term = expr match
+  def encodeExpr(expr: Expr)(using eCtx: ECtx): cvc5.Term = expr match
     case Const(n: Int) => smt.mkInteger(n)
     case Const(b: Boolean) => smt.mkBoolean(b)
     case Const(s: String) => smt.mkString(s)
@@ -243,15 +251,15 @@ class SMTSolver(using config: Config) extends LazyLogging:
   def proves(conclusion: Expr)(using ctx: PrfCtx): Boolean =
     for mc <- config.metrics do
       mc.timeStart("time/verif/smt/encode")
-    val task = create(conclusion)
+    val task = create(ctx)
     for mc <- config.metrics do
       mc.timePause("time/verif/smt/encode")
       mc.timeStart("time/verif/smt/solve")
-    val result = task.proves()
+    val result = task.proves(conclusion)
     for mc <- config.metrics do
       mc.timePause("time/verif/smt/solve")
     result
 
   def solve(conclusion: Expr)(using ctx: PrfCtx): Either[String, Unit] =
-    val task = create(conclusion)
-    task.solve()
+    val task = create(ctx)
+    task.solve(conclusion)

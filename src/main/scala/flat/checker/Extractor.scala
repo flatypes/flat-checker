@@ -24,11 +24,15 @@ class Extractor(using config: Config) extends LazyLogging:
   private def process(vc: VC, ctx: PrfCtx)(using input: os.Path): Unit = vc match
     case True =>
     case Goal(c, _) =>
-      val task = slv.create(c)(using ctx)
+      val task = slv.create(ctx)
+      val t = slv.encodeExpr(c)(using task.consts)
+      task.slv.assertFormula(t.notTerm)
       outputQuery(task)
       vcCounter += 1
     case HasType(e, t, _) =>
-      val task = slv.create(TypeTest(e, t))(using ctx)
+      val task = slv.create(ctx)
+      val t1 = slv.encodeExpr(TypeTest(e, t))(using task.consts)
+      task.slv.assertFormula(t1.notTerm)
       outputQuery(task)
       vcCounter += 1
     case InferType(e, _) =>
