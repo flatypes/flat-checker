@@ -1,25 +1,9 @@
 package flat
 
-import scala.annotation.tailrec
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 object util:
-  def cartesianProduct[T](left: Set[T], right: Set[T], p: (T, T) => T): Set[T] =
-    for x1 <- left; x2 <- right yield p(x1, x2)
-
-  def cartesianPower[T](set: Set[T], k: Int, p: (T, T) => T): Set[T] =
-    require(k >= 1)
-    if k == 1 then set
-    else cartesianProduct(cartesianPower(set, k - 1, p), set, p)
-
-  @tailrec
-  def tryAll[T](attempts: List[() => Option[T]]): Option[T] = attempts match
-    case Nil => None
-    case first :: rest => first() match
-      case some@Some(_) => some
-      case None => tryAll(rest)
-
-  def tryAll[T](attempts: (() => Option[T])*): Option[T] = tryAll(attempts.toList)
-
   private val unicodeSubscripts: String = "₀₁₂₃₄₅₆₇₈₉"
 
   def renderSubscript(k: Int): String =
@@ -29,9 +13,81 @@ object util:
   private val mxBean =
     java.lang.management.ManagementFactory.getPlatformMXBean(classOf[java.lang.management.ThreadMXBean])
 
-  /** Time an action and return the time elapsed in ms. */
-  def time[R](f: => R): (Double, R) =
-    val t0 = mxBean.getCurrentThreadCpuTime
-    val r = f
-    val t1 = mxBean.getCurrentThreadCpuTime
-    ((t1 - t0) / 1.0e6, r)
+  enum Aggregator:
+    case AllCount
+    case AllTime
+
+  import Aggregator.*
+
+  final class MetricCollector(outputPath: os.Path, aggregators: Aggregator*):
+    private class Block(val label: String):
+      // Key-value pairs
+      val counts = mutable.Map.empty[String, Int]
+      val times = mutable.Map.empty[String, Long]
+      val values = mutable.Map.empty[String, ujson.Value]
+      // Nested blocks
+      val blocks = mutable.Map.empty[String, ListBuffer[Block]]
+      // Auxiliaries for computing elapsed time
+      val startTimes = mutable.Map.empty[String, Long]
+      val hasStarted = mutable.Map.empty[String, Boolean]
+
+    private val st = mutable.Stack(Block(""))
+
+    def push(label: String): Unit =
+      require(!st.top.counts.keySet.contains(label))
+      require(!st.top.times.keySet.contains(label))
+      require(!st.top.values.keySet.contains(label))
+      if !st.top.blocks.keySet.contains(label) then
+        st.top.blocks(label) = ListBuffer.empty
+      st.push(Block(label))
+
+    def pop(): Unit =
+      val block = st.pop()
+      st.top.blocks(block.label) += block
+
+    def put(key: String, value: ujson.Value): Unit =
+      st.top.values(key) = value
+
+    def count(key: String, n: Int = 1): Unit =
+      val m = st.top.counts
+      m(key) = m.getOrElse(key, 0) + n
+
+    def timeStart(key: String): Unit =
+      require(!st.top.hasStarted.getOrElse(key, false), s"stopwatch '$key' has started")
+      st.top.hasStarted(key) = true
+      st.top.startTimes(key) = mxBean.getCurrentThreadCpuTime
+
+    def timePause(key: String): Unit =
+      val endTime = mxBean.getCurrentThreadCpuTime
+      require(st.top.hasStarted.getOrElse(key, false), s"stopwatch '$key' has not yet started")
+      st.top.hasStarted(key) = false
+      val m = st.top.times
+      m(key) = m.getOrElse(key, 0L) + (endTime - st.top.startTimes(key))
+
+    def save(indent: Int = -1, sortKeys: Boolean = false): Unit =
+      require(st.size == 1)
+      val json = ujson.write(encode(st.top), indent = indent, sortKeys = sortKeys)
+      os.write.over(outputPath, json)
+
+    private def encode(block: Block): ujson.Obj =
+      val items = ListBuffer.empty[(String, ujson.Value)]
+      items ++= block.counts.view.mapValues(ujson.Num(_))
+      items ++= block.times.view.mapValues(t => ujson.Num(t / 1.0e6))
+      items ++= block.values
+      for l -> bs <- block.blocks do
+        items += l -> ujson.Arr.from(bs.map(encode))
+        val aggItems: Seq[(String, ujson.Value)] = aggregators.flatMap:
+          case AllCount =>
+            val ks = bs.flatMap(_.counts.keys).toSet
+            for k <- ks yield
+              val n = bs.map(_.counts.getOrElse(k, 0)).sum
+              block.counts(s"$l/$k") = n
+              k -> n
+          case AllTime =>
+            val ks = bs.flatMap(_.times.keys).toSet
+            for k <- ks yield
+              val n = bs.map(_.times.getOrElse(k, 0L)).sum
+              block.times(s"$l/$k") = n
+              k -> n / 1.0e6
+        items += s"$l/aggregation" -> ujson.Obj.from(aggItems)
+      ujson.Obj.from(items)

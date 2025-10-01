@@ -1,0 +1,9 @@
+type Input = lang(r'(a|[^ab][ab]*|b..*)*')
+
+
+def f222(s: Input):
+  assert s.index("b") == len(s) - 1
+  i = 0
+  while i < len(s) - 1:
+    assert s[i] == "a"
+    i += 1

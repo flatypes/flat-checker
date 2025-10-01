@@ -36,14 +36,14 @@ For example, to type check `examples/a_star.py`, simply run
 ```
 
 By default, logs will be directly output to stdout.
-You may modify `src/main/resources/logback.xml` to change the logging settings.
-The input file could also be a folder, in which FLAT-Checker will type check all Python files found in that folder.
+You may modify `src/main/resources/logback.xml` to change the configuration (including log level).
+The input file can also be a folder, in which FLAT-Checker will type check all Python files found in that folder.
 
-To just extract the SMT queries without actually running any SMT solver, use the `--extract-only <folder>` option and
-specify an output folder for the SMT-lib2 files:
+To just extract the SMT queries without doing type checking, use the `extract` subcommand and specify an output folder
+for the SMT-lib2 files for the `-o` option:
 
 ```shell
-./flat-checker --extract-only smt/ examples/panini-bench
+./flat-checker extract -o smt/ examples/panini-bench
 ```
 
 This command will extract all generated SMT queries and output them into the `smt/` folder.

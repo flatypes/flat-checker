@@ -2,7 +2,7 @@ package flat.checker.py
 
 import flat.checker.*
 import flat.checker.py.ast.*
-import flat.regex.{REParser, RegExpr}
+import flat.regex.{REParser, RegEx}
 import flat.{Issuer, Location}
 
 class AnnotChecker(using issuer: Issuer):
@@ -133,9 +133,9 @@ class AnnotChecker(using issuer: Issuer):
       issuer.report(TypeError("expect a type", node.loc))
       core.NoType
 
-    def parseReExpr(input: CharSequence, loc: Location): RegExpr =
+    def parseReExpr(input: CharSequence, loc: Location): RegEx =
       REParser.tryParse(input) match
         case Left(detail) =>
           issuer.report(SyntaxError(detail, loc))
-          RegExpr.RENone
+          RegEx.RENone
         case Right(r) => r

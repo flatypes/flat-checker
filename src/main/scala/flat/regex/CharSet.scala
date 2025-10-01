@@ -1,130 +1,108 @@
 package flat.regex
 
 import org.apache.commons.text.StringEscapeUtils
+import org.apache.commons.text.StringEscapeUtils.escapeJava
 
-import scala.collection.mutable
+/** A finite Set of Unicode Characters (CS).
+ *
+ * @param set   the underlying set of characters
+ * @param isInc if true, `set` stores the characters that should be included; otherwise excluded
+ * */
+final class CharSet private(private val set: Set[Char], private val isInc: Boolean):
+  /** Tests if this CS is empty. */
+  def isEmpty: Boolean = set.isEmpty && isInc
 
-/** A set of Unicode characters. */
-final class CharSet(val polarity: Boolean, val chars: Set[Char]):
-  // If polarity is true, `chars` stores included characters. Otherwise, it stores excluded characters.
-  require(chars.size < 1000)
+  /** Tests if this CS is full. */
+  def isFull: Boolean = set.isEmpty && !isInc
 
-  def isEmpty: Boolean = polarity && chars.isEmpty
+  /** Tests if this CS is a singleton. */
+  def isSingleton: Boolean = set.size == 1 && isInc
 
-  def nonEmpty: Boolean = !isEmpty
+  /** Tests if this CS contains the given character `c`. */
+  def contains(c: Char): Boolean = if isInc then set.contains(c) else !set.contains(c)
 
-  def isFull: Boolean = !polarity && chars.isEmpty
+  /** Returns the smallest character in this CS if nonempty. */
+  def head: Char = if isInc then set.head else CharSet.allChars.find(!set.contains(_)).get
 
-  def isSingleton: Boolean = polarity && chars.size == 1
+  /** Returns the number of characters in this CS. Note: Full CS has 65536 characters. */
+  def size: Int = if isInc then set.size else 65536 - set.size
 
-  def isSingletonOf(c: Char): Boolean = polarity && chars == Set(c)
+  /** Tests if this CS is a subset of `that`. */
+  def subsetOf(that: CharSet): Boolean =
+    if isInc && that.isInc then set.subsetOf(that.set)
+    else if !isInc && !that.isInc then that.set.subsetOf(set)
+    else if isInc && !that.isInc then (set & that.set).isEmpty
+    else LazyList.from(CharSet.allChars).filterNot(set.contains).forall(that.contains)
 
-  def asChar: Char =
-    require(isSingleton)
-    chars.head
+  /** Complement: full CS - this CS. */
+  def unary_! : CharSet = new CharSet(set, !isInc)
 
-  def contains(ch: Char): Boolean =
-    if polarity then chars.contains(ch) else !chars.contains(ch)
-
-  def unary_! : CharSet = CharSet(!polarity, chars)
-
-  def |(other: CharSet): CharSet =
-    if polarity && other.polarity then CharSet(true, chars | other.chars)
-    else if !polarity && !other.polarity then CharSet(false, chars & other.chars)
+  /** Union. */
+  def |(that: CharSet): CharSet =
+    if isInc && that.isInc then new CharSet(set | that.set, true)
+    else if !isInc && !that.isInc then new CharSet(set & that.set, false)
     else
-      val include = if polarity then chars else other.chars
-      val exclude = if polarity then other.chars else chars
-      CharSet(false, exclude -- include)
+      val include = if isInc then set else that.set
+      val exclude = if isInc then that.set else set
+      new CharSet(exclude -- include, false)
 
-  def &(other: CharSet): CharSet =
-    if polarity && other.polarity then CharSet(true, chars & other.chars)
-    else if !polarity && !other.polarity then CharSet(false, chars | other.chars)
+  /** Intersection. */
+  def &(that: CharSet): CharSet =
+    if isInc && that.isInc then new CharSet(set & that.set, true)
+    else if !isInc && !that.isInc then new CharSet(set | that.set, false)
     else
-      val include = if polarity then chars else other.chars
-      val exclude = if polarity then other.chars else chars
-      CharSet(true, include -- exclude)
+      val include = if isInc then set else that.set
+      val exclude = if isInc then that.set else set
+      new CharSet(include -- exclude, true)
 
+  /** Disjointness: characters do not overlap. */
   def **(other: CharSet): Boolean = (this & other).isEmpty
 
-  def subsetOf(other: CharSet): Boolean =
-    if polarity && other.polarity then chars.subsetOf(other.chars)
-    else if !polarity && !other.polarity then other.chars.subsetOf(chars)
-    else if polarity then /* !other.polarity */ (chars & other.chars).isEmpty
-    else /* !polarity && other.polarity */ false
-
-  def --(other: CharSet): CharSet =
-    require(polarity && other.polarity)
-    CharSet(true, chars -- other.chars)
-
-  def --(exclude: Set[Char]): CharSet =
-    if polarity then CharSet(true, chars -- exclude)
-    else CharSet(false, chars | exclude)
-
-  def -(exclude: Char): CharSet = this -- Set(exclude)
+  /** Excludes the given character `c`. */
+  def -(c: Char): CharSet = new CharSet(if isInc then set - c else set + c, isInc)
 
   override def equals(obj: Any): Boolean = obj match
-    case other: CharSet => polarity == other.polarity && chars == other.chars
+    case that: CharSet => isInc == that.isInc && set == that.set
     case _ => false
 
-  def size: Int = if polarity then chars.size else 0x2FFFF - chars.size
+  /** Returns the usual `Set` encoding of this CS. */
+  def toSet: Set[Char] = if isInc then set else CharSet.allChars.toSet -- set
 
-  def getChars: Set[Char] =
-    require(polarity)
-    chars
-
-  def getRepresentative: Char =
-    if polarity then
-      require(chars.nonEmpty, "Cannot get representative for empty char set")
-      chars.head
-    else if chars.isEmpty then 0.toChar
-    else if chars.min.toInt > 0 then (chars.min.toInt - 1).toChar else (chars.max.toInt + 1).toChar
-
-  def prettyString: String =
-    val raw =
-      if isSingleton then chars.head.toString
-      else if isFull then "."
-      else
-        val part1 = (chars & CharSet.ALPHA_NUM.chars).toList.sorted match
-          case Nil => ""
-          case c :: Nil => c.toString
-          case cs =>
-            val sb = StringBuilder()
-            var i = 0
-            while i < cs.length do
-              var k = 1
-              while i + k < cs.length && cs(i + k) == cs(i) + k do k += 1
-              if k == 1 then sb += cs(i) else sb ++= (cs(i).toString + "-" + cs(i + k - 1).toString)
-              i += k
-            sb.toString
-        val part2 = (chars -- CharSet.ALPHA_NUM.chars).mkString("")
-        "[" + (if polarity then "" else "^") + part1 + part2 + "]"
-    StringEscapeUtils.escapeJava(raw)
+  /** Returns the SMT-LIB encoding that consists of:
+   *  - a sequence of characters or character ranges (both inclusive), and
+   *  - a Boolean value indicates if the characters above are ''included'' (true) or ''excluded'' (false).
+   */
+  def toSMT: (Seq[Char | (Char, Char)], Boolean) =
+    require(set.nonEmpty)
+    val pts = set.toList.sorted.map(_.toInt)
+    val is = 0 +: pts.indices.filter(i => i > 0 && pts(i) != pts(i - 1) + 1)
+    val chars =
+      for (i, j) <- is.zip(is.tail :+ pts.length)
+        yield if i == j - 1 then pts(i).toChar else (pts(i).toChar, pts(j - 1).toChar)
+    (chars, isInc)
 
   override def toString: String =
-    (if polarity then "" else "^") + StringEscapeUtils.escapeJava(chars.mkString(""))
+    val (chars, _) = toSMT
+    val parts = chars.map:
+      case c: Char => escapeJava(c.toString)
+      case (c1, c2) => escapeJava(c1.toString) + "-" + escapeJava(c2.toString)
+    "[" + (if isInc then "" else "^") + parts.mkString("") + "]"
 
 object CharSet:
-  val empty: CharSet = CharSet(true, Set.empty)
-  val full: CharSet = CharSet(false, Set.empty)
+  /** The empty CS. */
+  val empty: CharSet = new CharSet(Set.empty, true)
 
-  val NUM: CharSet = from('0' to '9')
-  val ALPHA_LOWER: CharSet = from('a' to 'z')
-  val ALPHA_UPPER: CharSet = from('A' to 'Z')
-  val ALPHA: CharSet = from('a' to 'z', 'A' to 'Z')
-  val ALPHA_NUM: CharSet = from('a' to 'z', 'A' to 'Z', '0' to '9')
+  /** The full CS. */
+  val full: CharSet = new CharSet(Set.empty, false)
 
-  def of(chars: Char*): CharSet = CharSet(true, chars.toSet)
+  /** The sequence of all Unicode characters. */
+  val allChars: Seq[Char] = 0.toChar to 65535.toChar
 
-  def from(sets: (Char | collection.IterableOnce[Char])*): CharSet =
-    CharSet(true, sets.map {
-      case c: Char => Set(c)
-      case iter: collection.IterableOnce[Char] => Set.from(iter)
-    }.reduce(_ | _))
+  /** Creates a CS with the given `c`s. */
+  def apply(c: Char*): CharSet = new CharSet(Set(c *), true)
 
-  def complementOf(chars: Char*): CharSet = CharSet(false, chars.toSet)
+  /** Creates a CS that contains all characters but ''not'' the given `c`s. */
+  def not(c: Char*): CharSet = new CharSet(Set(c *), false)
 
-  def complementFrom(sets: (Char | collection.IterableOnce[Char])*): CharSet =
-    CharSet(false, sets.map {
-      case c: Char => Set(c)
-      case iter: collection.IterableOnce[Char] => Set.from(iter)
-    }.reduce(_ | _))
+  /** Creates a CS with the given characters in the collection `it`. */
+  def from(it: IterableOnce[Char]): CharSet = new CharSet(Set.from(it), true)

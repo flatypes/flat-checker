@@ -32,7 +32,9 @@ class ExprChecker(out: ListBuffer[core.Stmt])(using issuer: Issuer, gCtx: GCtx, 
     override def visitName(node: Name, ctx: LCtx): (core.Type, core.Expr) =
       val x = node.id
       ctx.get(x) match
-        case Some(id) => (vm.getType(id), core.Var(id).copyLocation(node))
+        case Some(id) =>
+          val t = vm.getType(id)
+          (t, core.Var(id).withSort(t.toSort).copyLocation(node))
         case None =>
           gCtx.get(x) match
             case Some(info: FunInfo) =>
