@@ -1,0 +1,16 @@
+type Input = lang(r'([^ab]|aa*[^a]|bb*[^b]).*')
+
+
+def f401(s: Input):
+  i = 0
+  ca = 0
+  cb = 0
+  while i < len(s):
+    inv(0 <= i <= len(s))
+    inv(ca == i if 'a' in s else cb == i)
+    if s[i] == "a":
+      ca += 1
+    if s[i] == "b":
+      cb += 1
+    i += 1
+  assert ca == len(s) or cb == len(s)

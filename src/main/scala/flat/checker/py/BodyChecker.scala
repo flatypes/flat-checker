@@ -1,7 +1,7 @@
 package flat.checker.py
 
 import flat.Issuer
-import flat.checker.core.{CmpOp, Ident, StrAt, StrLen}
+import flat.checker.core.{CharAt, CmpOp, Ident, Length}
 import flat.checker.py.ast.*
 import flat.checker.{Sort, core}
 
@@ -50,13 +50,16 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
         case TupleExpr(values) =>
           val (t, e) = inferType(node.value, ctx)
           t.toSort match
-            case Sort.String =>
+            case Sort.S =>
               val id = vm.declare(core.strType)
               out += core.Assign(id, e)
-              out += core.Assert(core.Cmp(EQ, StrLen(core.Var(id)), core.Const(values.length)).fillLocation(node.loc))
+              out += core.Assert(core.Cmp(EQ,
+                Length(core.Var(id).withSort(Sort.S)),
+                core.Const(values.length)).fillLocation(node.loc))
               var newCtx = ctx
               for i <- values.indices do
-                newCtx = checkAssign(values(i), StrAt(core.Var(id), core.Const(i)).fillLocation(values(i).loc),
+                newCtx = checkAssign(values(i),
+                  CharAt(core.Var(id).withSort(Sort.S), core.Const(i)).fillLocation(values(i).loc),
                   // NOTE: to skip checking the binder has type char
                   core.strType, (newCtx, com))
               return newCtx
@@ -142,8 +145,8 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
       val e = checkType(node.test, core.BoolType, ctx)
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, _) = checkBody(realBody, ctx, com)(using insideLoop = true)
-      if node.body.nonEmpty && node.body.last.isInstanceOf[Break] then // this while loop is just an if-statement
-        out += core.IfStmt(e, b, Nil)
+      if b.last.isInstanceOf[core.Break] then // this while loop is just an if-statement
+        out += core.IfStmt(e, b.dropRight(1), Nil)
         if invNodes.nonEmpty then
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else

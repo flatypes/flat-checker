@@ -1,7 +1,7 @@
 package flat.checker
 
 import flat.checker.*
-import flat.regex.RegExpr
+import flat.regex.RegEx
 import flat.util.renderSubscript
 import flat.{Location, Locational, Ops}
 import org.apache.commons.text.StringEscapeUtils.escapeJava
@@ -28,19 +28,19 @@ object core:
     def toSort: Sort = Sort.Bot
 
   case object IntType extends Type:
-    def toSort: Sort = Sort.Int
+    def toSort: Sort = Sort.I
 
   case object BoolType extends Type:
-    def toSort: Sort = Sort.Bool
+    def toSort: Sort = Sort.B
 
-  final case class LangType(re: RegExpr) extends Type:
-    def toSort: Sort = Sort.String
+  final case class LangType(re: RegEx) extends Type:
+    def toSort: Sort = Sort.S
 
-  val strType: Type = LangType(RegExpr.all)
+  val strType: Type = LangType(RegEx.all)
 
-  val charType: Type = LangType(RegExpr.allChar)
+  val charType: Type = LangType(RegEx.allChar)
 
-  def literalType(value: String): Type = LangType(RegExpr.fromString(value))
+  def literalType(value: String): Type = LangType(RegEx.fromString(value))
 
   final case class TupleType(elems: Seq[Type]) extends Type:
     def toSort: Sort = Sort.Tuple(elems.map(_.toSort))
@@ -56,9 +56,9 @@ object core:
   given fromSort: Conversion[Sort, Type] = {
     case Sort.Top => AnyType
     case Sort.Bot => NoType
-    case Sort.Int => IntType
-    case Sort.Bool => BoolType
-    case Sort.String => strType
+    case Sort.I => IntType
+    case Sort.B => BoolType
+    case Sort.S => strType
     case Sort.Tuple(ss) => TupleType(ss.map(fromSort))
     case Sort.Array(s) => ArrayType(s)
     case Sort.Fun(ss, s) => FunType(ss.map(fromSort), s)
@@ -109,6 +109,8 @@ object core:
     def visitShowType(node: ShowType, ctx: C): T = visitStmt(node, ctx)
 
   sealed trait Expr extends Node, Locational, Product:
+    def sort: Sort
+
     def walk(f: Expr => Unit): Unit =
       f(this)
       productIterator.foreach {
@@ -150,8 +152,6 @@ object core:
 
     def collectVars: Set[String] = collect { case Var(x) => x }.toSet
 
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T
-
     def transform(pf: PartialFunction[Expr, Expr]): Expr
 
     def subst(mappings: Map[String, Expr]): Expr =
@@ -166,7 +166,10 @@ object core:
       this
 
   final case class Const(value: Int | Boolean | String) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitConst(this, ctx)
+    def sort: Sort = value match
+      case _: Int => Sort.I
+      case _: Boolean => Sort.B
+      case _: String => Sort.S
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr = pf.lift.apply(this) match
       case Some(e) => e
@@ -179,7 +182,7 @@ object core:
   given Conversion[Int | Boolean | String, Const] = Const.apply
 
   final case class GlobalRef(name: String) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitGlobalRef(this, ctx)
+    def sort: Sort = Sort.Bot
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr = pf.lift.apply(this) match
       case Some(e) => e
@@ -188,7 +191,14 @@ object core:
     override def toString: String = name
 
   final case class Var(name: String) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitVar(this, ctx)
+    private var theSort = Sort.Bot
+
+    def sort: Sort = theSort
+
+    def withSort(s: Sort): this.type =
+      require(theSort == Sort.Bot)
+      theSort = s
+      this
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr = pf.lift.apply(this) match
       case Some(e) => e
@@ -201,7 +211,7 @@ object core:
       else name
 
   final case class TupleExpr(elems: List[Expr]) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitTupleExpr(this, ctx)
+    def sort: Sort = Sort.Tuple(elems.map(_.sort))
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -213,7 +223,7 @@ object core:
   def mkUnit: Expr = TupleExpr(Nil)
 
   final case class TypeTest(value: Expr, typ: Type) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitTypeTest(this, ctx)
+    def sort: Sort = Sort.B
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -224,9 +234,9 @@ object core:
       case LangType(r) => s"$value : $r"
       case _ => s"$value : $typ"
 
-  // builtin functions/operations
+  // Boolean operations
   final case class And(left: Expr, right: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitAnd(this, ctx)
+    def sort: Sort = Sort.B
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -241,7 +251,7 @@ object core:
   def mkAnd(conjuncts: Expr*): Expr = mkAnd(conjuncts.toList)
 
   final case class Or(left: Expr, right: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitOr(this, ctx)
+    def sort: Sort = Sort.B
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -256,7 +266,7 @@ object core:
   def mkOr(disjuncts: Expr*): Expr = mkOr(disjuncts.toList)
 
   final case class Not(operand: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitNot(this, ctx)
+    def sort: Sort = Sort.B
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -266,7 +276,7 @@ object core:
     override def toString: String = s"(!$operand)"
 
   final case class Ite(test: Expr, thenValue: Expr, elseValue: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitIte(this, ctx)
+    def sort: Sort = thenValue.sort
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -278,7 +288,7 @@ object core:
   export flat.Ops.CmpOp
 
   final case class Cmp(op: CmpOp, left: Expr, right: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitCmp(this, ctx)
+    def sort: Sort = Sort.B
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -290,8 +300,9 @@ object core:
   extension (op: CmpOp)
     def apply(left: Expr, right: Expr): Cmp = Cmp(op, left, right)
 
+  // Arithmetic operations
   final case class Negate(value: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitNegate(this, ctx)
+    def sort: Sort = Sort.I
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -301,7 +312,7 @@ object core:
     override def toString: String = s"-$value"
 
   final case class Arith(op: ArithOp, left: Expr, right: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitArith(this, ctx)
+    def sort: Sort = Sort.I
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -331,110 +342,110 @@ object core:
 
   inline def mkSub(expr: Expr, value: Int): Expr = mkAdd(expr, -value)
 
-  final case class StrConcat(left: Expr, right: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrConcat(this, ctx)
+  // String Operations
+
+  final case class Concat(left: Expr, right: Expr) extends Expr:
+    def sort: Sort = Sort.S
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrConcat(left.transform(pf), right.transform(pf))
+        case None => Concat(left.transform(pf), right.transform(pf))
 
     override def toString: String = s"($left ++ $right)"
 
-  final case class StrLen(str: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrLen(this, ctx)
+  final case class Length(str: Expr) extends Expr:
+    def sort: Sort = Sort.I
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrLen(str.transform(pf))
+        case None => Length(str.transform(pf))
 
     override def toString: String = s"|$str|"
 
-  final case class StrAt(str: Expr, index: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrAt(this, ctx)
+  final case class CharAt(str: Expr, index: Expr) extends Expr:
+    def sort: Sort = Sort.S
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrAt(str.transform(pf), index.transform(pf))
+        case None => CharAt(str.transform(pf), index.transform(pf))
 
     override def toString: String = s"$str[$index]"
 
-  final case class StrSlice(str: Expr, fromIndex: Expr, untilIndex: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrSlice(this, ctx)
+  final case class Substr(str: Expr, startIndex: Expr, endIndex: Expr) extends Expr:
+    def sort: Sort = Sort.S
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrSlice(str.transform(pf), fromIndex.transform(pf), untilIndex.transform(pf))
+        case None => Substr(str.transform(pf), startIndex.transform(pf), endIndex.transform(pf))
 
-    override def toString: String = untilIndex match
-      case StrLen(s) if s == str => s"$str[$fromIndex:]"
-      case _ => s"$str[$fromIndex:$untilIndex]"
+    override def toString: String = endIndex match
+      case Length(s) if s == str => s"$str[$startIndex:]"
+      case _ => s"$str[$startIndex:$endIndex]"
 
-  final case class StrStartsWith(str: Expr, prefix: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrStartsWith(this, ctx)
+  /** String Testing Operations. */
+  sealed trait StrTest extends Expr:
+    def sort: Sort = Sort.B
 
+  final case class PrefixOf(prefix: Expr, str: Expr) extends StrTest:
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrStartsWith(str.transform(pf), prefix.transform(pf))
+        case None => PrefixOf(prefix.transform(pf), str.transform(pf))
 
     override def toString: String = s"$str.startsWith($prefix)"
 
-  final case class StrEndsWith(str: Expr, suffix: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrEndsWith(this, ctx)
-
+  final case class SuffixOf(suffix: Expr, str: Expr) extends StrTest:
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrEndsWith(str.transform(pf), suffix.transform(pf))
+        case None => SuffixOf(suffix.transform(pf), str.transform(pf))
 
     override def toString: String = s"$str.endsWith($suffix)"
 
-  final case class StrContains(str: Expr, infix: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrContains(this, ctx)
-
+  final case class InfixOf(infix: Expr, str: Expr) extends StrTest:
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrContains(str.transform(pf), infix.transform(pf))
+        case None => InfixOf(infix.transform(pf), str.transform(pf))
 
     override def toString: String = s"$str.contains($infix)"
 
-  final case class StrFind(str: Expr, target: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrFind(this, ctx)
+  final case class Find(str: Expr, pat: Expr) extends Expr:
+    def sort: Sort = Sort.I
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrFind(str.transform(pf), target.transform(pf))
+        case None => Find(str.transform(pf), pat.transform(pf))
 
-    override def toString: String = s"$str.find($target)"
+    override def toString: String = s"$str.find($pat)"
 
-  final case class StrSplit(str: Expr, sep: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrSplit(this, ctx)
+  final case class Split(str: Expr, sep: Expr) extends Expr:
+    def sort: Sort = Sort.Array(Sort.S)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrSplit(str.transform(pf), sep.transform(pf))
+        case None => Split(str.transform(pf), sep.transform(pf))
 
     override def toString: String = s"$str.split($sep)"
 
-  final case class StrRev(str: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrRev(this, ctx)
+  final case class Reverse(str: Expr) extends Expr:
+    def sort: Sort = Sort.S
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
         case Some(e) => e
-        case None => StrRev(str.transform(pf))
+        case None => Reverse(str.transform(pf))
 
     override def toString: String = s"$str.rev"
 
   final case class StrToCode(char: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitCharToCode(this, ctx)
+    def sort: Sort = Sort.I
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -444,7 +455,7 @@ object core:
     override def toString: String = s"$char.toCode"
 
   final case class StrFromCode(code: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitCharFromCode(this, ctx)
+    def sort: Sort = Sort.S
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -454,7 +465,7 @@ object core:
     override def toString: String = s"$code.toChar"
 
   final case class StrToInt(str: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrToInt(this, ctx)
+    def sort: Sort = Sort.I
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -464,7 +475,7 @@ object core:
     override def toString: String = s"$str.toInt"
 
   final case class StrFromInt(int: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitStrFromInt(this, ctx)
+    def sort: Sort = Sort.S
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -474,7 +485,9 @@ object core:
     override def toString: String = s"$int.toStr"
 
   final case class ArraySelect(array: Expr, index: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitArraySelect(this, ctx)
+    def sort: Sort = array.sort match
+      case Sort.Array(s) => s
+      case _ => assert(false)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -484,7 +497,9 @@ object core:
     override def toString: String = s"$array[$index]"
 
   final case class Apply(fun: Expr, args: Seq[Expr]) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T], ctx: C): T = visitor.visitApply(this, ctx)
+    def sort: Sort = fun.sort match
+      case Sort.Fun(_, s) => s
+      case _ => assert(false)
 
     def transform(pf: PartialFunction[Expr, Expr]): Expr =
       pf.lift.apply(this) match
@@ -492,63 +507,3 @@ object core:
         case None => Apply(fun.transform(pf), args.map(_.transform(pf)))
 
   val NoExpr: Expr = GlobalRef("")
-
-  trait ExprVisitor[C, T]:
-    def visitExpr(node: Expr, ctx: C): T =
-      throw UnsupportedOperationException("visit " + node.getClass.getCanonicalName)
-
-    def visitConst(node: Const, ctx: C): T = visitExpr(node, ctx)
-
-    def visitGlobalRef(node: GlobalRef, ctx: C): T = visitExpr(node, ctx)
-
-    def visitVar(node: Var, ctx: C): T = visitExpr(node, ctx)
-
-    def visitTupleExpr(node: TupleExpr, ctx: C): T = visitExpr(node, ctx)
-
-    def visitTypeTest(node: TypeTest, ctx: C): T = visitExpr(node, ctx)
-
-    def visitAnd(node: And, ctx: C): T = visitExpr(node, ctx)
-
-    def visitOr(node: Or, ctx: C): T = visitExpr(node, ctx)
-
-    def visitNot(node: Not, ctx: C): T = visitExpr(node, ctx)
-
-    def visitIte(node: Ite, ctx: C): T = visitExpr(node, ctx)
-
-    def visitCmp(node: Cmp, ctx: C): T = visitExpr(node, ctx)
-
-    def visitNegate(node: Negate, ctx: C): T = visitExpr(node, ctx)
-
-    def visitArith(node: Arith, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrConcat(node: StrConcat, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrLen(node: StrLen, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrAt(node: StrAt, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrStartsWith(node: StrStartsWith, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrEndsWith(node: StrEndsWith, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrContains(node: StrContains, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrSlice(node: StrSlice, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrFind(node: StrFind, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrSplit(node: StrSplit, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrRev(node: StrRev, ctx: C): T = visitExpr(node, ctx)
-
-    def visitCharToCode(node: StrToCode, ctx: C): T = visitExpr(node, ctx)
-
-    def visitCharFromCode(node: StrFromCode, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrToInt(node: StrToInt, ctx: C): T = visitExpr(node, ctx)
-
-    def visitStrFromInt(node: StrFromInt, ctx: C): T = visitExpr(node, ctx)
-
-    def visitArraySelect(node: ArraySelect, ctx: C): T = visitExpr(node, ctx)
-
-    def visitApply(node: Apply, ctx: C): T = visitExpr(node, ctx)

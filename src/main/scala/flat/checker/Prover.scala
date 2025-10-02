@@ -1,63 +1,150 @@
 package flat.checker
 
-import flat.Config
+import com.typesafe.scalalogging.LazyLogging
+import flat.Ops.CmpOp.*
+import flat.checker.ExprOps.conjuncts
 import flat.checker.core.*
+import flat.regex.{CharSet, RegEx}
+import flat.{Config, Ops}
 
-class Prover(path: os.Path)(using types: Types, config: Config) extends VCPrf(path):
-  protected def process(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
-    if ctx.canTriviallyProve(conclusion) then
-      return Right(Setting())
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
+
+/** Prover: prove verification conditions, or answer type queries. */
+final class Prover(using config: Config, types: Types) extends LazyLogging:
+  /** Proves that `conclusion` is valid under `ctx`. */
+  def prove(conclusion: Expr, ctx: PrfCtx): Boolean =
+    // Above all, try naive prover.
+    naive(conclusion)(using ctx) match
+      case Right(msg) =>
+        logger.debug(s"PROVED by $msg")
+        return true
+      case _ =>
+
+    // Split the conclusion into multiple goals and try naive prover on each.
+    val attempts = for (c, ctx, ls) <- split(conclusion, ctx, Nil) yield (c, ctx, ls, naive(c)(using ctx))
+    val (success, failure) = attempts.partition(_._4.isRight)
+    for (c, ctx, ls, res) <- success do
+      logger.debug("Goal " + ls.mkString(", ") + s" ⇒ $c")
+      logger.debug("PROVED by " + res.getOrElse("X") + " after split")
+
+    // Try destruct/narrow-infer for each failing goals.
+    val results = for (c, ctx, ls, _) <- failure yield
+      logger.debug("Goal " + ls.mkString(", ") + s" ⇒ $c")
+      if ctx.destructCandidates.nonEmpty then destruct(c, ctx)
+      else narrowAndInfer(c, ctx) match
+        case Left(_) => false
+        case Right(msg) =>
+          logger.debug(s"PROVED by $msg")
+          true
+    results.forall(_ == true)
+
+  private val smtSolver = new SMTSolver
+
+  private def naive(conclusion: Expr)(using ctx: PrfCtx): Either[Unit, String] =
+    if ctx.premises.contains(conclusion) then
+      return Right("naive")
 
     conclusion match
-      case And(e1, e2) =>
-        for config1 <- process(e1); config2 <- process(e2) yield config1 | config2
-      case Or(e1, e2) =>
-        process(e2)(using ctx + Not(e1))
+      case Cmp(op, Const(n1: Int), Const(n2: Int)) =>
+        if op.eval(n1, n2) then
+          return Right("naive")
+      case _ =>
+
+    for mc <- config.metrics do
+      mc.count("smt queries")
+      mc.timeStart("time/verif/smt")
+    val valid = smtSolver.proves(conclusion)(using ctx)
+    for mc <- config.metrics do
+      mc.timePause("time/verif/smt")
+    if valid then Right("SMT") else Left(())
+
+  private def split(conclusion: Expr, ctx: PrfCtx, labels: List[Expr]): List[(Expr, PrfCtx, List[Expr])] =
+    conclusion match
+      case And(e1, e2) => split(e1, ctx, labels) ++ split(e2, ctx, labels)
+      case Or(e1, e2) => split(e2, ctx + Not(e1), labels :+ Not(e1))
       case e =>
         e.collectFirst { case ite: Ite => ite } match
-          case Some(Ite(cond, _, _)) =>
-            val (ctx1, ctx2) = ctx.destruct(cond)
-            val e1 = e.transform { case Ite(b, e, _) if b == cond => e }
-            val e2 = e.transform { case Ite(b, _, e) if b == cond => e }
-            for config1 <- process(e1)(using ctx1); config2 <- process(e2)(using ctx2) yield config1 | config2
-          case None => processAtomic(e)
+          case Some(Ite(b, _, _)) =>
+            val List(ctx1 -> ls1, ctx2 -> ls2) = ctx.destructIf(b)
+            val e1 = e.transform { case Ite(e0, e1, _) if e0 == b => e1 }
+            val e2 = e.transform { case Ite(e0, _, e2) if e0 == b => e2 }
+            split(e1, ctx1, labels ++ ls1) ++ split(e2, ctx2, labels ++ ls2)
+          case None => List((e, ctx, labels))
 
-  private def processAtomic(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
-    logger.debug(s"SubGoal: $ctx ⇒ $conclusion")
-    val result = conclusion match
-      case TypeTest(e, t) => processTypeTest(e, t)
-      case e => processProp(e)
-    val result1 = result match
-      case Left(_) =>
-        logger.debug("Try destruct")
-        ctx.tryDestruct match
-          case Some((ctx1, ctx2)) =>
-            for
-              config1 <- processAtomic(conclusion)(using ctx1)
-              config2 <- processAtomic(conclusion)(using ctx2)
-            yield config1 | config2
-          case None => result
-      case _ => result
-    result1 match
-      case Left(_) => logger.debug("SubGoal FAILED")
-      case Right(_) => logger.debug("SubGoal proved")
-    result1
+  private def destruct(conclusion: Expr, ctx: PrfCtx): Boolean =
+    // Decide which premises to destruct.
+    val ps = ctx.destructCandidates
+    val ys = ps.map(similarity(conclusion, _))
+    val y = ys.max
+    val dps =
+      for
+        (p, x) <- ps.zip(ys)
+        if x == y
+      yield p
 
-  private def processTypeTest(expr: Expr, expected: Type)(using ctx: PrfCtx): Either[String, Setting] =
-    if ctx.canTriviallyProve(Const(false)) then
-      return Right(Setting())
+    // Destruct the context into multiple and try naive prover on each.
+    logger.debug("Destruct: " + dps.mkString(", "))
+    val attempts = for (ctx, ls) <- ctx.destruct(dps) yield (ctx, ls, naive(conclusion)(using ctx))
+    val (success, failure) = attempts.partition(_._3.isRight)
+    for (ctx, ls, res) <- success do
+      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("PROVED by " + res.getOrElse("X") + " after destruct")
 
-    val ctx1 = Refiner.refine(ctx)
-    if ctx1.canTriviallyProve(Const(false)) then
-      return Right(Setting(withHints = true))
+    // Try type narrowing and inference for each failing goals.
+    val attempts1 = for (ctx, ls, _) <- failure yield (ctx, ls, narrowAndInfer(conclusion, ctx))
+    val (success1, failure1) = attempts1.partition(_._3.isRight)
+    for (ctx, ls, res) <- success1 do
+      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("PROVED by " + res.getOrElse("X"))
 
-    checkType(expr, expected)(using ctx1) match
-      case Right(_) => Right(Setting(withHints = true))
-      case Left(actual) => Left(actual.toString)
+    // If there are still failing goals, try destruct again.
+    val results = for (ctx, ls, _) <- failure1 yield
+      logger.debug("Case " + ls.mkString(", ") + ":")
+      if ctx.destructCandidates.nonEmpty then
+        logger.debug("Try destruct more hypotheses")
+        destruct(conclusion, ctx)
+      else
+        logger.debug(s"[X] Case FAILED")
+        false
+    results.forall(_ == true)
+
+  private def similarity(conclusion: Expr, hypothesis: Expr): Int =
+    (hypothesis.collectVars & conclusion.collectVars).size
+
+  private def narrowAndInfer(conclusion: Expr, ctx: PrfCtx): Either[Unit, String] =
+    // Perform type narrowing.
+    for mc <- config.metrics do
+      mc.timeStart("time/verif/narrow")
+    val narrower = new Narrower
+    val ctx1 = narrower.narrow(ctx)
+    for mc <- config.metrics do
+      mc.timePause("time/verif/narrow")
+
+    // Try finding inconsistency.
+    val noneStr = ctx1.premises.collectFirst { case TypeTest(e, LangType(RegEx.RENone)) => e }
+    if noneStr.isDefined then
+      return Right(s"contradiction: ${noneStr.get} : ∅")
+
+    conclusion match
+      case TypeTest(e, t) =>
+        for mc <- config.metrics do
+          mc.timeStart("time/verif/type")
+        val result = checkType(e, t)(using ctx1)
+        for mc <- config.metrics do
+          mc.timePause("time/verif/type")
+        result match
+          case Left(_) => Left(())
+          case Right(value) => Right("type checking")
+      case Const(false) =>
+        withLemmas(conclusion, ctx1.premises, ctx1)
+      case _ =>
+        withLemmas(conclusion, List(conclusion), ctx1)
+          .orElse(withLemmas(conclusion, ctx1.premises, ctx1))
 
   private def checkType(expr: Expr, typ: Type)(using ctx: PrfCtx): Either[Type, Unit] = typ match
     case LangType(r2) =>
-      val inferer = new HintSynth
+      val inferer = new Inferer
       val r1 = inferer.inferLang(expr)
       if r1.subsetOf(r2) then Right(()) else Left(LangType(r1))
     case TupleType(ts) =>
@@ -72,42 +159,75 @@ class Prover(path: os.Path)(using types: Types, config: Config) extends VCPrf(pa
           }))
         case _ => throw UnsupportedOperationException()
     case _ =>
-      throw UnsupportedOperationException(s"check $expr : $typ")
+      throw UnsupportedOperationException(s"checkType $expr : $typ")
 
-  override def inferType(goal: Formula.InferType)(using ctx: PrfCtx): Unit =
-    val inferer = new HintSynth
-    val r = inferer.inferLang(goal.value)
-    issuer.report(TypeInferred(r.toString, goal.loc))
+  private val syn = new LemmaSynth
 
-  private val smtSolver = new SMTSolver
+  private def withLemmas(conclusion: Expr, seeds: List[Expr], ctx: PrfCtx): Either[Unit, String] =
+    // Synthesize lemmas.
+    for mc <- config.metrics do
+      mc.timeStart("time/verif/type")
+    val sketches = seeds.flatMap(collectSketches(_, ctx)).distinct
+    val lemmas = syn.synth(sketches)(using ctx)
+    for mc <- config.metrics do
+      mc.timePause("time/verif/type")
+    // Try to prove using these lemmas.
+    if lemmas.nonEmpty then
+      for mc <- config.metrics do
+        mc.count("lemmas", lemmas.length)
+      if lemmas.exists(_.conjuncts.contains(conclusion)) then
+        return Right("lemmas")
 
-  private def processProp(conclusion: Expr)(using ctx: PrfCtx): Either[String, Setting] =
-    // First try: without any hints
-    if ctx.canTriviallyProve(conclusion) then
-      return Right(Setting())
-    if smtSolver.canProve(conclusion) then
-      return Right(Setting(withSMT = true))
+      naive(conclusion)(using ctx ++ lemmas) match
+        case Right(msg) =>
+          return Right(s"lemmas + $msg")
+        case _ =>
+    Left(())
 
-    // Second try: with refinement
-    val ctx1 = Refiner.refine(ctx)
-    if ctx1.canTriviallyProve(conclusion) then
-      return Right(Setting(withHints = true))
-    if smtSolver.canProve(conclusion)(using ctx1) then
-      return Right(Setting(withHints = true, withSMT = true))
+  private def collectSketches(seed: Expr, ctx: PrfCtx): List[syn.Sketch] =
+    val ss = ListBuffer.empty[syn.Sketch]
+    seed.collect:
+      case Cmp(op@(EQ | NE), ec@CharAt(es, ei@Var(_)), Const(t: String)) if t.length == 1 =>
+        val c = t.head
+        val cs = op match
+          case EQ => CharSet(c)
+          case NE => CharSet.not(c)
+        ss += syn.InferLang(ec, target = Some(t))
+        ss += syn.InferIndexCharAt(es, ei, cs)
+      case Cmp(EQ | NE, es, Const(t: String)) =>
+        ss += syn.InferLang(es, target = Some(t))
+      case Cmp(EQ | NE, es1, es2) if es1.sort == Sort.S && es2.sort == Sort.S =>
+        ss += syn.InferLang(es1)
+        ss += syn.InferLang(es2)
+      case Cmp(_, ei@Var(_), Find(es, Const(t: String))) if t.length == 1 =>
+        ss += syn.InferIndexCmpFind(ei, es, t.head)
+      case t: StrTest =>
+        ss += syn.InferTest(t)
+      case Length(es) =>
+        ss += syn.InferLength(es)
+      case Find(es, Const(t: String)) =>
+        ss += syn.InferFind(es, t)
+    ss.toList
 
-    // Last try: with hints
-    val seeds = collectSeeds(conclusion).distinct
-    val synth = HintSynth(using ctx1)
-    val hints = seeds.flatMap(synth.collectHints).distinct
-    if hints.nonEmpty then
-      val ctx2 = ctx1 ++ hints
-      logger.debug("hints: " + hints.mkString(" ∧ "))
-      if ctx2.canTriviallyProve(conclusion) then
-        return Right(Setting(withHints = true))
-      if smtSolver.canProve(conclusion)(using ctx2) then
-        return Right(Setting(withHints = true, withSMT = true))
+  /** Proves that `value` has the `expected` type under `ctx`. */
+  def check(value: Expr, expected: Type, ctx: PrfCtx): Either[String, Unit] =
+    if prove(TypeTest(value, expected), ctx) then
+      return Right(())
 
-    // Otherwise: not proved
-    Left("")
+    for mc <- config.metrics do
+      mc.timeStart("time/verif/type")
+    val inferer = new Inferer(using ctx = ctx)
+    val r = inferer.inferLang(value)
+    for mc <- config.metrics do
+      mc.timePause("time/verif/type")
+    Left(r.toString)
 
-  private def collectSeeds(conclusion: Expr)(using ctx: PrfCtx): List[Expr] = conclusion :: ctx.assumptions
+  /** Infers the type of `value` under `ctx`. */
+  def infer(value: Expr, ctx: PrfCtx): RegEx =
+    for mc <- config.metrics do
+      mc.timeStart("time/verif/type")
+    val inferer = new Inferer(using ctx = ctx)
+    val r = inferer.inferLang(value)
+    for mc <- config.metrics do
+      mc.timePause("time/verif/type")
+    r

@@ -1,5 +1,6 @@
 package flat.checker
 
+import flat.checker.ExprOps.summands
 import flat.checker.core.*
 
 import scala.Function.unlift
@@ -60,8 +61,30 @@ object Analyzer:
       c2 <- getMostRecentValue(i, block, whileStmt)
     do
       invBuf += And(Cmp(reverseCmpOp(expectedOp), Var(i), c2),
-        Cmp(expectedOp, Var(i), Rewriter.simplifyArith(ADD(c1, delta))))
+        Cmp(expectedOp, Var(i), simplifyArith(ADD(c1, delta))))
     invBuf.toList
+
+  private def simplifyArith(expr: Expr): Expr =
+    val (consts, vars) = expr.summands.partition {
+      case Const(_: Int) => true
+      case Negate(Const(_: Int)) => true
+      case _ => false
+    }
+    val k = consts.map {
+      case Const(n: Int) => n
+      case Negate(Const(n: Int)) => -n
+      case _ => assert(false)
+    }.sum
+    val const = if k == 0 then Nil else if k > 0 then List(Const(k)) else List(Negate(Const(-k)))
+    add(vars ++ const)
+
+  private def add(exprs: List[Expr]): Expr = exprs match
+    case Nil => 0
+    case e :: Nil => e
+    case e :: es => es.foldLeft(e) {
+      case (acc, Negate(e)) => SUB(acc, e)
+      case (acc, e) => ADD(acc, e)
+    }
 
   private def accumulateDelta(i: String, stmt: Stmt): Option[Int] =
     stmt match

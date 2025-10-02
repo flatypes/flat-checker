@@ -1,7 +1,4 @@
 <configuration>
-    <!--    <logger name="optimus" level="OFF"/>-->
-    <!--    <logger name="optimus.optimization.MPModel" level="OFF"/>-->
-
     <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>%-5level %class: %msg%n</pattern>
@@ -16,7 +13,7 @@
         </encoder>
     </appender>
 
-    <root level="info">
+    <root level="debug">
         <appender-ref ref="console"/>
         <appender-ref ref="file"/>
     </root>

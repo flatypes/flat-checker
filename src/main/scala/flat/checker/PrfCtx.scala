@@ -1,69 +1,81 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.ExprOps.*
 import flat.checker.core.*
-import flat.regex.RegExpr
+import flat.regex.RegEx
 
-class PrfCtx private(hypotheses: List[Expr])(using val types: Types) extends LazyLogging:
+/** Proof Context. */
+class PrfCtx private(private val stablePremises: List[Expr], private val unstablePremises: List[Expr])
+                    (using val types: Types) extends LazyLogging:
+  /** Returns all premises in this proof context. */
+  def premises: List[Expr] = stablePremises ++ unstablePremises
 
-  import RegExpr.RENone
-  import Rewriter.*
+  /** Returns the RE of the given `str`. */
+  def getLang(str: Expr): RegEx =
+    stablePremises.reverse.collectFirst { case TypeTest(e, LangType(r)) if e == str => r }
+      .getOrElse:
+        str match
+          case Var(x) => types(x).asInstanceOf[LangType].re
+          case _ => throw IllegalArgumentException(s"regex not found: $str")
 
-  def assumptions: List[Expr] = hypotheses
+  /** If there is a premise that tells the RE of some suffix of `str`, i.e., `str[i:]` has type `r`,
+   * then returns this base index `i` and the RE `r`. */
+  def lookupSuffixLang(str: Expr): Option[(Expr, RegEx)] =
+    stablePremises.reverse.collectFirst:
+      case TypeTest(suffix@Substr(e1, ei, Length(e2)), LangType(r)) if e1 == str && e2 == str => (ei, r)
 
-  def contains(cond: Expr): Boolean = hypotheses.contains(cond)
+  def destructCandidates: List[Expr] = unstablePremises //.distinct
 
-  def exists(p: Expr => Boolean): Boolean = hypotheses.exists(p)
+  /** Creates a new proof context with given conditions added. */
+  def ++(conds: List[Expr]): PrfCtx =
+    val (bs1, bs2) = conds.map(simpl).flatMap(conjuncts).partition:
+      case _: Or => false
+      case b => b.collectFirst { case _: Ite => () }.isEmpty
+    PrfCtx(stablePremises ++ bs1, unstablePremises ++ bs2)
 
-  def exists(pf: PartialFunction[Expr, Boolean]): Boolean = exists(x => pf.lift(x).getOrElse(false))
+  inline def +(cond: Expr): PrfCtx = ++(List(cond))
 
-  def collectFirst[T](pf: PartialFunction[Expr, T]): Option[T] = hypotheses.collectFirst(pf)
+  private def destruct(dp: Expr): List[(PrfCtx, List[Expr])] =
+    dp match
+      case _: Or =>
+        assert(unstablePremises.contains(dp))
+        val bs = dp.disjuncts
+        val others = unstablePremises.filter(_ != dp)
+        val ctx = PrfCtx(stablePremises, others)
+        for i <- bs.indices.toList yield
+          val ps = bs(i) :: bs.take(i).map(Not(_))
+          ctx ++ ps -> List(bs(i))
+      case _ =>
+        val b = dp.collectFirst { case Ite(b, _, _) => b }.get
+        destructIf(b)
 
-  def collect[T](pf: PartialFunction[Expr, T]): List[T] = hypotheses.collect(pf)
+  /** Splits this proof context by the value of the given ''disjunctive premises'' that are either logical-ORs
+   * or contain `Ite`s.
+   * For a logical-OR with `k` disjuncts, splits into `k` contexts, each of which holds one disjunctive case.
+   * For an `Ite`, splits into two contexts: one assumes that the if-condition is true, and the other false.
+   */
+  def destruct(dps: List[Expr]): List[(PrfCtx, List[Expr])] = dps match
+    case Nil => throw IllegalArgumentException("no candidate")
+    case List(p) => destruct(p)
+    case p :: rest =>
+      for
+        ctx1 -> ps1 <- destruct(p)
+        ctx -> ps <- ctx1.destruct(rest)
+      yield ctx -> (ps1 ++ ps)
 
-  def foreach(f: Expr => Unit): Unit = hypotheses.foreach(f)
+  /** Splits this proof context by the value of the given `cond` into two contexts: one assumes that `cond` is true,
+   * and the other false. Only `Ite`s with this `cond` will be replaced by its `then` or `else` branch.
+   */
+  def destructIf(cond: Expr): List[(PrfCtx, List[Expr])] =
+    val (ifs, others) = unstablePremises.partition(_.collectFirst { case Ite(e, _, _) if e == cond => () }.isDefined)
+    val ctx = PrfCtx(stablePremises, others)
+    val ps1 = cond :: ifs.map(_.transform { case Ite(e, e1, _) if e == cond => e1 }) // if true
+    val ps2 = Not(cond) :: ifs.map(_.transform { case Ite(e, _, e2) if e == cond => e2 }) // if false
+    List(ctx ++ ps1 -> List(cond), ctx ++ ps2 -> List(Not(cond)))
 
-  def destruct(cond: Expr): (PrfCtx, PrfCtx) =
-    val ctx1 = PrfCtx(hypotheses.map(_.transform { case Ite(c, e, _) if c == cond => e }) :+ cond)
-    val not = destructAnd(simplifyCond(Not(cond)))
-    val ctx2 = PrfCtx(hypotheses.map(_.transform { case Ite(c, _, e) if c == cond => e }) ++ not)
-    (ctx1, ctx2)
-
-  def tryDestruct: Option[(PrfCtx, PrfCtx)] = hypotheses.zipWithIndex.collectFirst {
-    case (Or(b1, b2), i) =>
-      val es1 = hypotheses.take(i)
-      val es2 = hypotheses.drop(i + 1)
-      val ctx1 = PrfCtx(es1 ++ destructAnd(b1) ++ es2)
-      val ctx2 = PrfCtx(es1 ++ destructAnd(b2) ++ destructAnd(simplifyCond(Not(b1))) ++ es2)
-      (ctx1, ctx2)
-    case (e, i) if e.collectFirst { case Ite(_, _, _) => () }.isDefined =>
-      val cond = e.collectFirst { case Ite(c, _, _) => c }.get
-      val e1 = e.transform { case Ite(c, e, _) if c == cond => e }
-      val e2 = e.transform { case Ite(c, _, e) if c == cond => e }
-      val es1 = hypotheses.take(i)
-      val es2 = hypotheses.drop(i + 1)
-      val ctx1 = PrfCtx(es1 ++ destructAnd(cond) ++ destructAnd(e1) ++ es2)
-      val ctx2 = PrfCtx(es1 ++ destructAnd(simplifyCond(Not(cond))) ++ destructAnd(e2) ++ es2)
-      (ctx1, ctx2)
-  }
-
-  def getLang(value: Expr): RegExpr =
-    hypotheses.reverse.collectFirst {
-      case TypeTest(e, LangType(r)) if e == value => r
-    }.getOrElse {
-      value match
-        case Var(x) => types(x).asInstanceOf[LangType].re
-        case _ => throw IllegalArgumentException(s"regex not found: $value")
-    }
-
-  def +(cond: Expr): PrfCtx = PrfCtx(hypotheses ++ destructAnd(simplifyCond(cond)))
-
-  def ++(conds: List[Expr]): PrfCtx = PrfCtx(hypotheses ++ conds.map(simplifyCond).flatMap(destructAnd))
-
-  def canTriviallyProve(conclusion: Expr): Boolean =
-    contains(conclusion) || contains(Const(false)) || exists { case TypeTest(_, LangType(RENone)) => true }
-
-  override def toString: String = hypotheses.mkString(" ∧ ")
+  override def toString: String = premises.mkString(" ∧ ")
 
 object PrfCtx:
-  def empty(using types: Types) = PrfCtx(Nil)
+  /** The empty proof context. */
+  def empty(using types: Types) = PrfCtx(Nil, Nil)
