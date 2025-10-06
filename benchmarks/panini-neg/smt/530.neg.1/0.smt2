@@ -1,0 +1,8 @@
+; Input: /Users/paul/Workspace/flat-checker/benchmarks/panini-neg/py/530.neg.1.py
+(set-logic ALL)
+(declare-const s String)
+(declare-const i@1 Int)
+(assert (let ((_let_1 (str.to_re "a"))) (let ((_let_2 (re.* (re.diff re.allchar _let_1)))) (let ((_let_3 (str.to_re "b"))) (str.in_re s (re.++ _let_2 (re.++ _let_1 (re.* (re.union (re.++ (re.diff re.allchar _let_3) (re.* _let_3)) (re.++ _let_3 (re.++ _let_2 _let_1)))))))))))
+(assert (let ((_let_1 (str.to_re "a"))) (let ((_let_2 (re.* (re.diff re.allchar _let_1)))) (let ((_let_3 (str.to_re "b"))) (let ((_let_4 (re.++ _let_2 (re.++ _let_1 (re.* (re.union (re.++ (re.diff re.allchar _let_3) (re.* _let_3)) (re.++ _let_3 (re.++ _let_2 _let_1)))))))) (let ((_let_5 (str.len s))) (let ((_let_6 (str.in_re (str.substr s i@1 (- _let_5 i@1)) _let_4))) (let ((_let_7 (and (<= 0 i@1) (<= i@1 _let_5)))) (let ((_let_8 (< i@1 _let_5))) (let ((_let_9 (+ i@1 1))) (let ((_let_10 (and (>= i@1 0) _let_8))) (let ((_let_11 (= (str.at s i@1) "a"))) (let ((_let_12 (+ i@1 2))) (let ((_let_13 (and (>= _let_9 0) (< _let_9 _let_5)))) (not (and (and (and (<= 0 0) (<= 0 _let_5)) (str.in_re (str.substr s 0 (- _let_5 0)) _let_4)) (and (=> _let_8 (=> _let_7 (=> _let_6 (and (and _let_10 (=> (and _let_11 _let_10) (and _let_13 (and (=> _let_13 (= (str.at s _let_9) "b")) (and (and (<= 0 _let_12) (<= _let_12 _let_5)) (str.in_re (str.substr s _let_12 (- _let_5 _let_12)) _let_4)))))) (=> (and (not _let_11) _let_10) (and (and (<= 0 _let_9) (<= _let_9 _let_5)) (str.in_re (str.substr s _let_9 (- _let_5 _let_9)) _let_4))))))) (=> (not _let_8) (=> _let_7 (=> _let_6 true))))))))))))))))))))
+(check-sat)
+(exit)

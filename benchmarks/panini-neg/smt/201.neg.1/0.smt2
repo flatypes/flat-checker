@@ -1,0 +1,8 @@
+; Input: /Users/paul/Workspace/flat-checker/benchmarks/panini-neg/py/201.neg.1.py
+(set-logic ALL)
+(declare-const s String)
+(declare-const i@1 Int)
+(assert (let ((_let_1 (str.to_re "a"))) (str.in_re s (re.* (re.union _let_1 (re.++ (re.diff re.allchar _let_1) (re.++ re.allchar (re.* re.allchar))))))))
+(assert (let ((_let_1 (str.len s))) (let ((_let_2 (- _let_1 1))) (let ((_let_3 (>= i@1 0))) (let ((_let_4 (and _let_3 (<= i@1 _let_2)))) (let ((_let_5 (< i@1 _let_2))) (let ((_let_6 (+ i@1 1))) (let ((_let_7 (and _let_3 (< i@1 _let_1)))) (let ((_let_8 (and (>= _let_2 0) (< _let_2 _let_1)))) (not (and _let_8 (and (=> _let_8 (distinct (str.at s _let_2) "a")) (and (and (>= 0 0) (<= 0 _let_2)) (and (=> _let_5 (=> _let_4 (and _let_7 (and (=> _let_7 (= (str.at s i@1) "a")) (and (>= _let_6 0) (<= _let_6 _let_2)))))) (=> (not _let_5) (=> _let_4 true))))))))))))))))
+(check-sat)
+(exit)

@@ -3,6 +3,7 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 *.log
+*.json
 
 ### IntelliJ IDEA ###
 .idea/
@@ -46,6 +47,3 @@ build/
 
 ### Python ###
 *.venv
-
-smt/
-*.json

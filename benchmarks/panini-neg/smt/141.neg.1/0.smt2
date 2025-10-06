@@ -1,0 +1,7 @@
+; Input: /Users/paul/Workspace/flat-checker/benchmarks/panini-neg/py/141.neg.1.py
+(set-logic ALL)
+(declare-const s String)
+(assert (str.in_re s (re.* (re.diff re.allchar (str.to_re "a")))))
+(assert (not (>= (str.indexof s "a" 0) 0)))
+(check-sat)
+(exit)
