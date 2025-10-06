@@ -13,7 +13,7 @@
         </encoder>
     </appender>
 
-    <root level="debug">
+    <root level="off">
         <appender-ref ref="console"/>
         <appender-ref ref="file"/>
     </root>

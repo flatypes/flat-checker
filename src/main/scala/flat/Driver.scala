@@ -8,7 +8,7 @@ import flat.util.MetricCollector
 
 final case class Config(inputs: Seq[os.Path] = Seq.empty,
                         fastExit: Boolean = false, smtTimeLimit: Int = 3000, metrics: Option[MetricCollector] = None,
-                        extractMode: Boolean = false, extractOutput: Option[os.Path] = None)
+                        extractMode: Boolean = false, extractOutput: os.Path = null, extractSubgoals: Boolean = false)
 
 object Driver extends LazyLogging:
   def run(using config: Config): Unit =
@@ -48,8 +48,9 @@ object Driver extends LazyLogging:
       val checker = new Checker
       programs.foreach(checker.check)
       if checker.issuer.noError then
-        logger.info("Type CHECKED")
+        println(s"$path: Type CHECKED")
       else
+        println(s"$path: Type ERROR")
         checker.issuer.print()
       for mc <- config.metrics do
         mc.timePause("time/check")

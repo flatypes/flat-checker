@@ -28,13 +28,19 @@ class Narrower(using config: Config) extends LazyLogging:
         for
           es <- res1.keys
           if !res.contains(es) || res1(es) != res(es)
-        do logger.debug(s"Narrow $es: ${res1(es)}")
+        do
+          logger.debug(s"Narrow $es: ${res1(es)}")
+          for mc <- config.metrics do
+            mc.count("narrow/nontrivial")
         if res1.values.exists(_.isEmpty) then res1
         else iterate(rest, res1)
 
   private def narrowBy(hypothesis: Expr, res: Map[Expr, RegEx])(using ctx: PrfCtx): Map[Expr, RegEx] =
     hypothesis match
       case Cmp(op, Length(es@Var(_)), Const(n: Int)) =>
+        for mc <- config.metrics do
+          mc.count("narrow")
+
         val r = res(es)
         val r1 = mkIntervals(op, n) match
           case List(interval) => r.narrowByLength(interval)
@@ -42,6 +48,9 @@ class Narrower(using config: Config) extends LazyLogging:
           case _ => assert(false)
         res + (es -> r1)
       case Cmp(op, Find(es@Var(_), Const(t: String)), Const(n: Int)) if t.length == 1 =>
+        for mc <- config.metrics do
+          mc.count("narrow")
+
         val c = t.head
         val r = res(es)
         val intervals = mkIntervals(op, n)
@@ -54,6 +63,9 @@ class Narrower(using config: Config) extends LazyLogging:
         val r2 = r1 | (if notFound then r.narrowByNotContain(c) else RENone)
         res + (es -> r2)
       case Cmp(op@(EQ | NE), CharAt(es@Var(_), ei), Const(t: String)) if t.length == 1 =>
+        for mc <- config.metrics do
+          mc.count("narrow")
+
         val c = t.head
         val cs = op match
           case EQ => CharSet(c)
@@ -77,6 +89,9 @@ class Narrower(using config: Config) extends LazyLogging:
           case _ => r
         res + (es -> r1)
       case Cmp(op@(EQ | NE), es@Var(_), Const(t: String)) =>
+        for mc <- config.metrics do
+          mc.count("narrow")
+
         val r = res(es)
         val r1 = op match
           case EQ => r.narrowByEq(t)

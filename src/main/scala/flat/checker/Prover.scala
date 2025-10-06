@@ -57,6 +57,8 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     val valid = smtSolver.proves(conclusion)(using ctx)
     for mc <- config.metrics do
       mc.timePause("time/verif/smt")
+      if valid then
+        mc.count("smt queries/valid")
     if valid then Right("SMT") else Left(())
 
   private def split(conclusion: Expr, ctx: PrfCtx, labels: List[Expr]): List[(Expr, PrfCtx, List[Expr])] =

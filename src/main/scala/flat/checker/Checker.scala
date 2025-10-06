@@ -34,7 +34,7 @@ class Checker(using config: Config) extends LazyLogging:
           case InferType(e, _) => s"$e : ?"
       }")
       for mc <- config.metrics do
-        mc.push("vcs")
+        mc.push("subgoals")
         mc.put("#", vcCounter)
         val kind = vc match
           case _: Goal => "normal"

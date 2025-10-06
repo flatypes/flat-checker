@@ -44,9 +44,12 @@ object CLI:
         .children(
           opt[Path]('o', "output")
             .required()
-            .action { (p, c) => c.copy(extractOutput = Some(os.Path(p.toAbsolutePath))) }
+            .action { (p, c) => c.copy(extractOutput = os.Path(p.toAbsolutePath)) }
             .valueName("<dir>")
             .text("extract to this directory"),
+          opt[Unit]("subgoals")
+            .action { (_, c) => c.copy(extractSubgoals = true) }
+            .text("also extract subgoals for each VC"),
         )
     )
 

@@ -69,6 +69,8 @@ final class SMTSolver(using config: Config) extends LazyLogging:
 
   private val cache = mutable.Map.empty[PrfCtx, Task]
 
+  def mkConst(name: String, typ: Type): cvc5.Term = smt.mkConst(encodeSort(typ.toSort), name)
+
   private def encodeSort(sort: Sort): cvc5.Sort = sort match
     case Sort.Top | Sort.Bot => assert(false)
     case Sort.I => smt.getIntegerSort
@@ -78,7 +80,7 @@ final class SMTSolver(using config: Config) extends LazyLogging:
     case Sort.Array(s) => smt.mkArraySort(smt.getIntegerSort, encodeSort(s))
     case Sort.Fun(ss, s) => smt.mkFunctionSort(ss.map(encodeSort).toArray, encodeSort(s))
 
-  private def encodeHasType(term: cvc5.Term, typ: Type): Option[cvc5.Term] = typ match
+  def encodeHasType(term: cvc5.Term, typ: Type): Option[cvc5.Term] = typ match
     case LangType(r) => Some(smt.mkTerm(Kind.STRING_IN_REGEXP, term, encodeRE(r)))
     case _ => None
 
