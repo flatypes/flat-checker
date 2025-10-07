@@ -6,7 +6,7 @@ then
   echo "Downloaded: ostrich.zip"
 else
   echo "Downloading https://zenodo.org/records/15379336/files/ostrich.zip ..."
-  curl -s -o ostrich.zip https://zenodo.org/records/15379336/files/ostrich.zip
+  curl -o ostrich.zip https://zenodo.org/records/15379336/files/ostrich.zip
 fi
 
 # Unzip and build Docker image.
