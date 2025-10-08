@@ -70,43 +70,36 @@ def process(benchmarks: list[str], methods: list[str]) -> None:
                 writer.writerow(row)
 
         with open(f'results/smt-comparison-summary-{benchmark}.csv', 'w', newline='') as f:
-            fieldnames = ['metric'] + methods
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer = csv.DictWriter(f, fieldnames=['method', 'valid', 'invalid', 'timeout', 'error', 'total_time_ms'])
             writer.writeheader()
 
-            valid_counts = {m: 0 for m in methods}
-            invalid_counts = {m: 0 for m in methods}
-            timeout_counts = {m: 0 for m in methods}
-            error_counts = {m: 0 for m in methods}
-            for _, rs in results.items():
-                for m in methods:
+            for m in methods:
+                valid = 0
+                invalid = 0
+                timeout = 0
+                error = 0
+                for _, rs in results.items():
                     match rs[m]:
                         case 'valid':
-                            valid_counts[m] += 1
+                            valid += 1
                         case 'invalid':
-                            invalid_counts[m] += 1
+                            invalid += 1
                         case 'timeout':
-                            timeout_counts[m] += 1
+                            timeout += 1
                         case 'error':
-                            error_counts[m] += 1
+                            error += 1
                         case _:
                             assert False, f"Unexpected result {rs[m]} for method {m}"
-
-            writer.writerow({'metric': 'valid', **valid_counts})
-            writer.writerow({'metric': 'invalid', **invalid_counts})
-            writer.writerow({'metric': 'timeout', **timeout_counts})
-            writer.writerow({'metric': 'error', **error_counts})
-
-            total_times = {m: 0 for m in methods}
-            for _, ts in times.items():
-                for m in methods:
+                
+                time = 0
+                for k, ts in times.items():
                     if ts[m] is not None:
-                        total_times[m] += ts[m]
-            for m in methods:
-                total_times[m] += timeout_counts[m] * 60000  # timeout is 60s
+                        time += ts[m]
+                    else:
+                        assert results[k][m] == 'timeout'
+                        time += 60000  # timeout is 60s
 
-            writer.writerow({'metric': 'total_time_ms', **total_times})
-
+                writer.writerow({'method': m, 'valid': valid, 'invalid': invalid, 'timeout': timeout, 'error': error, 'total_time_ms': time})
 
 if __name__ == "__main__":
     benchmarks = ['panini', 'panini-neg']
