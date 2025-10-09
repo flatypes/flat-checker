@@ -1,0 +1,6 @@
+metric,flat-checker,ostrich2,z3-noodler-pos,cvc5,z3
+valid,204,202,191,159,152
+invalid,0,0,8,0,0
+timeout,0,2,5,45,52
+error,0,0,0,0,0
+total_time_ms,166018,527088,351751,2702829,3164321
