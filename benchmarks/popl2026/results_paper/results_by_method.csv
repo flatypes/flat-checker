@@ -1,6 +1,0 @@
-method,num_subjects,num_subjects_verified,num_subjects_refuted,num_subjects_unknown,num_goals,num_sat,num_unsat,num_timeouts,time_total_ms,time_total_with_timeouts_ms,time_avg_ms,time_stdev_ms
-z3,203,152,0,51,966,0,866,100,9820.0,6011274.0,11.339,4.877
-z3-noodler-pos,203,198,4,1,966,8,957,1,27047.0,87069.0,28.028,27.246
-flat-checker,203,203,0,0,966,0,966,0,51286.639,51286.639,53.092,814.024
-ostrich2,203,200,0,3,966,0,961,5,1064025.0,1365310.0,1107.206,1394.511
-cvc5,203,159,0,44,966,0,910,56,11986.0,3372698.0,13.171,24.738
