@@ -3,7 +3,7 @@ package flat.checker
 import flat.Ops
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
-import flat.checker.core.*
+import flat.checker.ast.*
 import org.apache.commons.math.optimization.GoalType
 import org.apache.commons.math.optimization.linear.*
 

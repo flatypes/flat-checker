@@ -2,7 +2,7 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
-import flat.checker.core.*
+import flat.checker.ast.*
 import flat.regex.RegEx
 import flat.regex.RegEx.*
 import io.github.cvc5

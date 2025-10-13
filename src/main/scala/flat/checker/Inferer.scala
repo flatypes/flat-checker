@@ -4,8 +4,8 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
-import flat.checker.core.*
-import flat.checker.core.ArithOp.*
+import flat.checker.ast.*
+import flat.checker.ast.ArithOp.*
 import flat.regex.*
 import flat.regex.AOps.*
 

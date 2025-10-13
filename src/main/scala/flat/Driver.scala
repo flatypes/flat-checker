@@ -2,7 +2,7 @@ package flat
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.*
-import flat.checker.core.Program
+import flat.checker.ast.Program
 import flat.checker.py.{Transpiler, Unpickler}
 import flat.util.MetricCollector
 

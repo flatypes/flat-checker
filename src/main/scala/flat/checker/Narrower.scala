@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
-import flat.checker.core.*
+import flat.checker.ast.*
 import flat.regex.*
 import flat.regex.NarrowOps.*
 import flat.regex.RegEx.*

@@ -1,7 +1,7 @@
 package flat.checker
 
 import flat.checker.ExprOps.summands
-import flat.checker.core.*
+import flat.checker.ast.*
 
 import scala.Function.unlift
 import scala.collection.mutable.ListBuffer

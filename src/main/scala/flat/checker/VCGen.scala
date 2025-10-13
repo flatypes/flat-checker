@@ -2,8 +2,8 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.Location
-import flat.checker.core.*
-import flat.checker.core.CmpOp.{GE, LT}
+import flat.checker.ast.*
+import flat.checker.ast.CmpOp.{GE, LT}
 
 import scala.annotation.tailrec
 import scala.collection.mutable

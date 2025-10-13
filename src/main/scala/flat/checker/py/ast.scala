@@ -1,7 +1,7 @@
 package flat.checker.py
 
 import flat.Locational
-import flat.checker.core.Ident
+import flat.checker.ast.Ident
 
 object ast:
   sealed trait Node extends Locational:
