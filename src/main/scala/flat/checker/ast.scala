@@ -181,10 +181,6 @@ object ast:
       case Some(e) => e
       case None => this
 
-    override def toString: String = value match
-      case s: String => "\"" + escapeJava(s) + "\""
-      case _ => value.toString
-
   given Conversion[Int | Boolean | String, Const] = Const.apply
 
   final case class GlobalRef(name: String) extends Expr:
@@ -210,12 +206,6 @@ object ast:
       case Some(e) => e
       case None => this
 
-    override def toString: String =
-      if name.contains('@') then
-        val Array(x, ver) = name.split('@')
-        x + renderSubscript(ver.toInt)
-      else name
-
   final case class TupleExpr(elems: List[Expr]) extends Expr:
     def sort: Sort = Sort.Tuple(elems.map(_.sort))
 
@@ -223,8 +213,6 @@ object ast:
       pf.lift.apply(this) match
         case Some(e) => e
         case None => TupleExpr(elems.map(_.transform(pf)))
-
-    override def toString: String = "(" + elems.mkString(", ") + ")"
 
   def mkUnit: Expr = TupleExpr(Nil)
 

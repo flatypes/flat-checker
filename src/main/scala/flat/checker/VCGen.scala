@@ -2,6 +2,7 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.Location
+import flat.checker.Printer.ppExpr
 import flat.checker.ast.*
 import flat.checker.ast.CmpOp.{GE, LT}
 
@@ -23,14 +24,6 @@ enum VC:
     case Goal(e, err) => Goal(e.subst(mappings), err)
     case LAnd(phi1, phi2) => LAnd(phi1.subst(mappings), phi2.subst(mappings))
     case LImp(e, phi) => LImp(e.subst(mappings), phi.subst(mappings))
-
-  override def toString: String = this match
-    case True => "⊤"
-    case HasType(e, t, _) => s"($e : $t)"
-    case InferType(e, _) => s"($e : ?)"
-    case Goal(e, _) => s"$e"
-    case LAnd(phi1, phi2) => s"($phi1 ∧ $phi2)"
-    case LImp(e, phi) => s"$e ⇒ $phi"
 
 object VC:
   def mkLAnd(formulas: List[VC]): VC =
@@ -102,7 +95,7 @@ object VCGen extends LazyLogging:
         val inv =
           if userInv.isEmpty then Analyzer.guessLoopInv(whileStmt, body).map(_.copyLocation(b)) else userInv
         if userInv.isEmpty then
-          logger.debug(s"Guessing invariants: ${inv.mkString(", ")}")
+          logger.debug(s"Guessing invariants: ${inv.map(ppExpr).mkString(", ")}")
         val pInv = mkLAnd(for e <- inv yield Goal(e, InvariantMayViolate(e.loc)))
         val sides = collectSideGoals(b)
         val pEnter = (b :: sides.map(_._1) ++ inv).foldRight(wlp(s, pInv, pInv))(LImp.apply)

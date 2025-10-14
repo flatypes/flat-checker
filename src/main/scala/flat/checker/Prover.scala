@@ -3,6 +3,7 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.conjuncts
+import flat.checker.Printer.ppExpr
 import flat.checker.ast.*
 import flat.regex.{CharSet, RegEx}
 import flat.{Config, Ops}
@@ -21,16 +22,16 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
         return true
       case _ =>
 
-    // Split the conclusion into multiple goals and try naive prover on each.
+    // Split the conclusion into multiple subgoals and try naive prover on each.
     val attempts = for (c, ctx, ls) <- split(conclusion, ctx, Nil) yield (c, ctx, ls, naive(c)(using ctx))
     val (success, failure) = attempts.partition(_._4.isRight)
     for (c, ctx, ls, res) <- success do
-      logger.debug("Goal " + ls.mkString(", ") + s" ⇒ $c")
+      logger.debug("+ " + ls.map(ppExpr).mkString(", ") + s" ⇒ ${ppExpr(c)}")
       logger.debug("PROVED by " + res.getOrElse("X") + " after split")
 
     // Try destruct/narrow-infer for each failing goals.
     val results = for (c, ctx, ls, _) <- failure yield
-      logger.debug("Goal " + ls.mkString(", ") + s" ⇒ $c")
+      logger.debug("+ " + ls.map(ppExpr).mkString(", ") + s" ⇒ ${ppExpr(c)}")
       if ctx.destructCandidates.nonEmpty then destruct(c, ctx)
       else narrowAndInfer(c, ctx) match
         case Left(_) => false
@@ -84,23 +85,23 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
       yield p
 
     // Destruct the context into multiple and try naive prover on each.
-    logger.debug("Destruct: " + dps.mkString(", "))
+    logger.debug("Destruct: " + dps.map(ppExpr).mkString(", "))
     val attempts = for (ctx, ls) <- ctx.destruct(dps) yield (ctx, ls, naive(conclusion)(using ctx))
     val (success, failure) = attempts.partition(_._3.isRight)
     for (ctx, ls, res) <- success do
-      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("- " + ls.map(ppExpr).mkString(", "))
       logger.debug("PROVED by " + res.getOrElse("X") + " after destruct")
 
     // Try type narrowing and inference for each failing goals.
     val attempts1 = for (ctx, ls, _) <- failure yield (ctx, ls, narrowAndInfer(conclusion, ctx))
     val (success1, failure1) = attempts1.partition(_._3.isRight)
     for (ctx, ls, res) <- success1 do
-      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("- " + ls.map(ppExpr).mkString(", "))
       logger.debug("PROVED by " + res.getOrElse("X"))
 
     // If there are still failing goals, try destruct again.
     val results = for (ctx, ls, _) <- failure1 yield
-      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("- " + ls.map(ppExpr).mkString(", "))
       if ctx.destructCandidates.nonEmpty then
         logger.debug("Try destruct more hypotheses")
         destruct(conclusion, ctx)
@@ -124,7 +125,7 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     // Try finding inconsistency.
     val noneStr = ctx1.premises.collectFirst { case TypeTest(e, LangType(RegEx.RENone)) => e }
     if noneStr.isDefined then
-      return Right(s"contradiction: ${noneStr.get} : ∅")
+      return Right(s"contradiction: ${ppExpr(noneStr.get)} is empty")
 
     conclusion match
       case TypeTest(e, t) =>

@@ -1,6 +1,7 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.Printer.{ppCtx, ppVC}
 import flat.checker.VC.*
 import flat.checker.ast.Program
 import flat.{Config, Issuer, checker}
@@ -12,14 +13,15 @@ class Checker(using config: Config) extends LazyLogging:
 
   /** Type-checks a `program` in the core language. */
   def check(program: Program): Unit =
+    logger.trace("Core program:\n{}", Printer.ppProgram(program))
     val vc = VCGen.generate(program)
 
     given types: Types = Types.from(program.vars)
 
-    vcCounter = 1
+    nextGoal = 1
     discharge(vc, PrfCtx.empty)(using new Prover)
 
-  private var vcCounter = 1
+  private var nextGoal = 1
 
   private def discharge(vc: VC, ctx: PrfCtx)(using prover: Prover): Unit = vc match
     case True =>
@@ -27,15 +29,10 @@ class Checker(using config: Config) extends LazyLogging:
     case LImp(h, vc) => discharge(vc, ctx + h)
     case _ =>
       logger.info("")
-      logger.info(s"VC $vcCounter: $ctx ⇒ ${
-        vc match
-          case Goal(c, _) => c
-          case HasType(e, t, _) => s"$e : $t"
-          case InferType(e, _) => s"$e : ?"
-      }")
+      logger.info(s"Goal $nextGoal: ${ppCtx(ctx)} ⇒ ${ppVC(vc)}")
       for mc <- config.metrics do
         mc.push("vcs")
-        mc.put("#", vcCounter)
+        mc.put("#", nextGoal)
         val kind = vc match
           case _: Goal => "normal"
           case _: HasType => "check type"
@@ -48,14 +45,14 @@ class Checker(using config: Config) extends LazyLogging:
         case Goal(c, err) =>
           if prover.prove(c, ctx) then true
           else
-            logger.info(s"VC $vcCounter NOT PROVED")
+            logger.info(s"Goal $nextGoal NOT PROVED")
             issuer.report(err)
             false
         case HasType(e, t, _) =>
           prover.check(e, t, ctx) match
             case Right(_) => true
             case Left(actual) =>
-              logger.info(s"VC $vcCounter NOT PROVED")
+              logger.info(s"Goal $nextGoal NOT PROVED")
               issuer.report(TypeMayMismatch(t.toString, actual, e.loc))
               false
         case InferType(e, _) =>
@@ -69,4 +66,4 @@ class Checker(using config: Config) extends LazyLogging:
         mc.put("succeed", succeed)
         mc.pop()
 
-      vcCounter += 1
+      nextGoal += 1

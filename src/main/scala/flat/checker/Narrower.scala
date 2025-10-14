@@ -25,10 +25,6 @@ class Narrower(using config: Config) extends LazyLogging:
       case Nil => res
       case e :: rest =>
         val res1 = narrowBy(e, res)
-        for
-          es <- res1.keys
-          if !res.contains(es) || res1(es) != res(es)
-        do logger.debug(s"Narrow $es: ${res1(es)}")
         if res1.values.exists(_.isEmpty) then res1
         else iterate(rest, res1)
 

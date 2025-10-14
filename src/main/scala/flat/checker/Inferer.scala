@@ -119,18 +119,15 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         val rc = RegEx.fromCharSet(substr(r, i1, i2.shift(1)).alphabet)
         val r1 = if isValid(LT(startIdx.get, Length(str))) then rc.+ else rc.*
         val r2 = substr(r, i2.shift(1), j)
-        logger.debug(s"infer substr of $r from $startIndex until $endIndex: $r1 ++ $r2")
         r1 ++ r2
       case (i: BasicIndex, IndexInterval(j1, j2)) =>
         val r1 = substr(r, i, j1)
         val rc = RegEx.fromCharSet(substr(r, j1, j2.shift(1)).alphabet)
         val r2 = if isValid(LT(endIdx.get, Length(str))) then rc.+ else rc.*
-        logger.debug(s"infer substr of $r from $startIndex until $endIndex: $r1 ++ $r2")
         r1 ++ r2
       case (IndexInterval(i, _), IndexInterval(_, j)) =>
         val rc = RegEx.fromCharSet(substr(r, i, j).alphabet)
         val r1 = if isValid(LT(startIdx.get, endIdx.get)) then rc.+ else rc.*
-        logger.debug(s"infer substr of $r from $startIndex until $endIndex: $r1")
         r1
 
   /** Infer the result of a given string `test`. */
