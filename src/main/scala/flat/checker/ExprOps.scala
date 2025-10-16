@@ -1,7 +1,7 @@
 package flat.checker
 
-import flat.checker.core.*
-import flat.checker.core.ArithOp.*
+import flat.checker.ast.*
+import flat.checker.ast.ArithOp.*
 
 object ExprOps:
   extension (expr: Expr)

@@ -1,7 +1,7 @@
 package flat.checker.py
 
 import flat.checker.Sort
-import flat.checker.core.*
+import flat.checker.ast.*
 
 final case class MemberInfo(required: Seq[Sort], optional: Seq[(Sort, Expr)], returns: Sort,
                             builder: PartialFunction[Seq[Expr], Expr],
@@ -21,7 +21,7 @@ final case class MemberInfo(required: Seq[Sort], optional: Seq[(Sort, Expr)], re
     preCond.get.apply(es)
 
 import flat.Ops.CmpOp.*
-import flat.checker.core.ArithOp.*
+import flat.checker.ast.ArithOp.*
 
 val intMemberTable = Map(
   "__pos__" -> MemberInfo(Seq(), Seq(), Sort.I, { case Seq(n) => n }),

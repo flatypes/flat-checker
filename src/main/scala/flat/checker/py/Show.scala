@@ -1,6 +1,6 @@
 package flat.checker.py
 
-import flat.checker.{Sort, core}
+import flat.checker.{Sort, ast}
 
 extension (sort: Sort)
   def show: String = sort match
@@ -13,5 +13,5 @@ extension (sort: Sort)
     case Sort.Array(s) => s"list[${s.show}]"
     case Sort.Fun(ss, s) => s"Callable[[${ss.map(_.show).mkString(", ")}], ${s.show}]"
 
-extension (typ: core.Type)
+extension (typ: ast.Type)
   def show: String = typ.toSort.show

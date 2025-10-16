@@ -1,8 +1,8 @@
 package flat.checker
 
 import flat.Ops.CmpOp.*
-import flat.checker.core.*
-import flat.checker.core.ArithOp.*
+import flat.checker.ast.*
+import flat.checker.ast.ArithOp.*
 import org.scalatest.funspec.AnyFunSpec
 
 class LPSolverTest extends AnyFunSpec:

@@ -9,7 +9,7 @@ import org.apache.commons.text.StringEscapeUtils.escapeJava
 import scala.collection.immutable.Iterable
 import scala.collection.mutable.ListBuffer
 
-object core:
+object ast:
   trait Node
 
   final case class Program(vars: Map[String, Type], body: List[Stmt])

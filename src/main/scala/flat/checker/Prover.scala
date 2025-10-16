@@ -3,7 +3,7 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.conjuncts
-import flat.checker.core.*
+import flat.checker.ast.*
 import flat.regex.{CharSet, RegEx}
 import flat.{Config, Ops}
 

@@ -2,7 +2,7 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.VC.*
-import flat.checker.core.{Program, TypeTest}
+import flat.checker.ast.{Program, TypeTest}
 import flat.{Config, checker}
 import io.github.cvc5
 
