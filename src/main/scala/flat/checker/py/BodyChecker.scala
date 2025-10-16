@@ -1,7 +1,7 @@
 package flat.checker.py
 
 import flat.Issuer
-import flat.checker.ast.{CharAt, CmpOp, Ident, Length}
+import flat.checker.ast.{CharAt, CmpOp, Length, StmtList, mkStmtList}
 import flat.checker.py.ast.*
 import flat.checker.{Sort, ast}
 
@@ -137,7 +137,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
       val (b1, ctx1) = checkBody(node.body, ctx, com)
       val delta1 = ctx1 -- ctx.keySet
       val (b2, ctx2) = checkBody(node.orElse, ctx, com ++ delta1)
-      out += ast.IfStmt(e, b1, b2)
+      out += ast.IfStmt(e, mkStmtList(b1), mkStmtList(b2))
       ctx ++ delta1.view.filterKeys(ctx2.contains)
 
     override def visitWhile(node: While, env: (LCtx, LCtx)): LCtx =
@@ -146,12 +146,12 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, _) = checkBody(realBody, ctx, com)(using insideLoop = true)
       if b.last.isInstanceOf[ast.Break] then // this while loop is just an if-statement
-        out += ast.IfStmt(e, b.dropRight(1), Nil)
+        out += ast.IfStmt(e, mkStmtList(b.dropRight(1)), StmtList(Nil))
         if invNodes.nonEmpty then
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else
         val inv = for expr <- invNodes yield checkType(expr, ast.BoolType, ctx)
-        out += ast.While(e, b, inv)
+        out += ast.While(e, mkStmtList(b), inv)
       ctx
 
     @tailrec

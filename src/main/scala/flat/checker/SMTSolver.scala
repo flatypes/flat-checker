@@ -216,7 +216,7 @@ final class SMTSolver(using config: Config) extends LazyLogging:
       smt.mkTerm(Kind.STRING_FROM_INT, t)
 
     // Array operations
-    case ArraySelect(ea, ei) =>
+    case ArrSelect(ea, ei) =>
       val ta = encodeExpr(ea)
       val ti = encodeExpr(ei)
       // Given an index sort `I` and element sort `E`, an array sort `Array I E` is defined for every index `i` in `I`,

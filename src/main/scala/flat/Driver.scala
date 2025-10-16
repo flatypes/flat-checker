@@ -2,7 +2,7 @@ package flat
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.*
-import flat.checker.ast.Program
+import flat.checker.ast.Module
 import flat.checker.py.{Transpiler, Unpickler}
 import flat.util.MetricCollector
 
@@ -28,7 +28,7 @@ object Driver extends LazyLogging:
         mc.push("files")
         mc.put("path", path.toString)
         mc.timeStart("time/transpile")
-      val programs = transpile(path)
+      val module = transpile(path)
       for mc <- config.metrics do
         mc.timePause("time/transpile")
 
@@ -36,7 +36,8 @@ object Driver extends LazyLogging:
         for mc <- config.metrics do
           mc.timeStart("time/extract")
         val extractor = new Extractor
-        programs.foreach(extractor.extract(_, path))
+        // module.foreach(extractor.extract(_, path))
+        // FIXME
         for mc <- config.metrics do
           mc.timePause("time/extract")
           mc.pop()
@@ -46,7 +47,7 @@ object Driver extends LazyLogging:
       for mc <- config.metrics do
         mc.timeStart("time/check")
       val checker = new Checker
-      programs.foreach(checker.check)
+      checker.check(module)
       if checker.issuer.noError then
         logger.info("Type CHECKED")
       else
@@ -58,7 +59,7 @@ object Driver extends LazyLogging:
 
       if config.fastExit && !checker.issuer.noError then done else checkFiles(rest)
 
-  private inline def transpile(path: os.Path): List[Program] =
+  private inline def transpile(path: os.Path): Module =
     val unpickler = Unpickler(path)
     val tree = unpickler.getTree
     val transpiler = new Transpiler

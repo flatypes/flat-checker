@@ -5,8 +5,8 @@ import flat.Location
 import flat.checker.ast.*
 import flat.checker.ast.CmpOp.{GE, LT}
 
-import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 enum VC:
   case True
@@ -70,17 +70,14 @@ object VCGen extends LazyLogging:
 
   import VC.*
 
-  def generate(program: Program): VC =
-    given Types = Types.from(program.vars)
-
-    given Fresher = new Fresher
-
-    wlp(program.body, True, True)(using pReturn = True)
+  def generate(types: Types, body: Stmt): VC =
+    wlp(body, True, Nil, True)(using types, True, new Fresher)
 
   /** Compute the weakest liberal pre of a statement `stmt` and a post condition `post`. */
   private def wlp(stmt: Stmt, post: VC, body: List[Stmt], pInv: VC)
                  (using types: Types, pReturn: VC, fresher: Fresher): VC =
     stmt match
+      case StmtList(ss) => ss.foldRight(post) { (s, post) => wlp(s, post, ss, pInv) }
       case Assign(x, e) =>
         val sides = collectSideGoals(e)
         val t = types(x)
@@ -92,11 +89,11 @@ object VCGen extends LazyLogging:
         mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(sides.map(_._1), Goal(cond, AssertionMayFail(cond.loc))), post)
       case IfStmt(b, s1, s2) =>
         val conds = destruct(b)
-        val pTrue = conds.foldRight(wlp(s1, post, pInv)) { case (e, p) =>
+        val pTrue = conds.foldRight(wlp(s1, post, body, pInv)) { case (e, p) =>
           val sides = collectSideGoals(e)
           mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(e :: sides.map(_._1), p))
         }
-        val pFalse = mkLImp(Not(b).copyLocation(b) :: collectSideGoals(b).map(_._1), wlp(s2, post, pInv))
+        val pFalse = mkLImp(Not(b).copyLocation(b) :: collectSideGoals(b).map(_._1), wlp(s2, post, body, pInv))
         mkLAnd(pTrue, pFalse)
       case whileStmt@While(b, s, userInv) =>
         val inv =
@@ -105,10 +102,10 @@ object VCGen extends LazyLogging:
           logger.debug(s"Guessing invariants: ${inv.mkString(", ")}")
         val pInv = mkLAnd(for e <- inv yield Goal(e, InvariantMayViolate(e.loc)))
         val sides = collectSideGoals(b)
-        val pEnter = (b :: sides.map(_._1) ++ inv).foldRight(wlp(s, pInv, pInv))(LImp.apply)
+        val pEnter = (b :: sides.map(_._1) ++ inv).foldRight(wlp(s, pInv, body, pInv))(LImp.apply)
         val exitCond = mkOr(
           mkAnd(Not(b).copyLocation(b) :: sides.map(_._1)) ::
-            collectBreakCond(s).map(e => mkAnd(e :: collectSideGoals(e).map(_._1))))
+            collectBreakCond(s.toBlock).map(e => mkAnd(e :: collectSideGoals(e).map(_._1))))
         val pExit = (exitCond :: inv).foldRight(post)(LImp.apply)
         val pLoop = mkLAnd(pEnter, pExit)
         val m = Map.from(for x <- Analyzer.getModifiedVars(whileStmt) yield x -> Var(fresher.fresh(x)))
@@ -119,10 +116,10 @@ object VCGen extends LazyLogging:
         val sides = collectSideGoals(e)
         mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(sides.map(_._1), InferType(e, e.loc)), post)
 
-  @tailrec
-  private def wlp(body: List[Stmt], post: VC, pInv: VC)
-                 (using types: Types, pReturn: VC, fresher: Fresher): VC =
-    if body.isEmpty then post else wlp(body.dropRight(1), wlp(body.last, post, body, pInv), pInv)
+  //  @tailrec
+  //  private def wlp(body: List[Stmt], post: VC, pInv: VC)
+  //                 (using types: Types, pReturn: VC, fresher: Fresher): VC =
+  //    if body.isEmpty then post else wlp(body.dropRight(1), wlp(body.last, post, body, pInv), pInv)
 
   private def destruct(cond: Expr): List[Expr] = cond match
     case And(e1, e2) => destruct(e1) ++ destruct(e2)
@@ -135,15 +132,11 @@ object VCGen extends LazyLogging:
       case IfStmt(cond, List(Break()), _) => cond
     }
 
-  private def collectSideGoals(expr: Expr): List[(Expr, TypeError)] = expr.walkAndCollect {
-    case CharAt(str, index) => // 0 <= index < |str|
-      (And(GE(index, 0), LT(index, Length(str))), IndexMayOutOfBounds(index.loc))
-    case Substr(_, fromIndex, untilIndex) => // both indices are non-negative
-      (And(GE(fromIndex, 0), GE(untilIndex, 0)), IndexMayOutOfBounds(expr.loc))
-    //    case StrToCode(str) => // |str| == 1
-    //      Goal(EQ(StrLen(str), 1), TypeMayMismatch("char (string of length 1)", "string", str.loc))
-    //    case StrFromCode(int) => // 0 <= int <= 0x2FFFF
-    //      Goal(And(GE(int, 0), LE(int, 0x2FFFF)), IndexMayOutOfBounds(int.loc))
-    //    case StrToInt(str) => // str in number
-    //      HasType(str, LangType(RegExpr.number), str.loc)
-  }
+  private def collectSideGoals(expr: Expr): List[(Expr, TypeError)] =
+    val buf = ListBuffer.empty[(Expr, TypeError)]
+    expr.traverse:
+      case CharAt(e, ei) => // 0 <= ei < |e|
+        buf += (And(GE(ei, 0), LT(ei, Length(e))) -> IndexMayOutOfBounds(ei.loc))
+      case Substr(_, ei, ej) => // both indices are non-negative
+        buf += (And(GE(ei, 0), GE(ej, 0)) -> IndexMayOutOfBounds(expr.loc))
+    buf.toList

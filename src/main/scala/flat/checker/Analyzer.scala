@@ -13,9 +13,10 @@ object Analyzer:
 
   def getModifiedVars(stmt: Stmt): Set[String] =
     stmt match
+      case StmtList(ss) => ss.flatMap(getModifiedVars).toSet
       case Assign(x, _) => Set(x)
-      case IfStmt(_, b1, b2) => b1.flatMap(getModifiedVars).toSet | b2.flatMap(getModifiedVars).toSet
-      case While(_, b, _) => b.flatMap(getModifiedVars).toSet
+      case IfStmt(_, s1, s2) => getModifiedVars(s1) | getModifiedVars(s2)
+      case While(_, s, _) => getModifiedVars(s)
       case _ => Set.empty
 
   def extractCmpExprs(cond: Expr): List[Cmp] =
@@ -48,7 +49,7 @@ object Analyzer:
     val invBuf = ListBuffer.empty[Expr]
     for
       i <- getModifiedVars(whileStmt)
-      ds = whileStmt.body.map(accumulateDelta(i, _))
+      ds = whileStmt.body.toBlock.map(accumulateDelta(i, _))
       if ds.forall(_.isDefined)
       delta = ds.map(_.get).sum
       if delta != 0

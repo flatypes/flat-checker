@@ -73,7 +73,7 @@ val strMemberTable = Map(
 
 def arrayMemberTable(elemSort: Sort) = Map(
   "__contains__" -> MemberInfo(Seq(elemSort), Seq(), Sort.B, { case Seq(xs, x) => ??? }),
-  "__getitem__" -> MemberInfo(Seq(Sort.I), Seq(), elemSort, { case Seq(xs, i) => ArraySelect(xs, i) }),
+  "__getitem__" -> MemberInfo(Seq(Sort.I), Seq(), elemSort, { case Seq(xs, i) => ArrSelect(xs, i) }),
   "__setitem__" -> MemberInfo(Seq(Sort.I, elemSort), Seq(), Sort.Bot,
     { case Seq(xs, i, x) => ??? }),
   "__all__" -> MemberInfo(Seq(), Seq(), Sort.B, { case Seq(xs) => ??? }),

@@ -2,18 +2,23 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.VC.*
-import flat.checker.ast.{Program, TypeTest}
+import flat.checker.ast.{FunDef, Module, TypeTest}
 import flat.{Config, checker}
 import io.github.cvc5
 
 import scala.collection.mutable.ListBuffer
 
 class Extractor(using config: Config) extends LazyLogging:
-  def extract(program: Program, input: os.Path): Unit =
-    val vc = VCGen.generate(program)
+  def extract(module: Module, input: os.Path): Unit =
+    require(module.body.length == 1)
+    extract(module.body.head, input)
 
-    given types: Types = Types.from(program.vars)
+  def extract(funDef: FunDef, input: os.Path): Unit =
+    val varDefs = (funDef.params :+ funDef.returns) ++ funDef.locals
 
+    given types: Types = Types.from(varDefs.map(v => v.name -> v.typ))
+
+    val vc = VCGen.generate(types, funDef.body)
     vcCounter = 1
     process(vc, PrfCtx.empty)(using input)
 

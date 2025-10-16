@@ -94,7 +94,7 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
           te match
             case ast.FunType(ts, t) =>
               val es = for (arg, tArg) <- node.args zip ts yield arg.accept(CheckMode, (tArg, ctx))
-              (t, ast.Apply(e, es).copyLocation(node))
+              (t, ast.Apply(e, es.toList).copyLocation(node))
             case _ =>
               issuer.report(TypeMismatch("Callable", te.show, expr.loc))
               (ast.NoType, ast.NoExpr)

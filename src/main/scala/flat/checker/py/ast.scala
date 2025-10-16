@@ -1,11 +1,12 @@
 package flat.checker.py
 
 import flat.Locational
-import flat.checker.ast.Ident
 
 object ast:
   sealed trait Node extends Locational:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T
+
+  final case class Ident(name: String) extends Locational
 
   sealed trait TopStmt extends Node
 

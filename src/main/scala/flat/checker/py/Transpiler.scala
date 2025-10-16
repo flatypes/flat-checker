@@ -2,7 +2,7 @@ package flat.checker.py
 
 import flat.Issuer
 import flat.checker.ast
-import flat.checker.ast.Ident
+import flat.checker.ast.VarDef
 import flat.checker.py.ast.*
 
 import scala.collection.mutable
@@ -42,15 +42,15 @@ final class Transpiler:
 
   import annotChecker.checkAnnot
 
-  def transpile(tree: List[TopStmt]): List[ast.Program] =
+  def transpile(tree: List[TopStmt]): ast.Module =
     val initCtx: GCtx = Map.empty
     val finalCtx = tree.foldLeft(initCtx) { (c, s) => s.accept(FirstPass, c) }
-    val out = ListBuffer.empty[ast.Program]
+    val out = ListBuffer.empty[ast.FunDef]
     val secondPass = SecondPass(out)
     for s <- tree do s.accept(secondPass, finalCtx)
     issuer.ensureNoError()
     // TODO: check all expressions have location
-    out.toList
+    ast.Module(out.toList)
 
   private object FirstPass extends NodeVisitor[GCtx, GCtx]:
     override def visitTypeAlias(node: TypeAlias, ctx: GCtx): GCtx =
@@ -82,19 +82,19 @@ final class Transpiler:
           issuer.report(Redefined(node.ident))
           ctx
 
-  private class SecondPass(out: ListBuffer[ast.Program]) extends NodeVisitor[GCtx, Unit]:
+  private class SecondPass(out: ListBuffer[ast.FunDef]) extends NodeVisitor[GCtx, Unit]:
     override def visitTypeAlias(node: TypeAlias, ctx: GCtx): Unit = () // do nothing
 
     override def visitFunctionDef(node: FunctionDef, ctx: GCtx): Unit =
-      val info = ctx(node.ident.name).asInstanceOf[FunInfo]
+      val name = node.ident.name
+      val vm = new VarManager
+      val info = ctx(name).asInstanceOf[FunInfo]
+      val params = List.from(for (Arg(a, _), t) <- node.args zip info.funType.args yield ast.VarDef(a.name, t))
+      val returnType = info.funType.returns
+      val returns = VarDef("return", returnType)
 
-      given gCtx: GCtx = ctx
-
-      given returnType: ast.Type = info.funType.returns
-
-      given vm: VarManager = new VarManager
-
-      val checker = new BodyChecker
+      val checker = BodyChecker(using gCtx = ctx, returnType = returnType, vm = vm)()
       val lCtx = Map.from(for (Arg(a, _), t) <- node.args zip info.funType.args yield a.name -> vm.declare(t, a))
-      val (s, _) = checker.checkBody(node.body, lCtx, Map.empty)(using insideLoop = false)
-      out += ast.Program(vm.getTypes + ("return" -> returnType), s)
+      val (ss, _) = checker.checkBody(node.body, lCtx, Map.empty)(using insideLoop = false)
+      val locals = List.from(for x -> t <- vm.getTypes.removedAll(node.args.map(_.ident.name)) yield VarDef(x, t))
+      out += ast.FunDef(name, params, returns, locals, ast.mkStmtList(ss))
