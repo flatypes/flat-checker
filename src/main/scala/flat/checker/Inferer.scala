@@ -4,6 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
+import flat.checker.Printer.ppExpr
 import flat.checker.ast.*
 import flat.checker.ast.ArithOp.*
 import flat.regex.*
@@ -39,7 +40,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
           case Some(r) => // select the more premise one
             val cs1 = r.first
             val cs2 = rOrd.first
-            if cs1.subsetOf(cs2) then cs1 else cs2
+            if cs2.subsetOf(cs1) then cs2 else cs1
           case None => rOrd.first
         if cs.isEmpty then RegEx.RENull else RegEx.fromCharSet(cs)
       case Substr(es, ei, Arith(ADD, Find(Substr(e1, e2, Length(e3)), Const(t: String)), e4))
@@ -50,8 +51,10 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         val r1 = substr(r, i, IndexR(0), startIdx = Some(ei))(using es)
         r1.take(IndexAt(t))
       case Substr(es, ei, ej) =>
-        val (rOpt, rOrd) = inferSubstr(es, ei, ej)
-        rOpt.getOrElse(rOrd)
+        inferSubstr(es, ei, ej) match
+          case (Some(r1), r2) => // select the more precise one; if neither is a subset of another, prefer r1
+            if r2.subsetOf(r1) then r2 else r1
+          case (None, r) => r
       case _ => throw IllegalArgumentException(str.toString)
 
   /** Infer the type of `Substr(str, start, end)`.
@@ -65,7 +68,10 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       (base, r) <- ctx.lookupSuffixLang(str)
       ki <- start.diffNonneg(base)
       j <- if end == Length(str) then Some(IndexR(0)) else end.diffNonneg(base).map(IndexR(_))
-    yield substr(r, IndexL(ki), j)(using Substr(str, base, Length(str)))
+      r1 = substr(r, IndexL(ki), j)(using Substr(str, base, Length(str)))
+      _ = logger.debug("infer {}[{}:{}] as {}[{}:][{}:{}]: {}",
+        ppExpr(str), ppExpr(start), ppExpr(end), ppExpr(str), ppExpr(base), ki, j, r1)
+    yield r1
 
     // Ordinary attempt in a compositional manner.
     val r = inferLang(str)

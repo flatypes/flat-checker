@@ -1,7 +1,7 @@
 package flat.checker.py
 
 import flat.Issuer
-import flat.checker.ast.{CharAt, CmpOp, Length, StmtList, mkStmtList}
+import flat.checker.ast.CmpOp.*
 import flat.checker.py.ast.*
 import flat.checker.{Sort, ast}
 
@@ -9,9 +9,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 
 class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: VarManager):
-
-  import CmpOp.*
-
   def checkBody(body: Seq[LocalStmt], ctx: LCtx, com: LCtx)(using insideLoop: Boolean): (List[ast.Stmt], LCtx) =
     val out = ListBuffer.empty[ast.Stmt]
     val checker = Checker(out)
@@ -54,12 +51,12 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
               val id = vm.declare(ast.strType)
               out += ast.Assign(id, e)
               out += ast.Assert(ast.Cmp(EQ,
-                Length(ast.Var(id).withSort(Sort.S)),
+                ast.Length(ast.Var(id).withSort(Sort.S)),
                 ast.Const(values.length)).fillLocation(node.loc))
               var newCtx = ctx
               for i <- values.indices do
                 newCtx = checkAssign(values(i),
-                  CharAt(ast.Var(id).withSort(Sort.S), ast.Const(i)).fillLocation(values(i).loc),
+                  ast.CharAt(ast.Var(id).withSort(Sort.S), ast.Const(i)).fillLocation(values(i).loc),
                   // NOTE: to skip checking the binder has type char
                   ast.strType, (newCtx, com))
               return newCtx
@@ -137,7 +134,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
       val (b1, ctx1) = checkBody(node.body, ctx, com)
       val delta1 = ctx1 -- ctx.keySet
       val (b2, ctx2) = checkBody(node.orElse, ctx, com ++ delta1)
-      out += ast.IfStmt(e, mkStmtList(b1), mkStmtList(b2))
+      out += ast.IfStmt(e, ast.mkStmtList(b1), ast.mkStmtList(b2))
       ctx ++ delta1.view.filterKeys(ctx2.contains)
 
     override def visitWhile(node: While, env: (LCtx, LCtx)): LCtx =
@@ -146,12 +143,12 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, _) = checkBody(realBody, ctx, com)(using insideLoop = true)
       if b.last.isInstanceOf[ast.Break] then // this while loop is just an if-statement
-        out += ast.IfStmt(e, mkStmtList(b.dropRight(1)), StmtList(Nil))
+        out += ast.IfStmt(e, ast.mkStmtList(b.dropRight(1)), ast.Skip())
         if invNodes.nonEmpty then
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else
         val inv = for expr <- invNodes yield checkType(expr, ast.BoolType, ctx)
-        out += ast.While(e, mkStmtList(b), inv)
+        out += ast.While(e, ast.mkStmtList(b), inv)
       ctx
 
     @tailrec

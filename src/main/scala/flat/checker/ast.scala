@@ -84,16 +84,23 @@ object ast:
 
     def toBlock: List[Stmt] = List(this)
 
-  final case class StmtList(block: List[Stmt]) extends Stmt:
-    def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitStmtList(this)
+  final case class Skip() extends Stmt:
+    def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitSkip(this)
 
-    protected def children: List[Stmt] = block
+    protected def children: List[Stmt] = Nil
 
-    override def toBlock: List[Stmt] = block
+    override def toBlock: List[Stmt] = Nil
+
+  final case class SeqStmt(first: Stmt, second: Stmt) extends Stmt:
+    def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitSeqStmt(this)
+
+    protected def children: List[Stmt] = List(first, second)
+
+    override def toBlock: List[Stmt] = first.toBlock ++ second.toBlock
 
   def mkStmtList(body: List[Stmt]): Stmt = body match
-    case List(s) => s
-    case _ => StmtList(body)
+    case Nil => Skip()
+    case ss => ss.reduceRight(SeqStmt(_, _))
 
   final case class Assign(id: String, value: Expr) extends Stmt:
     def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitAssign(this)
@@ -131,7 +138,9 @@ object ast:
     protected def children: List[Stmt] = Nil
 
   trait StmtVisitor[C, T]:
-    def visitStmtList(node: StmtList)(using ctx: C): T
+    def visitSkip(node: Skip)(using ctx: C): T
+
+    def visitSeqStmt(node: SeqStmt)(using ctx: C): T
 
     def visitAssign(node: Assign)(using ctx: C): T
 

@@ -71,13 +71,14 @@ object VCGen extends LazyLogging:
   import VC.*
 
   def generate(types: Types, body: Stmt): VC =
-    wlp(body, True, Nil, True)(using types, True, new Fresher)
+    wlp(body, True, body.toBlock, True)(using types, True, new Fresher)
 
   /** Compute the weakest liberal pre of a statement `stmt` and a post condition `post`. */
   private def wlp(stmt: Stmt, post: VC, body: List[Stmt], pInv: VC)
                  (using types: Types, pReturn: VC, fresher: Fresher): VC =
     stmt match
-      case StmtList(ss) => ss.foldRight(post) { (s, post) => wlp(s, post, ss, pInv) }
+      case Skip() => post
+      case SeqStmt(s1, s2) => wlp(s1, wlp(s2, post, body, pInv), body, pInv)
       case Assign(x, e) =>
         val sides = collectSideGoals(e)
         val t = types(x)
@@ -89,11 +90,13 @@ object VCGen extends LazyLogging:
         mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(sides.map(_._1), Goal(cond, AssertionMayFail(cond.loc))), post)
       case IfStmt(b, s1, s2) =>
         val conds = destruct(b)
-        val pTrue = conds.foldRight(wlp(s1, post, body, pInv)) { case (e, p) =>
+        val body1 = s1.toBlock
+        val pTrue = conds.foldRight(wlp(s1, post, body1, pInv)) { case (e, p) =>
           val sides = collectSideGoals(e)
           mkLAnd(mkLAnd(sides.map(Goal(_, _))), mkLImp(e :: sides.map(_._1), p))
         }
-        val pFalse = mkLImp(Not(b).copyLocation(b) :: collectSideGoals(b).map(_._1), wlp(s2, post, body, pInv))
+        val body2 = s2.toBlock
+        val pFalse = LImp(Not(b).copyLocation(b), wlp(s2, post, body2, pInv))
         mkLAnd(pTrue, pFalse)
       case whileStmt@While(b, s, userInv) =>
         val inv =
@@ -102,7 +105,8 @@ object VCGen extends LazyLogging:
           logger.debug(s"Guessing invariants: ${inv.mkString(", ")}")
         val pInv = mkLAnd(for e <- inv yield Goal(e, InvariantMayViolate(e.loc)))
         val sides = collectSideGoals(b)
-        val pEnter = (b :: sides.map(_._1) ++ inv).foldRight(wlp(s, pInv, body, pInv))(LImp.apply)
+        val body1 = s.toBlock
+        val pEnter = (b :: sides.map(_._1) ++ inv).foldRight(wlp(s, pInv, body1, pInv))(LImp.apply)
         val exitCond = mkOr(
           mkAnd(Not(b).copyLocation(b) :: sides.map(_._1)) ::
             collectBreakCond(s.toBlock).map(e => mkAnd(e :: collectSideGoals(e).map(_._1))))

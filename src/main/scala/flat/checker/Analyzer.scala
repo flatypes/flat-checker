@@ -13,7 +13,7 @@ object Analyzer:
 
   def getModifiedVars(stmt: Stmt): Set[String] =
     stmt match
-      case StmtList(ss) => ss.flatMap(getModifiedVars).toSet
+      case SeqStmt(s1, s2) => getModifiedVars(s1) | getModifiedVars(s2)
       case Assign(x, _) => Set(x)
       case IfStmt(_, s1, s2) => getModifiedVars(s1) | getModifiedVars(s2)
       case While(_, s, _) => getModifiedVars(s)

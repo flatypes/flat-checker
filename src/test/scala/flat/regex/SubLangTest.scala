@@ -49,6 +49,7 @@ class SubLangTest extends AnyFunSpec, REAssertions:
       assertSub("a{1,5}", "a*")
       assertSub("a{5,}", "a*")
       assertSub("(ab){2,}", "a(ba)*b")
+      assertSub("(ab)*", "[ab]*")
 
     it("negative"):
       assertNotSub("ab*", "ac*")
