@@ -1,7 +1,7 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.VC.*
+import flat.checker.Formula.*
 import flat.checker.ast.{FunDef, Module, TypeTest}
 import flat.{Config, checker}
 import io.github.cvc5
@@ -26,7 +26,7 @@ class Extractor(using config: Config) extends LazyLogging:
 
   private val slv = new SMTSolver
 
-  private def process(vc: VC, ctx: PrfCtx)(using input: os.Path): Unit = vc match
+  private def process(vc: Formula, ctx: PrfCtx)(using input: os.Path): Unit = vc match
     case True =>
     case Goal(c, _) =>
       val task = slv.create(ctx)

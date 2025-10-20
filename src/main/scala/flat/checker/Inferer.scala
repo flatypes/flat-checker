@@ -35,7 +35,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       case Reverse(es) => inferLang(es).reverse
       case CharAt(es, ei) =>
         // es[ei] = es[ei:].take1
-        val (rOpt, rOrd) = inferSubstr(es, ei, Length(es))
+        val (rOpt, rOrd) = inferSubstr(es, ei, Length(es))(using ctx + LT(ei, Length(es)))
         val cs = rOpt match
           case Some(r) => // select the more premise one
             val cs1 = r.first
@@ -59,7 +59,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
 
   /** Infer the type of `Substr(str, start, end)`.
    * Return two solutions: one using the suffix lang (if specified), and the other using the ordinary method. */
-  private def inferSubstr(str: Expr, start: Expr, end: Expr): (Option[RegEx], RegEx) =
+  private def inferSubstr(str: Expr, start: Expr, end: Expr)(using ctx: PrfCtx): (Option[RegEx], RegEx) =
     // Optional attempt: Given that the language of `str[base:]` (for some `base` index) is `r`,
     // and that `start` equals to `base + ki` for some constant ki >= 0.
     // - If `end` is the end index, then it suffices to infer `r[ki:]`;
@@ -68,7 +68,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       (base, r) <- ctx.lookupSuffixLang(str)
       ki <- start.diffNonneg(base)
       j <- if end == Length(str) then Some(IndexR(0)) else end.diffNonneg(base).map(IndexR(_))
-      r1 = substr(r, IndexL(ki), j)(using Substr(str, base, Length(str)))
+      r1 = substr(r, IndexL(ki), j)(using str = Substr(str, base, Length(str)))
       _ = logger.debug("infer {}[{}:{}] as {}[{}:][{}:{}]: {}",
         ppExpr(str), ppExpr(start), ppExpr(end), ppExpr(str), ppExpr(base), ki, j, r1)
     yield r1
@@ -77,13 +77,13 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     val r = inferLang(str)
     val i = indexInferer.infer(start, str)
     val j = indexInferer.infer(end, str)
-    val rOrd = substr(r, i, j, startIdx = Some(start), endIdx = Some(end))(using str)
+    val rOrd = substr(r, i, j, startIdx = Some(start), endIdx = Some(end))(using str = str)
 
     // Return both results.
     (rOpt, rOrd)
 
   private def substr(r: RegEx, startIndex: Index, endIndex: Index,
-                     startIdx: Option[Expr] = None, endIdx: Option[Expr] = None)(using str: Expr): RegEx =
+                     startIdx: Option[Expr] = None, endIdx: Option[Expr] = None)(using str: Expr, ctx: PrfCtx): RegEx =
     (startIndex, endIndex) match
       case (IndexL(0), IndexR(0)) => r
       case (i: BasicIndex, IndexR(0)) => r.drop(i)
@@ -203,4 +203,5 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
 
   private val smtSolver = new SMTSolver
 
-  private def isValid(cond: Expr): Boolean = ctx.premises.contains(cond) || smtSolver.proves(cond)
+  private def isValid(cond: Expr)(using ctx: PrfCtx): Boolean =
+    ctx.premises.contains(cond) || smtSolver.proves(cond)

@@ -25,12 +25,12 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     val attempts = for (c, ctx, ls) <- split(conclusion, ctx, Nil) yield (c, ctx, ls, naive(c)(using ctx))
     val (success, failure) = attempts.partition(_._4.isRight)
     for (c, ctx, ls, res) <- success do
-      logger.debug("Goal " + ls.mkString(", ") + s" ⇒ $c")
+      logger.debug("+ " + ls.mkString(", ") + s" ⇒ $c")
       logger.debug("PROVED by " + res.getOrElse("X") + " after split")
 
     // Try destruct/narrow-infer for each failing goals.
     val results = for (c, ctx, ls, _) <- failure yield
-      logger.debug("Goal " + ls.mkString(", ") + s" ⇒ $c")
+      logger.debug("+ " + ls.mkString(", ") + s" ⇒ $c")
       if ctx.destructCandidates.nonEmpty then destruct(c, ctx)
       else narrowAndInfer(c, ctx) match
         case Left(_) => false
@@ -88,19 +88,19 @@ final class Prover(using config: Config, types: Types) extends LazyLogging:
     val attempts = for (ctx, ls) <- ctx.destruct(dps) yield (ctx, ls, naive(conclusion)(using ctx))
     val (success, failure) = attempts.partition(_._3.isRight)
     for (ctx, ls, res) <- success do
-      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("- " + ls.mkString(", ") + ":")
       logger.debug("PROVED by " + res.getOrElse("X") + " after destruct")
 
     // Try type narrowing and inference for each failing goals.
     val attempts1 = for (ctx, ls, _) <- failure yield (ctx, ls, narrowAndInfer(conclusion, ctx))
     val (success1, failure1) = attempts1.partition(_._3.isRight)
     for (ctx, ls, res) <- success1 do
-      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("- " + ls.mkString(", ") + ":")
       logger.debug("PROVED by " + res.getOrElse("X"))
 
     // If there are still failing goals, try destruct again.
     val results = for (ctx, ls, _) <- failure1 yield
-      logger.debug("Case " + ls.mkString(", ") + ":")
+      logger.debug("- " + ls.mkString(", ") + ":")
       if ctx.destructCandidates.nonEmpty then
         logger.debug("Try destruct more hypotheses")
         destruct(conclusion, ctx)

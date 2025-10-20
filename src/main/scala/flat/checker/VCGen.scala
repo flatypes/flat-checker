@@ -8,15 +8,15 @@ import flat.checker.ast.CmpOp.{GE, LT}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-enum VC:
+enum Formula:
   case True
   case HasType(value: Expr, typ: Type, loc: Location)
   case InferType(value: Expr, loc: Location)
   case Goal(boolExpr: Expr, err: TypeError)
-  case LAnd(left: VC, right: VC)
-  case LImp(premise: Expr, conclusion: VC)
+  case LAnd(left: Formula, right: Formula)
+  case LImp(premise: Expr, conclusion: Formula)
 
-  def subst(mappings: Map[String, Expr]): VC = this match
+  def subst(mappings: Map[String, Expr]): Formula = this match
     case True => True
     case HasType(e, t, loc) => HasType(e.subst(mappings), t, loc)
     case InferType(e, loc) => InferType(e.subst(mappings), loc)
@@ -32,17 +32,17 @@ enum VC:
     case LAnd(phi1, phi2) => s"($phi1 ∧ $phi2)"
     case LImp(e, phi) => s"$e ⇒ $phi"
 
-object VC:
-  def mkLAnd(formulas: List[VC]): VC =
+object Formula:
+  def mkLAnd(formulas: List[Formula]): Formula =
     val nontrivial = formulas.filter {
       case True | LImp(_, True) => false
       case _ => true
     }
     if nontrivial.isEmpty then True else nontrivial.reduceRight(LAnd.apply)
 
-  def mkLAnd(formulas: VC*): VC = mkLAnd(formulas.toList)
+  def mkLAnd(formulas: Formula*): Formula = mkLAnd(formulas.toList)
 
-  def mkLImp(premises: List[Expr], conclusion: VC): VC = premises match
+  def mkLImp(premises: List[Expr], conclusion: Formula): Formula = premises match
     case Nil => conclusion
     case _ => LImp(premises.reduce(And(_, _)), conclusion)
 
@@ -59,26 +59,18 @@ final class Types(store: Map[String, Type]):
 object Types:
   def from(it: IterableOnce[(String, Type)]) = Types(Map.from(it))
 
-class Fresher:
-  private val latest = mutable.Map.empty[String, Int]
-
-  def fresh(name: String): String =
-    require(!name.contains('@'))
-    val k = latest.getOrElse(name, 0)
-    latest(name) = k + 1
-    s"$name@${k + 1}"
-
+@deprecated
 object VCGen extends LazyLogging:
 
-  import VC.*
+  import Formula.*
 
-  def generate(types: Types, body: Stmt): VC =
-    Analyzer.guessInvariants(body, Map.from(for x <- types.intVars yield x -> Analyzer.Value.Rel(0)))
+  def generate(types: Types, body: Stmt): Formula =
+    Analyzer.guessInvariants(body)
     wlp(body, True, body.toBlock, True)(using types, True, new Fresher)
 
   /** Compute the weakest liberal pre of a statement `stmt` and a post condition `post`. */
-  private def wlp(stmt: Stmt, post: VC, body: List[Stmt], pInv: VC)
-                 (using types: Types, pReturn: VC, fresher: Fresher): VC =
+  private def wlp(stmt: Stmt, post: Formula, body: List[Stmt], pInv: Formula)
+                 (using types: Types, pReturn: Formula, fresher: Fresher): Formula =
     stmt match
       case Skip() => post
       case SeqStmt(s1, s2) => wlp(s1, wlp(s2, post, body, pInv), body, pInv)

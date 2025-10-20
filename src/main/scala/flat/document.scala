@@ -31,8 +31,8 @@ trait Locational:
     this.optLoc = Some(from.loc)
     this
 
-class Diagnostic(val loc: Location, val severity: DiagnosticSeverity, val message: String,
-                 val detail: String = ""):
+class Diagnostic(val loc: Location, val message: String,
+                 val detail: String = "", val severity: DiagnosticSeverity = DiagnosticSeverity.ERROR):
   def longString: String =
     val buf = ListBuffer.empty[String]
     val lineNumberWidth = (loc.end.row + 1).toString.length

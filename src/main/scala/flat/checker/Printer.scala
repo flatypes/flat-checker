@@ -1,7 +1,6 @@
 package flat.checker
 
 import flat.Ops.CmpOp.*
-import flat.checker.VC.*
 import flat.checker.ast.*
 import flat.regex.RegEx
 import flat.regex.RegEx.*
@@ -264,6 +263,10 @@ object Printer:
       val cond = ppExpr(node.cond)
       ("  " * level) + s"assert $cond" + "\n"
 
+    def visitAssume(node: Assume)(using level: Int): String =
+      val cond = ppExpr(node.cond)
+      ("  " * level) + s"assume $cond" + "\n"
+
     def visitShowType(node: ShowType)(using level: Int): String =
       val value = ppExpr(node.value)
       ("  " * level) + s"infer $value" + "\n"
@@ -288,24 +291,14 @@ object Printer:
     def visitReturn(node: Return)(using level: Int): String =
       ("  " * level) + "return" + "\n"
 
-  def ppVC(vc: VC): String = vc match
-    case True => "⊤"
-    case HasType(e, t, _) =>
-      val se = ppExpr(e)
-      val st = ppType(t)
-      s"$se ∈ $st"
-    case InferType(e, _) =>
-      val se = ppExpr(e)
-      s"$se ∈ ?"
-    case Goal(e, _) => ppExpr(e)
-    case LAnd(vc1, vc2) =>
-      val s1 = if vc1.isInstanceOf[LImp] then paren(ppVC(vc1)) else ppVC(vc1)
-      val s2 = if vc2.isInstanceOf[LImp] then paren(ppVC(vc2)) else ppVC(vc2)
-      s"$s1 ∧ $s2"
-    case LImp(e, vc) =>
-      val s1 = ppExpr(e)
-      val s2 = ppVC(vc)
-      s"$s1 ⇒ $s2"
+  def ppVCGoal(goal: VCGoal): String = goal match
+    case VCType(e, t) =>
+      val value = ppExpr(e)
+      val expected = ppType(t)
+      s"$value ∈ $expected"
+    case _ =>
+      val cond = ppExpr(goal.cond)
+      s"$cond (${goal.getClass.getSimpleName})"
 
   def ppCtx(ctx: PrfCtx): String =
     val ss = ctx.premises.map(ppExpr)

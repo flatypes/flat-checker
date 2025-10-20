@@ -72,7 +72,8 @@ object ast:
     protected def children: List[Stmt]
 
     def traverse(pf: PartialFunction[Stmt, Unit]): Unit =
-      for e <- this :: children do pf.applyOrElse(e, _ => {})
+      pf.applyOrElse(this, _ => {})
+      children.foreach(_.traverse(pf))
 
     def collect[T](pf: PartialFunction[Stmt, T]): List[T] =
       pf.lift.apply(this) match
@@ -113,6 +114,11 @@ object ast:
 
     protected def children: List[Stmt] = Nil
 
+  final case class Assume(cond: Expr) extends Stmt:
+    def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitAssume(this)
+
+    protected def children: List[Stmt] = Nil
+
   final case class ShowType(value: Expr) extends Stmt:
     def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitShowType(this)
 
@@ -149,6 +155,8 @@ object ast:
 
     def visitAssert(node: Assert)(using ctx: C): T
 
+    def visitAssume(node: Assume)(using ctx: C): T
+
     def visitShowType(node: ShowType)(using ctx: C): T
 
     def visitIfStmt(node: IfStmt)(using ctx: C): T
@@ -168,7 +176,8 @@ object ast:
     protected def update(newChildren: List[Expr]): Expr
 
     def traverse(pf: PartialFunction[Expr, Unit]): Unit =
-      for e <- this :: children do pf.applyOrElse(e, _ => {})
+      pf.applyOrElse(this, _ => {})
+      children.foreach(_.traverse(pf))
 
     def collect[T](pf: PartialFunction[Expr, T]): List[T] =
       pf.lift.apply(this) match

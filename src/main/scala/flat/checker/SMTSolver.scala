@@ -13,12 +13,18 @@ import scala.collection.mutable
 final class SMTSolver(using config: Config) extends LazyLogging:
   private val smt = cvc5.TermManager()
 
-  final class Task(val slv: cvc5.Solver, val consts: Map[String, cvc5.Term]):
+  final class Task(val slv: cvc5.Solver, val consts: Map[String, cvc5.Term])(using types: Types):
     def assertions: List[cvc5.Term] = slv.getAssertions.toList
 
     private def smtSolve(conclusion: Expr): cvc5.Result =
       slv.push()
-      val t = encodeExpr(conclusion)(using consts)
+      val m = mutable.Map.from(consts)
+      for x <- conclusion.collectVars do
+        if !m.contains(x) then
+          val s = encodeSort(types(x).toSort)
+          val t = smt.mkConst(s, x)
+          m(x) = t
+      val t = encodeExpr(conclusion)(using m.toMap)
       slv.assertFormula(t.notTerm)
       val result = slv.checkSat()
       slv.pop()
@@ -63,7 +69,7 @@ final class SMTSolver(using config: Config) extends LazyLogging:
           slv.assertFormula(t)
         // 3. Done
         val consts = Map.from(for x -> t <- vars yield t.getSymbol -> t)
-        val task = Task(slv, consts)
+        val task = Task(slv, consts)(using ctx.types)
         cache(ctx) = task
         task
 

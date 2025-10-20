@@ -2,13 +2,26 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.Ops.CmpOp.*
-import flat.checker.Printer.{ppExpr, ppStmt}
+import flat.checker.Printer.ppExpr
 import flat.checker.ast.*
 import flat.checker.ast.ArithOp.*
 
 object Analyzer extends LazyLogging:
+  /** An execution ''trace'' is a list of statements. */
+  private type Trace = List[Stmt]
+
+  /** Collects traces from executing the given `stmts`. */
+  private def collectTraces(stmts: List[Stmt]): List[Trace] = stmts match
+    case Nil => List(Nil)
+    case Skip() :: ss => collectTraces(ss)
+    case SeqStmt(s1, s2) :: ss => collectTraces(s1 :: s2 :: ss)
+    case IfStmt(b, s1, s2) :: ss =>
+      collectTraces(s1 :: ss).map(Assume(b) :: _) ++ collectTraces(s2 :: ss).map(Assume(Not(b)) :: _)
+    case s@(Break() | Return()) :: _ => List(s)
+    case s :: ss => collectTraces(ss).map(s :: _)
+
   /** Symbolic Value */
-  enum Value:
+  private enum Value:
     case Abs(value: Expr)
     case Rel(delta: Int)
     case Unknown
@@ -22,37 +35,19 @@ object Analyzer extends LazyLogging:
 
   import Value.*
 
-  /** A ''state'' is a map from variables to symbolic values. */
-  type State = Map[String, Value]
-
-  /** Executes (symbolically) the given `stmt` under the initial `state`.
-   *
-   * Restrictions:
-   *  - Only integer variables are supported.
-   *  - While-loops are handled by killing all modified variables.
-   */
-  def execute(stmt: Stmt, state: State)(using trace: (Stmt, State) => Unit): State =
-    trace(stmt, state)
-    stmt match
-      case SeqStmt(s1, s2) =>
-        val state1 = execute(s1, state)
-        execute(s2, state1)
-      case Assign(x, e) if state.contains(x) =>
+  private def computeValue(name: String, trace: Trace): Value =
+    var value = Rel(0)
+    trace.foreach:
+      case Assign(x, e) if x == name =>
         e match
           case Arith(op, Var(y), Const(k: Int)) if y == x =>
-            val v = state(x) + (if op == ADD then k else -k)
-            state + (x -> v)
+            value += (if op == ADD then k else -k)
           case _ =>
-            val v = if e.collectVars.contains(x) then Unknown else Abs(e)
-            state + (x -> v)
-      case IfStmt(b, s1, s2) =>
-        val state1 = execute(s1, state)
-        val state2 = execute(s2, state)
-        Map.from(for x <- state1.keys yield x -> (state1(x) | state2(x)))
-      case While(_, s) =>
-        val modified = collectModifiedVars(s) & state.keySet
-        state ++ (for x <- modified yield x -> Unknown)
-      case _ => state
+            value = if e.collectVars.contains(x) then Unknown else Abs(e)
+      case While(_, s) if collectModifiedVars(s).contains(name) =>
+        value = Unknown
+      case _ =>
+    value
 
   /** Collects all variables that are modified (as lhs of `Assign`) inside the given `stmt`. */
   def collectModifiedVars(stmt: Stmt): Set[String] = stmt match
@@ -70,48 +65,48 @@ object Analyzer extends LazyLogging:
    *  - `e0 ≤ x < e + k` if `k > 0` and `op` is `<` (similar for `≤`);
    *  - `e + k < x ≤ e0` if `k < 0` and `op` is `>` (similar for `≥`).
    *
-   * @param body  the body of the program to analyze
-   * @param state the initial state
+   * @param body the body of the program to analyze
    */
-  def guessInvariants(body: Stmt, state: State): Unit = execute(body, state)(using guess)
-
-  private def guess(stmt: Stmt, state: State): Unit = stmt match
-    case loop@While(Cmp(op, Var(x), e), s) if loop.invariants.isEmpty && op != EQ && op != NE &&
-      (e.collectVars & collectModifiedVars(s)).isEmpty =>
-      state(x) match
-        case Abs(e0) =>
-          val finalState = execute(s, Map(x -> Rel(0)))(using (_, _) => {})
-          (finalState(x), op) match
-            case (Rel(k), LT | LE) if k > 0 =>
-              val inv = And(LE(e0, Var(x)), op(Var(x), mkAdd(e, k)))
-              logger.debug("Guessed invariant: {}", ppExpr(inv))
-              loop.invariants += inv.setLocation(loop.cond.loc)
-            case (Rel(k), GT | GE) if k < 0 =>
-              val inv = And(op.reverse(mkAdd(e, k), Var(x)), LE(Var(x), e0))
-              logger.debug("Guessed invariant: {}", ppExpr(inv))
-              loop.invariants += inv.setLocation(loop.cond.loc)
-            case _ =>
-        case _ =>
-    case _ =>
+  def guessInvariants(body: Stmt): Unit =
+    body.traverse:
+      case loop@While(Cmp(op, Var(x), e), s) if loop.invariants.isEmpty && op != EQ && op != NE &&
+        (e.collectVars & collectModifiedVars(s)).isEmpty =>
+        val initValues = for
+          trace <- collectTraces(List(body))
+          k = trace.indexOf(loop)
+          if k >= 0
+        yield computeValue(x, trace.take(k))
+        initValues.reduce(_ | _) match
+          case Abs(e0) =>
+            val finalValues = collectTraces(List(s)).map(computeValue(x, _))
+            (finalValues.reduce(_ | _), op) match
+              case (Rel(k), LT | LE) if k > 0 =>
+                val inv = And(LE(e0, Var(x)), op(Var(x), mkAdd(e, k)))
+                logger.debug("Guessed invariant: {}", ppExpr(inv))
+                loop.invariants += inv.setLocation(loop.cond.loc)
+              case (Rel(k), GT | GE) if k < 0 =>
+                val inv = And(op.reverse(mkAdd(e, k), Var(x)), LE(Var(x), e0))
+                logger.debug("Guessed invariant: {}", ppExpr(inv))
+                loop.invariants += inv.setLocation(loop.cond.loc)
+              case _ =>
+          case _ =>
+      case _ =>
 
   /** Collects the `break`-conditions in the given loop `body`. */
   def collectBreakConds(body: Stmt): List[Expr] =
-    body.toBlock.flatMap:
-      case IfStmt(b, Break(), Skip()) => List(b)
-      case IfStmt(_, s1, s2) => collectBreakAssert(s1.toBlock) ++ collectBreakAssert(s2.toBlock)
-      case Break() => throw IllegalStateException("loop body contains non-conditional break: " + ppStmt(body))
-      case _ => Nil
+    for
+      trace <- collectTraces(List(body))
+      k = trace.indexOf(Break())
+      if k >= 0
+    yield collectExitCond(trace.take(k))
 
-  /** Collects `assert`-conditions right before `break`-statements in the given `block`. */
-  private def collectBreakAssert(block: List[Stmt]): List[Expr] =
-    block.flatMap:
-      case IfStmt(_, s1, s2) => collectBreakAssert(s1.toBlock) ++ collectBreakAssert(s2.toBlock)
-      case brk@Break() =>
-        val i = block.indexOf(brk)
-        if i - 1 >= 0 && block(i - 1).isInstanceOf[Assert] then
-          val b = block(i - 1).asInstanceOf[Assert].cond
-          List(b)
-        else
-          logger.warn("cannot collect break-conditions for statement {} of the block {}", i, ppStmt(mkStmtList(block)))
-          List(true)
-      case _ => Nil
+  private def collectExitCond(trace: Trace): Expr =
+    mkAnd:
+      trace.reverse
+        .takeWhile:
+          case Assume(_) | Assert(_) => true
+          case _ => false
+        .map:
+          case Assume(b) => b
+          case Assert(b) => b
+          case _ => assert(false)

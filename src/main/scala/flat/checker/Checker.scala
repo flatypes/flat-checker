@@ -1,7 +1,7 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.VC.*
+import flat.checker.Printer.{ppCtx, ppExpr, ppVCGoal}
 import flat.checker.ast.{FunDef, Module}
 import flat.{Config, Issuer, checker}
 
@@ -17,58 +17,37 @@ class Checker(using config: Config) extends LazyLogging:
   def check(funDef: FunDef): Unit =
     val varDefs = (funDef.params :+ funDef.returns) ++ funDef.locals
     val types = Types.from(varDefs.map(v => v.name -> v.typ))
-    val vc = VCGen.generate(types, funDef.body)
-    vcCounter = 1
-    discharge(vc, PrfCtx.empty(using types = types))(using new Prover(using types = types))
+    val vc = VCGenerator.generate(funDef.body, types)
+    nextGoal = 1
+    discharge(vc, PrfCtx.empty(using types))(using new Prover(using types = types))
 
-  private var vcCounter = 1
+  private var nextGoal = 1
 
   private def discharge(vc: VC, ctx: PrfCtx)(using prover: Prover): Unit = vc match
-    case True =>
-    case LAnd(vc1, vc2) => discharge(vc1, ctx); discharge(vc2, ctx)
-    case LImp(h, vc) => discharge(vc, ctx + h)
-    case _ =>
+    case VCTrue =>
+    case VCInfer(e) =>
       logger.info("")
-      logger.info(s"VC $vcCounter: $ctx ⇒ ${
-        vc match
-          case Goal(c, _) => c
-          case HasType(e, t, _) => s"$e : $t"
-          case InferType(e, _) => s"$e : ?"
-      }")
+      logger.info("Goal {}: {} ⇒ {} : ?", nextGoal, ppCtx(ctx), ppExpr(e))
+      val r = prover.infer(e, ctx)
+      issuer.report(TypeInferred(r.toString, e.loc))
+    case VCImp(eb, vc) => discharge(vc, ctx + eb)
+    case VCAnd(vc1, vc2) => discharge(vc1, ctx); discharge(vc2, ctx)
+    case g: VCGoal =>
+      logger.info("")
+      logger.info(s"Goal {}: {} ⇒ {}", nextGoal, ppCtx(ctx), ppVCGoal(g))
       for mc <- config.metrics do
         mc.push("vcs")
-        mc.put("#", vcCounter)
-        val kind = vc match
-          case _: Goal => "normal"
-          case _: HasType => "check type"
-          case _: InferType => "infer type"
-          case _ => assert(false)
-        mc.put("kind", kind)
+        mc.put("#", nextGoal)
+        mc.put("kind", g.getClass.toString)
         mc.timeStart("time/verif")
-
-      val succeed = vc match
-        case Goal(c, err) =>
-          if prover.prove(c, ctx) then true
-          else
-            logger.info(s"VC $vcCounter NOT PROVED")
-            issuer.report(err)
-            false
-        case HasType(e, t, _) =>
-          prover.check(e, t, ctx) match
-            case Right(_) => true
-            case Left(actual) =>
-              logger.info(s"VC $vcCounter NOT PROVED")
-              issuer.report(TypeMayMismatch(t.toString, actual, e.loc))
-              false
-        case InferType(e, _) =>
-          val r = prover.infer(e, ctx)
-          issuer.report(TypeInferred(r.toString, e.loc))
-          true
-        case _ => assert(false)
-
+      val succeed = prover.prove(g.cond, ctx)
       for mc <- config.metrics do
         mc.timePause("time/verif")
         mc.put("succeed", succeed)
         mc.pop()
 
-      vcCounter += 1
+      if !succeed then
+        logger.info(s"Goal {} NOT PROVED", nextGoal)
+        issuer.report(g.diagnostic(""))
+
+      nextGoal += 1
