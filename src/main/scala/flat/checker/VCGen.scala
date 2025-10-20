@@ -109,7 +109,7 @@ object VCGen extends LazyLogging:
         val pEnter = (b :: sides.map(_._1) ++ inv).foldRight(wlp(s, pInv, body1, pInv))(LImp.apply)
         val exitCond = mkOr(
           mkAnd(Not(b).copyLocation(b) :: sides.map(_._1)) ::
-            collectBreakCond(s.toBlock).map(e => mkAnd(e :: collectSideGoals(e).map(_._1))))
+            Analyzer.collectBreakConds(s).map(e => mkAnd(e :: collectSideGoals(e).map(_._1))))
         val pExit = (exitCond :: inv).foldRight(post)(LImp.apply)
         val pLoop = mkLAnd(pEnter, pExit)
         val m = Map.from(for x <- Analyzer.collectModifiedVars(whileStmt) yield x -> Var(fresher.fresh(x)))
@@ -130,11 +130,6 @@ object VCGen extends LazyLogging:
     case Not(Or(e1, e2)) => destruct(Not(e1)) ++ destruct(Not(e2))
     case Not(And(e1, e2)) => List(Or(Not(e1), Not(e2)))
     case _ => List(cond)
-
-  private def collectBreakCond(body: List[Stmt]): List[Expr] =
-    body.collect {
-      case IfStmt(cond, List(Break()), _) => cond
-    }
 
   private def collectSideGoals(expr: Expr): List[(Expr, TypeError)] =
     val buf = ListBuffer.empty[(Expr, TypeError)]

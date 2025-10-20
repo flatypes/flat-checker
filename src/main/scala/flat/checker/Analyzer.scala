@@ -64,7 +64,7 @@ object Analyzer extends LazyLogging:
 
   /** Guesses naive loop invariants where user invariants are not provided.
    *
-   * Applies to loops `while x op e do s` where the loop variable `x` has a constant delta `k ≠ 0` in each iteration.
+   * Applies to loops `while x op e do ...` where the loop variable `x` has a constant delta `k ≠ 0` in each iteration.
    * Let `e0` be the initial value of `x` before entering the loop.
    * The guessed invariant is:
    *  - `e0 ≤ x < e + k` if `k > 0` and `op` is `<` (similar for `≤`);
@@ -94,12 +94,12 @@ object Analyzer extends LazyLogging:
         case _ =>
     case _ =>
 
-  /** Collects the `break`-conditions in the given `loopBody`. */
-  def collectBreakConds(loopBody: Stmt): List[Expr] =
-    loopBody.toBlock.flatMap:
+  /** Collects the `break`-conditions in the given loop `body`. */
+  def collectBreakConds(body: Stmt): List[Expr] =
+    body.toBlock.flatMap:
       case IfStmt(b, Break(), Skip()) => List(b)
       case IfStmt(_, s1, s2) => collectBreakAssert(s1.toBlock) ++ collectBreakAssert(s2.toBlock)
-      case Break() => throw IllegalStateException("loop body contains non-conditional break: " + ppStmt(loopBody))
+      case Break() => throw IllegalStateException("loop body contains non-conditional break: " + ppStmt(body))
       case _ => Nil
 
   /** Collects `assert`-conditions right before `break`-statements in the given `block`. */
