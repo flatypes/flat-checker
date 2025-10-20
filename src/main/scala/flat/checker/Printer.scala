@@ -1,5 +1,6 @@
 package flat.checker
 
+import flat.Ops.CmpOp.*
 import flat.checker.VC.*
 import flat.checker.ast.*
 import flat.regex.RegEx
@@ -83,6 +84,15 @@ object Printer:
       s"$s1 ∈ $s2"
 
     def visitAnd(node: And)(using ctx: Unit): String =
+      // Special case: _ op _ op _
+      (node.left, node.right) match
+        case (Cmp(op1@(LE | LT), e1, e), Cmp(op2@(LE | LT), e3, e2)) if e3 == e =>
+          val value = e.accept(this)
+          val left = e1.accept(this)
+          val right = e2.accept(this)
+          return s"$left $op1 $value $op2 $right"
+        case _ =>
+
       // right associative
       val s1 = node.left.accept(this)
       val left = if getLevel(node.left) <= Level.AND then paren(s1) else s1

@@ -147,8 +147,10 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
         if invNodes.nonEmpty then
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else
+        val loop = ast.While(e, ast.mkStmtList(b))
         val inv = for expr <- invNodes yield checkType(expr, ast.BoolType, ctx)
-        out += ast.While(e, ast.mkStmtList(b), inv)
+        loop.invariants ++= inv
+        out += loop
       ctx
 
     @tailrec

@@ -54,6 +54,8 @@ final class Types(store: Map[String, Type]):
 
   def strVars: Set[String] = store.filter(_._2.toSort == Sort.S).keySet
 
+  def intVars: Set[String] = store.filter(_._2.toSort == Sort.I).keySet
+
 object Types:
   def from(it: IterableOnce[(String, Type)]) = Types(Map.from(it))
 
@@ -71,6 +73,7 @@ object VCGen extends LazyLogging:
   import VC.*
 
   def generate(types: Types, body: Stmt): VC =
+    Analyzer.guessInvariants(body, Map.from(for x <- types.intVars yield x -> Analyzer.Value.Rel(0)))
     wlp(body, True, body.toBlock, True)(using types, True, new Fresher)
 
   /** Compute the weakest liberal pre of a statement `stmt` and a post condition `post`. */
@@ -98,11 +101,8 @@ object VCGen extends LazyLogging:
         val body2 = s2.toBlock
         val pFalse = LImp(Not(b).copyLocation(b), wlp(s2, post, body2, pInv))
         mkLAnd(pTrue, pFalse)
-      case whileStmt@While(b, s, userInv) =>
-        val inv =
-          if userInv.isEmpty then Analyzer.guessLoopInv(whileStmt, body).map(_.copyLocation(b)) else userInv
-        if userInv.isEmpty then
-          logger.debug(s"Guessing invariants: ${inv.mkString(", ")}")
+      case whileStmt@While(b, s) =>
+        val inv = whileStmt.invariants.toList
         val pInv = mkLAnd(for e <- inv yield Goal(e, InvariantMayViolate(e.loc)))
         val sides = collectSideGoals(b)
         val body1 = s.toBlock
@@ -112,7 +112,7 @@ object VCGen extends LazyLogging:
             collectBreakCond(s.toBlock).map(e => mkAnd(e :: collectSideGoals(e).map(_._1))))
         val pExit = (exitCond :: inv).foldRight(post)(LImp.apply)
         val pLoop = mkLAnd(pEnter, pExit)
-        val m = Map.from(for x <- Analyzer.getModifiedVars(whileStmt) yield x -> Var(fresher.fresh(x)))
+        val m = Map.from(for x <- Analyzer.collectModifiedVars(whileStmt) yield x -> Var(fresher.fresh(x)))
         mkLAnd(pInv, mkLAnd(sides.map(Goal(_, _))), pLoop.subst(m))
       case Break() => pInv
       case Return() => pReturn

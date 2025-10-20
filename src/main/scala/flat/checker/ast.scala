@@ -7,6 +7,7 @@ import flat.{Location, Locational, Ops}
 import org.apache.commons.text.StringEscapeUtils.escapeJava
 
 import scala.collection.immutable.Iterable
+import scala.collection.mutable.ListBuffer
 
 object ast:
   final case class Module(body: List[FunDef])
@@ -122,7 +123,9 @@ object ast:
 
     protected def children: List[Stmt] = List(thenBody, elseBody)
 
-  final case class While(cond: Expr, body: Stmt, invariants: List[Expr]) extends Stmt:
+  final case class While(cond: Expr, body: Stmt) extends Stmt:
+    var invariants: ListBuffer[Expr] = ListBuffer.empty
+
     def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitWhile(this)
 
     protected def children: List[Stmt] = List(body)
@@ -392,12 +395,20 @@ object ast:
       case ADD => "+"
       case SUB => "-"
 
-  def mkAdd(expr: Expr, value: Int): Expr = value match
-    case 0 => expr
-    case n if n > 0 => Arith(ArithOp.ADD, expr, n)
-    case n => Arith(ArithOp.SUB, expr, n)
+  import ArithOp.*
 
-  inline def mkSub(expr: Expr, value: Int): Expr = mkAdd(expr, -value)
+  def mkAdd(expr: Expr, value: Int): Expr =
+    val (base, k) = expr match
+      case Const(n: Int) => (None, n + value)
+      case Arith(ADD, e, Const(n: Int)) => (Some(e), n + value)
+      case Arith(SUB, e, Const(n: Int)) => (Some(e), -n + value)
+      case e => (Some(e), value)
+    base match
+      case Some(e) =>
+        if k == 0 then e
+        else if k > 0 then Arith(ADD, e, k)
+        else Arith(SUB, e, -k)
+      case None => Const(k)
 
   // String Operations
 
