@@ -28,7 +28,7 @@ trait Locational:
     this
 
   def copyLocation(from: Locational): this.type =
-    this.optLoc = Some(from.loc)
+    this.optLoc = from.optLoc
     this
 
 class Diagnostic(val loc: Location, val message: String,

@@ -168,7 +168,7 @@ object ast:
     def visitReturn(node: Return)(using ctx: C): T
 
   /** Expression. */
-  sealed trait Expr extends Locational:
+  sealed trait Expr extends Locational, Product:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T
 
     protected def children: List[Expr]
@@ -219,7 +219,7 @@ object ast:
       case s: String => "\"" + escapeJava(s) + "\""
       case _ => value.toString
 
-  given Conversion[Int | Boolean | String, Const] = Const.apply
+  given Conversion[Int | Boolean | String, Const] = Const(_)
 
   final case class GlobalRef(name: String) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitGlobalRef(this)

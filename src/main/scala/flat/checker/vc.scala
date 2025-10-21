@@ -1,11 +1,11 @@
 package flat.checker
 
-import flat.Diagnostic
 import flat.Ops.CmpOp.*
 import flat.checker.Analyzer.{collectBreakConds, collectModifiedVars, guessInvariants}
 import flat.checker.ExprOps.conjuncts
 import flat.checker.Printer.ppType
 import flat.checker.ast.*
+import flat.{Diagnostic, Location}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -16,75 +16,69 @@ sealed trait VC:
 case object VCTrue extends VC:
   def subst(m: Map[String, Expr]): VC = this
 
-final case class VCInfer(value: Expr) extends VC:
-  def subst(m: Map[String, Expr]): VC = VCInfer(value.subst(m))
-
 final case class VCImp(left: Expr, right: VC) extends VC:
-  def subst(m: Map[String, Expr]): VC = VCImp(left.subst(m), right.subst(m))
+  def subst(m: Map[String, Expr]): VC = copy(left = left.subst(m), right = right.subst(m))
 
-final case class VCAnd(left: VC, right: VC) extends VC:
-  def subst(m: Map[String, Expr]): VC = VCAnd(left.subst(m), right.subst(m))
+final case class VCGroup(sides: List[VC] = Nil, mains: List[VC] = Nil) extends VC:
+  def subst(m: Map[String, Expr]): VC = copy(sides = sides.map(_.subst(m)), mains = mains.map(_.subst(m)))
 
-def mkVCAnd(conjuncts: List[VC]): VC =
-  conjuncts.filter(_ != VCTrue) match
-    case Nil => VCTrue
-    case List(vc) => vc
-    case _ => conjuncts.reduceRight(VCAnd(_, _))
+def mkVCGroup(sides: List[VC], mains: VC*): VCGroup = VCGroup(sides, mains.toList)
 
-def mkVCAnd(conjuncts: VC*): VC = mkVCAnd(conjuncts.toList)
+final case class VCInfer(value: Expr)(using val loc: Location) extends VC:
+  def subst(m: Map[String, Expr]): VC = copy(value = value.subst(m))
 
 sealed trait VCGoal extends VC:
   def cond: Expr
 
   def diagnostic(msg: String): Diagnostic
 
-final case class VCType(value: Expr, expected: Type) extends VCGoal:
+final case class VCType(value: Expr, expected: Type)(using loc: Location) extends VCGoal:
   def subst(m: Map[String, Expr]): VC = copy(value = value.subst(m))
 
   def cond: Expr = TypeTest(value, expected)
 
   def diagnostic(msg: String): Diagnostic =
-    Diagnostic(cond.loc, "Type may mismatch", s"expected: ${ppType(expected)}\n" + msg)
+    Diagnostic(loc, "Type may mismatch", s"expected: ${ppType(expected)}\n" + msg)
 
-final case class VCAssert(cond: Expr) extends VCGoal:
-  def subst(m: Map[String, Expr]): VC = VCAssert(cond.subst(m))
-
-  def diagnostic(msg: String): Diagnostic =
-    Diagnostic(cond.loc, "Assertion may fail", msg)
-
-final case class VCInvPre(cond: Expr) extends VCGoal:
-  def subst(m: Map[String, Expr]): VC = VCInvPre(cond.subst(m))
+final case class VCAssert(cond: Expr)(using loc: Location) extends VCGoal:
+  def subst(m: Map[String, Expr]): VC = copy(cond = cond.subst(m))
 
   def diagnostic(msg: String): Diagnostic =
-    Diagnostic(cond.loc, "Invariant may not hold at the entry point", msg)
+    Diagnostic(loc, "Assertion may fail", msg)
 
-final case class VCInvPost(cond: Expr) extends VCGoal:
-  def subst(m: Map[String, Expr]): VC = VCInvPost(cond.subst(m))
+final case class VCInvPre(cond: Expr)(using loc: Location) extends VCGoal:
+  def subst(m: Map[String, Expr]): VC = copy(cond = cond.subst(m))
 
   def diagnostic(msg: String): Diagnostic =
-    Diagnostic(cond.loc, "Invariant may not hold again after an iteration", msg)
+    Diagnostic(loc, "Invariant may not hold at the entry point", msg)
 
-final case class VCIdxInBound(idx: Expr, str: Expr) extends VCGoal:
-  def subst(m: Map[String, Expr]): VC = VCIdxInBound(idx.subst(m), str.subst(m))
+final case class VCInvPost(cond: Expr)(using loc: Location) extends VCGoal:
+  def subst(m: Map[String, Expr]): VC = copy(cond = cond.subst(m))
+
+  def diagnostic(msg: String): Diagnostic =
+    Diagnostic(loc, "Invariant may not hold again after an iteration", msg)
+
+final case class VCIdxInBound(idx: Expr, str: Expr)(using loc: Location) extends VCGoal:
+  def subst(m: Map[String, Expr]): VC = copy(idx = idx.subst(m), str = str.subst(m))
 
   def cond: Expr = And(LE(0, idx), LT(idx, Length(str)))
 
   def diagnostic(msg: String): Diagnostic =
-    Diagnostic(cond.loc, "Index may be out of bound", msg)
+    Diagnostic(loc, "Index may be out of bound", msg)
 
-final case class VCIdxNonneg(idx: Expr) extends VCGoal:
-  def subst(m: Map[String, Expr]): VC = VCIdxNonneg(idx.subst(m))
+final case class VCIdxNonneg(idx: Expr)(using loc: Location) extends VCGoal:
+  def subst(m: Map[String, Expr]): VC = copy(idx = idx.subst(m))
 
   def cond: Expr = GE(idx, 0)
 
   def diagnostic(msg: String): Diagnostic =
-    Diagnostic(cond.loc, "Index may be negative", msg)
+    Diagnostic(loc, "Index may be negative", msg)
 
-final case class VCPre(cond: Expr) extends VCGoal:
-  def subst(m: Map[String, Expr]): VC = VCPre(cond.subst(m))
+final case class VCPre(cond: Expr)(using loc: Location) extends VCGoal:
+  def subst(m: Map[String, Expr]): VC = copy(cond = cond.subst(m))
 
   def diagnostic(msg: String): Diagnostic =
-    Diagnostic(cond.loc, "Pre-condition may fail", msg)
+    Diagnostic(loc, "Pre-condition may fail", msg)
 
 object VCGenerator:
   def generate(body: Stmt, types: Types): VC =
@@ -96,45 +90,46 @@ object VCGenerator:
     case Skip() => post
     case SeqStmt(s1, s2) => wlp(s1, wlp(s2, post))
     case Assume(b) =>
-      mkVCAnd(checkSide(b), VCImp(b, post))
+      mkVCGroup(checkSides(b), VCImp(b, post))
     case Assign(x, e) =>
       val t = types(x)
-      val vcType = if t == ast.fromSort(t.toSort) then VCTrue else VCType(e, t)
-      mkVCAnd(checkSide(e), vcType, post.subst(Map(x -> e)))
+      val vcType = if t == ast.fromSort(t.toSort) then VCTrue else VCType(e, t)(using e.loc)
+      mkVCGroup(checkSides(e), vcType, post.subst(Map(x -> e)))
     case Assert(b) =>
-      mkVCAnd(checkSide(b), VCAssert(b), post)
+      mkVCGroup(checkSides(b), VCAssert(b)(using b.loc), post)
     case ShowType(e) =>
-      mkVCAnd(checkSide(e), VCInfer(e), post)
+      mkVCGroup(checkSides(e), VCInfer(e)(using e.loc), post)
     case IfStmt(b, s1, s2) =>
       val bs = b.conjuncts
-      val vcSide = mkVCAnd(bs.indices.map(i => VCImp(mkAnd(bs.take(i)), checkSide(bs(i)))).toList)
+      val vcSides = bs.indices.map(i => VCImp(mkAnd(bs.take(i)), VCGroup(sides = checkSides(bs(i))))).toList
       val vcThen = VCImp(b, wlp(s1, post))
       val vcElse = VCImp(Not(b), wlp(s2, post))
-      mkVCAnd(vcSide, vcThen, vcElse)
+      mkVCGroup(vcSides, vcThen, vcElse)
     case loop@While(b, s) =>
       val bis = loop.invariants.toList
       val m = Map.from(for x <- collectModifiedVars(s) yield x -> Var(fresher.fresh(x)))
-      val vcInvSide = mkVCAnd(bis.indices.map(i => VCImp(mkAnd(bis.take(i)), checkSide(bis(i)))).toList).subst(m)
-      val vcInvPre = mkVCAnd(bis.map(VCInvPre(_)))
-      val vcSide = checkSide(b).subst(m)
-      val vcInv = mkVCAnd(bis.map(VCInvPost(_)))
+      val vcInvSides =
+        bis.indices.map(i => VCImp(mkAnd(bis.take(i)), VCGroup(sides = checkSides(bis(i)))).subst(m)).toList
+      val vcSides = checkSides(b).map(_.subst(m))
+      val vcInvPres = bis.map(bi => VCInvPre(bi)(using bi.loc))
+      val vcInv = VCGroup(mains = bis.map(bi => VCInvPost(bi)(using bi.loc)))
       val vcEnter = VCImp(mkAnd(b :: bis), wlp(s, vcInv)(using vcInv = vcInv)).subst(m)
       val vcExit = VCImp(mkAnd(mkOr(Not(b) :: collectBreakConds(s)) :: bis), post).subst(m)
-      mkVCAnd(vcInvSide, vcInvPre, vcSide, vcEnter, vcExit)
+      VCGroup(vcInvSides ++ vcSides, vcInvPres :+ vcEnter :+ vcExit)
     case Return() => VCTrue
     case Break() => vcInv // NOTE: the loop invariant must hold immediately before the break statement
 
-  private def checkSide(expr: Expr): VC =
+  private def checkSides(expr: Expr): List[VC] =
     val goals = ListBuffer.empty[VCGoal]
     expr.traverse:
       case CharAt(es, ei) =>
-        goals += VCIdxInBound(ei, es)
+        goals += VCIdxInBound(ei, es)(using ei.loc)
       case Substr(es, ei, ej) =>
         if ei != Const(0) then
-          goals += VCIdxNonneg(ei)
+          goals += VCIdxNonneg(ei)(using ei.loc)
         if ej != Length(es) then
-          goals += VCIdxNonneg(ej)
-    mkVCAnd(goals.toList)
+          goals += VCIdxNonneg(ej)(using ej.loc)
+    goals.toList
 
 class Fresher:
   private val latest = mutable.Map.empty[String, Int]
@@ -148,9 +143,17 @@ class Fresher:
 trait VCRunner:
   def run(vc: VC): Unit = vc match
     case VCTrue => // ignore trivial
-    case VCInfer(e) => infer(e)
     case VCImp(b, vc) => assume(b); run(vc)
-    case VCAnd(vc1, vc2) => push(); run(vc1); pop(); push(); run(vc2); pop()
+    case VCGroup(sides, mains) =>
+      for vc <- sides do
+        push()
+        run(vc)
+        pop()
+      for vc <- mains do
+        push()
+        run(vc)
+        pop()
+    case VCInfer(e) => infer(e)
     case g: VCGoal => prove(g)
 
   protected def push(): Unit

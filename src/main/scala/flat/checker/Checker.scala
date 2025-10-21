@@ -23,15 +23,20 @@ class Checker(using config: Config) extends LazyLogging:
 
   private var nextGoal = 1
 
-  private def discharge(vc: VC, ctx: PrfCtx)(using prover: Prover): Unit = vc match
-    case VCTrue =>
+  private def discharge(vc: VC, ctx: PrfCtx)(using prover: Prover): Boolean = vc match
+    case VCTrue => true
+    case VCImp(eb, vc) => discharge(vc, ctx + eb)
+    case VCGroup(sides, mains) =>
+      if sides.exists(!discharge(_, ctx)) then
+        return false
+      val results = mains.map(discharge(_, ctx))
+      results.forall(_ == true)
     case VCInfer(e) =>
       logger.info("")
       logger.info("Goal {}: {} ⇒ {} : ?", nextGoal, ppCtx(ctx), ppExpr(e))
       val r = prover.infer(e, ctx)
       issuer.report(TypeInferred(r.toString, e.loc))
-    case VCImp(eb, vc) => discharge(vc, ctx + eb)
-    case VCAnd(vc1, vc2) => discharge(vc1, ctx); discharge(vc2, ctx)
+      true
     case g: VCGoal =>
       logger.info("")
       logger.info(s"Goal {}: {} ⇒ {}", nextGoal, ppCtx(ctx), ppVCGoal(g))
@@ -51,3 +56,4 @@ class Checker(using config: Config) extends LazyLogging:
         issuer.report(g.diagnostic(""))
 
       nextGoal += 1
+      succeed

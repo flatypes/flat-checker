@@ -67,7 +67,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     val rOpt = for
       (base, r) <- ctx.lookupSuffixLang(str)
       ki <- start.diffNonneg(base)
-      j <- if end == Length(str) then Some(IndexR(0)) else end.diffNonneg(base).map(IndexR(_))
+      j <- if end == Length(str) then Some(IndexR(0)) else end.diffNonneg(base).map(IndexL(_))
       r1 = substr(r, IndexL(ki), j)(using str = Substr(str, base, Length(str)))
       _ = logger.debug("infer {}[{}:{}] as {}[{}:][{}:{}]: {}",
         ppExpr(str), ppExpr(start), ppExpr(end), ppExpr(str), ppExpr(base), ki, j, r1)
