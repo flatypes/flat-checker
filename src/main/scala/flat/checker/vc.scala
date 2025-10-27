@@ -80,13 +80,22 @@ final case class VCPre(cond: Expr)(using loc: Location) extends VCGoal:
   def diagnostic(msg: String): Diagnostic =
     Diagnostic(loc, "Pre-condition may fail", msg)
 
+class Fresh:
+  private val latest = mutable.Map.empty[String, Int]
+
+  def apply(name: String): String =
+    require(!name.contains('@'))
+    val k = latest.getOrElse(name, 0)
+    latest(name) = k + 1
+    s"$name@${k + 1}"
+
 object VCGenerator:
   def generate(body: Stmt, types: Types): VC =
     guessInvariants(body)
-    val fresher = new Fresher
-    wlp(body, VCTrue)(using types, fresher, VCTrue)
+    val fresh = new Fresh
+    wlp(body, VCTrue)(using types, fresh, VCTrue)
 
-  private def wlp(stmt: Stmt, post: VC)(using types: Types, fresher: Fresher, vcInv: VC): VC = stmt match
+  private def wlp(stmt: Stmt, post: VC)(using types: Types, fresh: Fresh, vcInv: VC): VC = stmt match
     case Skip() => post
     case SeqStmt(s1, s2) => wlp(s1, wlp(s2, post))
     case Assume(b) =>
@@ -107,7 +116,7 @@ object VCGenerator:
       mkVCGroup(vcSides, vcThen, vcElse)
     case loop@While(b, s) =>
       val bis = loop.invariants.toList
-      val m = Map.from(for x <- collectModifiedVars(s) yield x -> Var(fresher.fresh(x)))
+      val m = Map.from(for x <- collectModifiedVars(s) yield x -> Var(fresh(x)))
       val vcInvSides =
         bis.indices.map(i => VCImp(mkAnd(bis.take(i)), VCGroup(sides = checkSides(bis(i)))).subst(m)).toList
       val vcSides = checkSides(b).map(_.subst(m))
@@ -130,38 +139,3 @@ object VCGenerator:
         if ej != Length(es) then
           goals += VCIdxNonneg(ej)(using ej.loc)
     goals.toList
-
-class Fresher:
-  private val latest = mutable.Map.empty[String, Int]
-
-  def fresh(name: String): String =
-    require(!name.contains('@'))
-    val k = latest.getOrElse(name, 0)
-    latest(name) = k + 1
-    s"$name@${k + 1}"
-
-trait VCRunner:
-  def run(vc: VC): Unit = vc match
-    case VCTrue => // ignore trivial
-    case VCImp(b, vc) => assume(b); run(vc)
-    case VCGroup(sides, mains) =>
-      for vc <- sides do
-        push()
-        run(vc)
-        pop()
-      for vc <- mains do
-        push()
-        run(vc)
-        pop()
-    case VCInfer(e) => infer(e)
-    case g: VCGoal => prove(g)
-
-  protected def push(): Unit
-
-  protected def pop(): Unit
-
-  protected def assume(cond: Expr): Unit
-
-  protected def infer(value: Expr): Unit
-
-  protected def prove(goal: VCGoal): Unit

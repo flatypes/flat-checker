@@ -18,42 +18,81 @@ class Checker(using config: Config) extends LazyLogging:
     val varDefs = (funDef.params :+ funDef.returns) ++ funDef.locals
     val types = Types.from(varDefs.map(v => v.name -> v.typ))
     val vc = VCGenerator.generate(funDef.body, types)
-    nextGoal = 1
-    discharge(vc, PrfCtx.empty(using types))(using new Prover(using types = types))
+    run(vc)(using new Verifier(using types = types))
 
+  //    nextGoal = 1
+//    discharge(vc, PrfCtx.empty(using types))(using new Prover(using types = types))
   private var nextGoal = 1
 
-  private def discharge(vc: VC, ctx: PrfCtx)(using prover: Prover): Boolean = vc match
+  def run(vc: VC)(using prover: Verifier): Boolean = vc match
     case VCTrue => true
-    case VCImp(eb, vc) => discharge(vc, ctx + eb)
+    case VCImp(b, vc) => prover.assume(b); run(vc)
     case VCGroup(sides, mains) =>
-      if sides.exists(!discharge(_, ctx)) then
+      // Prove all side conditions first: if any fails, immediately give up this group.
+      val result1 = sides.forall(vc => prover.locally { run(vc) })
+      if !result1 then
         return false
-      val results = mains.map(discharge(_, ctx))
-      results.forall(_ == true)
+      // Prove all main goals: even if any fails, still try others to collect more error messages.
+      mains.map(vc => prover.locally { run(vc) }).forall(_ == true)
     case VCInfer(e) =>
       logger.info("")
-      logger.info("Goal {}: {} ⇒ {} : ?", nextGoal, ppCtx(ctx), ppExpr(e))
-      val r = prover.infer(e, ctx)
+      logger.info("Goal {}: {} ⇒ {} : ?", nextGoal, ppCtx(prover.getCtx), ppExpr(e))
+      val r = prover.infer(e)
       issuer.report(TypeInferred(r.toString, e.loc))
+      nextGoal += 1
       true
     case g: VCGoal =>
       logger.info("")
-      logger.info(s"Goal {}: {} ⇒ {}", nextGoal, ppCtx(ctx), ppVCGoal(g))
+      logger.info(s"Goal {}: {} ⇒ {}", nextGoal, ppCtx(prover.getCtx), ppVCGoal(g))
       for mc <- config.metrics do
         mc.push("vcs")
         mc.put("#", nextGoal)
         mc.put("kind", g.getClass.toString)
         mc.timeStart("time/verif")
-      val succeed = prover.prove(g.cond, ctx)
+      val succeed = prover.prove(g.cond)
       for mc <- config.metrics do
         mc.timePause("time/verif")
         mc.put("succeed", succeed)
         mc.pop()
-
       if !succeed then
         logger.info(s"Goal {} NOT PROVED", nextGoal)
         issuer.report(g.diagnostic(""))
-
       nextGoal += 1
       succeed
+
+  private def discharge(vc: VC, ctx: PrfCtx)(using prover: Verifier): Boolean = ???
+/* vc match
+  case VCTrue => true
+  case VCImp(eb, vc) => discharge(vc, ctx + eb)
+  case VCGroup(sides, mains) =>
+    if sides.exists(!discharge(_, ctx)) then
+      return false
+    val results = mains.map(discharge(_, ctx))
+    results.forall(_ == true)
+  case VCInfer(e) =>
+    logger.info("")
+    logger.info("Goal {}: {} ⇒ {} : ?", nextGoal, ppCtx(ctx), ppExpr(e))
+    val r = prover.infer(e, ctx)
+    issuer.report(TypeInferred(r.toString, e.loc))
+    true
+  case g: VCGoal =>
+    logger.info("")
+    logger.info(s"Goal {}: {} ⇒ {}", nextGoal, ppCtx(ctx), ppVCGoal(g))
+    for mc <- config.metrics do
+      mc.push("vcs")
+      mc.put("#", nextGoal)
+      mc.put("kind", g.getClass.toString)
+      mc.timeStart("time/verif")
+    val succeed = prover.prove(g.cond)
+    for mc <- config.metrics do
+      mc.timePause("time/verif")
+      mc.put("succeed", succeed)
+      mc.pop()
+
+    if !succeed then
+      logger.info(s"Goal {} NOT PROVED", nextGoal)
+      issuer.report(g.diagnostic(""))
+
+    nextGoal += 1
+    succeed
+*/

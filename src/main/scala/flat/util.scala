@@ -4,6 +4,11 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object util:
+  def bigProduct[T](xss: Seq[Seq[T]]): Seq[Seq[T]] = xss match
+    case Nil => Seq.empty
+    case Seq(xs) => for x <- xs yield Seq(x)
+    case xs +: yss => for x <- xs; ys <- bigProduct(yss) yield x +: ys
+
   private val unicodeSubscripts: String = "₀₁₂₃₄₅₆₇₈₉"
 
   def renderSubscript(k: Int): String =

@@ -201,7 +201,4 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
           case _ => assert(false)
         (bs, results.distinct.toList)
 
-  private val smtSolver = new SMTSolver
-
-  private def isValid(cond: Expr)(using ctx: PrfCtx): Boolean =
-    ctx.premises.contains(cond) || smtSolver.proves(cond)
+  private inline def isValid(cond: Expr)(using ctx: PrfCtx): Boolean = ctx.proves(cond)
