@@ -7,7 +7,8 @@ import flat.checker.py.{Transpiler, Unpickler}
 import flat.util.MetricCollector
 
 final case class Config(inputs: Seq[os.Path] = Seq.empty,
-                        fastExit: Boolean = false, smtTimeLimit: Int = 3000, metrics: Option[MetricCollector] = None,
+                        fastExit: Boolean = false, nonInc: Boolean = false,
+                        smtTimeLimit: Int = 3000, metrics: Option[MetricCollector] = None,
                         extractMode: Boolean = false, extractOutput: Option[os.Path] = None)
 
 object Driver extends LazyLogging:

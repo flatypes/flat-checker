@@ -23,6 +23,10 @@ object CLI:
       opt[Unit]("fast-exit")
         .action { (_, c) => c.copy(fastExit = true) }
         .text("immediately exit upon the first error occurred"),
+      // option --non-inc
+      opt[Unit]("non-inc")
+        .action { (_, c) => c.copy(nonInc = true) }
+        .text("disable incremental checking"),
       // option --metrics
       opt[Path]("metrics")
         .action: (p, c) =>

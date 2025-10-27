@@ -3,22 +3,100 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
+import flat.checker.Printer.*
 import flat.checker.ast.*
 import flat.regex.{CharSet, RegEx}
-import flat.{Config, Ops}
+import flat.{Config, Issuer, Ops}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 /** Verifier: prove goals or answer type queries. */
-final class Verifier(using config: Config, types: Types) extends LazyLogging:
+final class Verifier(using config: Config, types: Types, issuer: Issuer) extends LazyLogging:
+  def verify(vc: VC): Boolean = if config.nonInc then verifyNonInc(vc, Nil) else verifyInc(vc)
+
+  private var nextGoal = 1
+
+  private def verifyInc(vc: VC): Boolean = vc match
+    case VCTrue => true
+    case VCImp(b, vc) => assume(b); verifyInc(vc)
+    case VCGroup(sides, mains) =>
+      // Prove all side conditions first: if any fails, immediately give up this group.
+      val result1 = sides.forall(vc => locally { verifyInc(vc) })
+      if !result1 then
+        return false
+      // Prove all main goals: even if any fails, still try others to collect more error messages.
+      mains.map(vc => locally { verifyInc(vc) }).forall(_ == true)
+    case _ => verifyGoal(vc)
+
+  private def verifyNonInc(vc: VC, premises: List[Expr]): Boolean = vc match
+    case VCTrue => true
+    case VCImp(b, vc) => verifyNonInc(vc, b :: premises)
+    case VCGroup(sides, mains) =>
+      // Prove all side conditions first: if any fails, immediately give up this group.
+      val result1 = sides.forall(vc => verifyNonInc(vc, premises))
+      if !result1 then
+        return false
+      // Prove all main goals: even if any fails, still try others to collect more error messages.
+      mains.map(vc => verifyNonInc(vc, premises)).forall(_ == true)
+    case _ =>
+      locally { premises.foreach(assume); verifyGoal(vc) }
+
+  private def verifyGoal(vc: VC): Boolean = vc match
+    case vc: VCInfer =>
+      logger.info("")
+      logger.info("Goal {}: {} ⇒ {} : ?", nextGoal, ppCtx(getCtx), ppExpr(vc.value))
+      val r = infer(vc.value)
+      issuer.report(TypeInferred(ppRE(r), vc.loc))
+      nextGoal += 1
+      true
+    case vc: VCType =>
+      logger.info("")
+      logger.info("Goal {}: {} ⇒ {} : {}", nextGoal, ppCtx(getCtx), ppExpr(vc.value), ppType(vc.expected))
+      for mc <- config.metrics do
+        mc.push("goals")
+        mc.put("#", nextGoal)
+        mc.put("kind", vc.getClass.toString)
+        mc.timeStart("time/verif")
+      val succeed = check(vc.value, vc.expected) match
+        case Right(_) => true
+        case Left(msg) =>
+          issuer.report(vc.diagnostic(msg))
+          logger.info(s"Goal {} NOT PROVED", nextGoal)
+          false
+      for mc <- config.metrics do
+        mc.timePause("time/verif")
+        mc.put("succeed", succeed)
+        mc.pop()
+      nextGoal += 1
+      succeed
+    case g: VCGoal =>
+      logger.info("")
+      logger.info(s"Goal {}: {} ⇒ {}", nextGoal, ppCtx(getCtx), ppVCGoal(g))
+      for mc <- config.metrics do
+        mc.push("goals")
+        mc.put("#", nextGoal)
+        mc.put("kind", g.getClass.toString)
+        mc.timeStart("time/verif")
+      val succeed = prove(g.cond)
+      for mc <- config.metrics do
+        mc.timePause("time/verif")
+        mc.put("succeed", succeed)
+        mc.pop()
+      if !succeed then
+        issuer.report(g.diagnostic(""))
+        logger.info(s"Goal {} NOT PROVED", nextGoal)
+      nextGoal += 1
+      succeed
+    case _ => assert(false)
+
   private val smtSolver = new SMTSolver
   private var mostRecentCtx = PrfCtx.empty(using types, smtSolver)
   private val cachedPremises = ListBuffer.empty[Expr]
   private val ctxStack = mutable.Stack.empty[PrfCtx]
 
   /** Gets the current proof context. */
-  def getCtx: PrfCtx =
+  private def getCtx: PrfCtx =
     if cachedPremises.nonEmpty then
       mostRecentCtx = mostRecentCtx ++ cachedPremises.toList
       cachedPremises.clear()
@@ -35,7 +113,7 @@ final class Verifier(using config: Config, types: Types) extends LazyLogging:
     mostRecentCtx = ctxStack.pop()
     smtSolver.pop()
 
-  inline def locally[T](f: => T): T =
+  private inline def locally[T](f: => T): T =
     push()
     val result = f
     pop()
@@ -44,9 +122,13 @@ final class Verifier(using config: Config, types: Types) extends LazyLogging:
   /** Command assume. */
   def assume(cond: Expr): Unit =
     cachedPremises += cond
+    for mc <- config.metrics do
+      mc.timeStart("time/verif/smt/assume")
     smtSolver.assume(cond)
+    for mc <- config.metrics do
+      mc.timePause("time/verif/smt/assume")
 
-  /** Infers the type of `value` under `ctx`. */
+  /** Infers the type of `value`. */
   def infer(value: Expr): RegEx =
     for mc <- config.metrics do
       mc.timeStart("time/verif/type")
@@ -56,7 +138,7 @@ final class Verifier(using config: Config, types: Types) extends LazyLogging:
       mc.timePause("time/verif/type")
     r
 
-  /** Proves that `value` has the `expected` type under `ctx`. */
+  /** Proves that `value` has the `expected` type. */
   def check(value: Expr, expected: Type): Either[String, Unit] =
     if prove(TypeTest(value, expected)) then
       return Right(())
@@ -69,7 +151,7 @@ final class Verifier(using config: Config, types: Types) extends LazyLogging:
       mc.timePause("time/verif/type")
     Left(r.toString)
 
-  /** Proves that `conclusion` is valid under `ctx`. */
+  /** Proves that `conclusion` is valid. */
   def prove(conclusion: Expr): Boolean =
     tryNaive(conclusion) match
       case Right(msg) =>
@@ -90,10 +172,10 @@ final class Verifier(using config: Config, types: Types) extends LazyLogging:
 
     for mc <- config.metrics do
       mc.count("smt queries")
-      mc.timeStart("time/verif/smt")
+      mc.timeStart("time/verif/smt/prove")
     val valid = smtSolver.proves(conclusion)
     for mc <- config.metrics do
-      mc.timePause("time/verif/smt")
+      mc.timePause("time/verif/smt/prove")
     if valid then Right("SMT") else Left(())
 
   private def trySplit(conclusion: Expr): Boolean = conclusion match
@@ -118,6 +200,7 @@ final class Verifier(using config: Config, types: Types) extends LazyLogging:
           val e2 = conclusion.transform { case Ite(e0, _, e2) if e0 == b => e2 }
           locally { caseIf(b, false); trySplit(e2) }
         case None =>
+          logger.debug("+ {}", ppExpr(conclusion))
           tryNaive(conclusion) match
             case Right(msg) =>
               logger.debug(s"PROVED by $msg after split")
@@ -189,12 +272,14 @@ final class Verifier(using config: Config, types: Types) extends LazyLogging:
   private inline def caseIf(cond: Expr, isTrue: Boolean): Unit =
     mostRecentCtx = getCtx.caseIf(cond, isTrue)
     smtSolver.assume(if isTrue then cond else Not(cond))
+    logger.debug("-{} if {}{}", ctxStack.size, if isTrue then "" else "not ", ppExpr(cond))
 
   private inline def caseOr(or: Or, k: Int): Unit =
     mostRecentCtx = getCtx.caseOr(or, k)
     val bs = or.disjuncts
-    val assumptions = bs.take(k).map(Not(_)) :+ bs(k)
+    val assumptions = bs(k) :: bs.take(k).map(Not(_))
     assumptions.foreach(smtSolver.assume)
+    logger.debug("-{} case {}: {}", ctxStack.size, k, ppExpr(bs(k)))
 
   private def tryNarrowAndLemmas(conclusion: Expr): Either[Unit, String] =
     // Perform type narrowing.
