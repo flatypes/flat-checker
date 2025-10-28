@@ -18,6 +18,16 @@ object util:
   private val mxBean =
     java.lang.management.ManagementFactory.getPlatformMXBean(classOf[java.lang.management.ThreadMXBean])
 
+  final class Stopwatch:
+    private var startTime = 0L
+
+    def start(): Unit =
+      startTime = mxBean.getCurrentThreadCpuTime
+
+    def stop(): Double =
+      val endTime = mxBean.getCurrentThreadCpuTime
+      (endTime - startTime) / 1.0e6
+
   enum Aggregator:
     case AllCount
     case AllTime

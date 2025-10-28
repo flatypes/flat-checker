@@ -5,6 +5,7 @@ import flat.Config
 import flat.checker.ast.*
 import flat.regex.RegEx
 import flat.regex.RegEx.*
+import flat.util.Stopwatch
 import io.github.cvc5
 import io.github.cvc5.Kind
 
@@ -26,7 +27,14 @@ final class SMTSolver(using config: Config, types: Types) extends LazyLogging:
     slv.push()
     val t = encodeExpr(conclusion)
     slv.assertFormula(t.notTerm)
+    val sw = new Stopwatch
+    logger.whenTraceEnabled:
+      sw.start()
     val slvResult = slv.checkSat()
+    logger.whenTraceEnabled:
+      val time = sw.stop()
+      logger.trace("SMT: prove {}, time: {} ms", if slvResult.isUnsat then "OK" else "FAIL", time)
+      logger.trace(slv.getAssertions.mkString("\n"))
     slv.pop()
     slvResult.isUnsat
 

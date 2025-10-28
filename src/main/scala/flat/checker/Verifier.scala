@@ -154,11 +154,8 @@ final class Verifier(using config: Config, types: Types, issuer: Issuer) extends
   /** Proves that `conclusion` is valid. */
   def prove(conclusion: Expr): Boolean =
     tryNaive(conclusion) match
-      case Right(msg) =>
-        logger.debug(s"PROVED by $msg")
-        true
-      case _ =>
-        trySplit(conclusion)
+      case Right(msg) => logger.debug(s"PROVED by $msg"); true
+      case _ => trySplit(conclusion)
 
   private def tryNaive(conclusion: Expr): Either[Unit, String] =
     if getCtx.premises.contains(conclusion) then
@@ -178,52 +175,65 @@ final class Verifier(using config: Config, types: Types, issuer: Issuer) extends
       mc.timePause("time/verif/smt/prove")
     if valid then Right("SMT") else Left(())
 
-  private def trySplit(conclusion: Expr): Boolean = conclusion match
-    case And(b1, b2) =>
-      val result1 = trySplit(b1)
-      if !result1 then
-        return false
-      trySplit(b2)
+  private def trySplit(conclusion: Expr): Boolean =
+    val goals = split(conclusion)
+    if goals.length == 1 then tryDestruct(conclusion, 1) else goals.forall(proveCGoal(_, 1))
+
+  private enum Guard:
+    case If(cond: Expr, value: Boolean)
+    case Case(or: Or, choice: Int)
+
+    override def toString: String = this match
+      case If(b, true) => "if " + ppExpr(b)
+      case If(b, false) => "if not " + ppExpr(b)
+      case Case(or, k) => "case " + ppExpr(or.disjuncts(k)) + s" ($k)"
+
+  private def assume(guard: Guard): Unit = guard match
+    case Guard.If(cond, isTrue) =>
+      mostRecentCtx = getCtx.caseIf(cond, isTrue)
+      smtSolver.assume(if isTrue then cond else Not(cond))
+    case Guard.Case(or, k) =>
+      mostRecentCtx = getCtx.caseOr(or, k)
+      val bs = or.disjuncts
+      val assumptions = bs(k) :: bs.take(k).map(Not(_))
+      assumptions.foreach(smtSolver.assume)
+
+  private enum CGoal:
+    case Just(conclusion: Expr)
+    case Imp(conds: List[Expr], goals: List[CGoal])
+    case Guarded(guard: Guard, goals: List[CGoal])
+
+  private def split(conclusion: Expr): List[CGoal] = conclusion match
+    case and: And => and.conjuncts.flatMap(split)
     case or: Or =>
       val bs = or.disjuncts
-      for b <- bs.dropRight(1) do assume(Not(b))
-      trySplit(bs.last)
+      List(CGoal.Imp(bs.dropRight(1).map(Not(_)), split(bs.last)))
     case _ =>
       conclusion.collectFirst { case ite: Ite => ite } match
         case Some(Ite(b, _, _)) =>
-          // Case 1: b is true
-          val e1 = conclusion.transform { case Ite(e0, e1, _) if e0 == b => e1 }
-          val result1 = locally { caseIf(b, true); trySplit(e1) }
-          if !result1 then
-            return false
-          // Case 2: b is false
-          val e2 = conclusion.transform { case Ite(e0, _, e2) if e0 == b => e2 }
-          locally { caseIf(b, false); trySplit(e2) }
-        case None =>
-          logger.debug("+ {}", ppExpr(conclusion))
-          tryNaive(conclusion) match
-            case Right(msg) =>
-              logger.debug(s"PROVED by $msg after split")
-              true
-            case Left(_) =>
-              if getCtx.destructibleCandidates.isEmpty then
-                tryNarrowAndLemmas(conclusion) match
-                  case Right(msg) =>
-                    logger.debug(s"PROVED by $msg")
-                    true
-                  case Left(_) => false
-              else
-                tryCases(conclusion)
+          val c1 = conclusion.transform { case Ite(e0, e1, _) if e0 == b => e1 }
+          val c2 = conclusion.transform { case Ite(e0, _, e2) if e0 == b => e2 }
+          List(CGoal.Guarded(Guard.If(b, true), split(c1)), CGoal.Guarded(Guard.If(b, false), split(c2)))
+        case None => List(CGoal.Just(conclusion))
 
-  private enum Pat:
-    case IfPat(cond: Expr)
-    case OrPat(or: Or)
+  private def proveCGoal(goal: CGoal, level: Int): Boolean = goal match
+    case CGoal.Just(c) =>
+      logger.debug("⇒ {}", ppExpr(c))
+      tryNaive(c) match
+        case Right(msg) => logger.debug(s"PROVED by $msg after split"); true
+        case Left(_) => tryDestruct(c, level)
+    case CGoal.Imp(bs, gs) =>
+      logger.debug("{} assume {}", "-" * level, bs.map(ppExpr).mkString(" ∧ "))
+      locally { bs.foreach(assume); gs.forall(proveCGoal(_, level)) }
+    case CGoal.Guarded(guard, gs) =>
+      logger.debug("{} {}", "-" * level, guard)
+      locally { assume(guard); gs.forall(proveCGoal(_, level + 1)) }
 
-  import Pat.*
-
-  private def tryCases(conclusion: Expr): Boolean =
-    // Decide which premises to perform case analysis.
+  private def tryDestruct(conclusion: Expr, level: Int): Boolean =
     val candidates = getCtx.destructibleCandidates
+    if candidates.isEmpty then
+      return tryNarrowAndLemmas(conclusion).isRight
+    // Decide which premises to perform case analysis.
     val similarities = candidates.map(similarity(conclusion, _))
     val maxSimilarity = similarities.max
     val selected =
@@ -231,22 +241,21 @@ final class Verifier(using config: Config, types: Types, issuer: Issuer) extends
         (p, x) <- candidates.zip(similarities)
         if x == maxSimilarity
       yield p
-    // Collect patterns and destruct the cases.
-    val cases = ListBuffer.empty[Pat]
+    // Collect goals
+    val guardGroups = ListBuffer.empty[List[Guard]]
     selected.foreach:
-      case or: Or => cases += OrPat(or)
-      case b => b.traverse { case Ite(cond, _, _) => cases += IfPat(cond) }
-    tryDestruct(cases.toList, conclusion)
+      case or: Or => guardGroups += or.disjuncts.indices.map(k => Guard.Case(or, k)).toList
+      case b => b.traverse { case Ite(cond, _, _) => guardGroups += List(Guard.If(cond, true), Guard.If(cond, false)) }
+    proveCases(conclusion, guardGroups.toList, level)
 
   private def similarity(conclusion: Expr, premise: Expr): Int =
     (premise.collectVars & conclusion.collectVars).size
 
-  private def tryDestruct(pats: List[Pat], conclusion: Expr): Boolean = pats match
+  private def proveCases(conclusion: Expr, guardGroups: List[List[Guard]], level: Int): Boolean = guardGroups match
     case Nil =>
       tryNaive(conclusion) match
         case Right(msg) =>
-          logger.debug(s"PROVED by $msg after split")
-          true
+          logger.debug(s"PROVED by $msg after destruct"); true
         case Left(_) =>
           tryNarrowAndLemmas(conclusion) match
             case Right(msg) =>
@@ -255,34 +264,18 @@ final class Verifier(using config: Config, types: Types, issuer: Issuer) extends
             case Left(_) if getCtx.destructibleCandidates.nonEmpty =>
               // Try destruct again.
               logger.debug("Try destruct more hypotheses")
-              tryCases(conclusion)
+              tryDestruct(conclusion, level)
             case _ =>
               logger.debug(s"[X] Case FAILED")
               false
-    case IfPat(b) :: rest =>
-      // Case 1: b is true
-      val result1 = locally { caseIf(b, true); tryDestruct(rest, conclusion) }
-      if !result1 then
-        return false
-      // Case 2: b is false
-      locally { caseIf(b, false); tryDestruct(rest, conclusion) }
-    case OrPat(or) :: rest =>
-      or.disjuncts.indices.forall(k => locally { caseOr(or, k); tryDestruct(rest, conclusion) })
-
-  private inline def caseIf(cond: Expr, isTrue: Boolean): Unit =
-    mostRecentCtx = getCtx.caseIf(cond, isTrue)
-    smtSolver.assume(if isTrue then cond else Not(cond))
-    logger.debug("-{} if {}{}", ctxStack.size, if isTrue then "" else "not ", ppExpr(cond))
-
-  private inline def caseOr(or: Or, k: Int): Unit =
-    mostRecentCtx = getCtx.caseOr(or, k)
-    val bs = or.disjuncts
-    val assumptions = bs(k) :: bs.take(k).map(Not(_))
-    assumptions.foreach(smtSolver.assume)
-    logger.debug("-{} case {}: {}", ctxStack.size, k, ppExpr(bs(k)))
+    case group :: rest =>
+      group.forall: guard =>
+        logger.debug("{} {}", "-" * level, guard)
+        locally { assume(guard); proveCases(conclusion, rest, level + 1) }
 
   private def tryNarrowAndLemmas(conclusion: Expr): Either[Unit, String] =
     // Perform type narrowing.
+    logger.trace("narrowing")
     for mc <- config.metrics do
       mc.timeStart("time/verif/narrow")
     val narrower = new Narrower
@@ -306,10 +299,13 @@ final class Verifier(using config: Config, types: Types, issuer: Issuer) extends
           case Left(_) => Left(())
           case Right(value) => Right("type checking")
       case Const(false) =>
+        logger.trace("lemmas (all premises)")
         withLemmas(conclusion, getCtx.premises)
       case _ =>
-        withLemmas(conclusion, List(conclusion))
-          .orElse(withLemmas(conclusion, getCtx.premises))
+        logger.trace("lemmas (conclusion)")
+        withLemmas(conclusion, List(conclusion)).orElse:
+          logger.trace("lemmas (all)")
+          withLemmas(conclusion, getCtx.premises)
 
   private def checkType(expr: Expr, typ: Type): Either[Type, Unit] = typ match
     case LangType(r2) =>
@@ -342,6 +338,7 @@ final class Verifier(using config: Config, types: Types, issuer: Issuer) extends
       mc.timePause("time/verif/type")
     // Try to prove using these lemmas.
     if lemmas.nonEmpty then
+      logger.trace("lemmas: {}", lemmas.map(ppExpr).mkString(", "))
       for mc <- config.metrics do
         mc.count("lemmas", lemmas.length)
       if lemmas.exists(_.conjuncts.contains(conclusion)) then
