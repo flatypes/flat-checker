@@ -1,6 +1,5 @@
 package flat.checker
 
-import flat.checker.*
 import flat.regex.RegEx
 import flat.util.renderSubscript
 import flat.{Location, Locational, Ops}
@@ -12,58 +11,87 @@ import scala.collection.mutable.ListBuffer
 object ast:
   final case class Module(body: List[FunDef])
 
-  final case class FunDef(name: String, params: List[VarDef], returns: VarDef, locals: List[VarDef], body: Stmt)
+  final case class FunDef(name: String, params: List[VarDef], returns: VarDef, locals: List[VarDef], body: Stmt):
+    lazy val lCtx: Map[String, Type] =
+      val paramCtx = Map.from(for param <- params yield param.name -> param.typ)
+      val returnCtx = Map(returns.name -> returns.typ)
+      val localCtx = Map.from(for param <- locals yield param.name -> param.typ)
+      paramCtx ++ returnCtx ++ localCtx
 
   final case class VarDef(name: String, typ: Type)
 
-  /** Type. Can be refined. */
+  /** We adopt a refinement type system. */
   sealed trait Type:
-    def ignoreHint: Type = this
+    /** The base type is a ''sort'', which has no logical constraint. */
+    def base: Sort
 
-    def toSort: Sort
+    /** The logical constraint that poses to this type. The self value is bound to `_`. */
+    def constraint: Option[Expr]
 
-  case object AnyType extends Type:
-    def toSort: Sort = Sort.Top
+  /** Sort: a type that is not constrained. */
+  sealed trait Sort extends Type:
+    def base: Sort = this
 
-  case object NoType extends Type:
-    def toSort: Sort = Sort.Bot
+    def constraint: Option[Expr] = None
 
-  case object IntType extends Type:
-    def toSort: Sort = Sort.I
+  case object TopType extends Sort
 
-  case object BoolType extends Type:
-    def toSort: Sort = Sort.B
+  case object NoType extends Sort
 
-  final case class LangType(re: RegEx) extends Type:
-    def toSort: Sort = Sort.S
+  case object IntSort extends Sort
 
-  val strType: Type = LangType(RegEx.all)
+  case object BoolSort extends Sort
+
+  case object StrSort extends Sort
+
+  case object UnitSort extends Sort
+
+  final case class TupleSort(elems: List[Sort]) extends Sort
+
+  final case class ArraySort(elem: Sort) extends Sort
+
+  final case class FunSort(args: List[Sort], returns: Sort) extends Sort
+
+  extension (lower: Sort)
+    infix def subsortOf(upper: Sort): Boolean =
+      (lower, upper) match
+        case (_, TopType) | (NoType, _) => true
+        case (FunSort(xs, x), FunSort(ys, y)) => (ys zip xs).forall(_ subsortOf _) && (x subsortOf y)
+        case _ => lower == upper
+
+  /** Refines a `typ` with a given `cond`. */
+  class RefinedType(val typ: Type, val cond: Expr) extends Type:
+    def base: Sort = typ.base
+
+    def constraint: Option[Expr] = typ.constraint match
+      case Some(b) => Some(And(b, cond))
+      case None => Some(cond)
+
+  /** Regular Language Type */
+  final case class LangType(re: RegEx) extends RefinedType(StrSort, StrIn(Var("_"), re))
 
   val charType: Type = LangType(RegEx.allChar)
 
-  def literalType(value: String): Type = LangType(RegEx.fromString(value))
+  /** Creates a literal type whose sole inhabitant is the given literal `value`. */
+  def literalType(value: Int | Boolean | String): Type = value match
+    case n: Int => RefinedType(IntSort, Ops.CmpOp.EQ(Var("_"), n))
+    case b: Boolean => RefinedType(BoolSort, Ops.CmpOp.EQ(Var("_"), b))
+    case s: String => LangType(RegEx.fromString(s))
 
-  final case class TupleType(elems: Seq[Type]) extends Type:
-    def toSort: Sort = Sort.Tuple(elems.map(_.toSort))
+  final case class TupleType(elems: List[Type]) extends Type:
+    def base: Sort = TupleSort(elems.map(_.base))
 
-  val unitType: TupleType = TupleType(Seq.empty)
+    def constraint: Option[Expr] = Some(TypeTest(Var("_"), this))
 
   final case class ArrayType(elem: Type) extends Type:
-    def toSort: Sort = Sort.Array(elem.toSort)
+    def base: Sort = ArraySort(elem.base)
 
-  final case class FunType(args: Seq[Type], returns: Type) extends Type:
-    def toSort: Sort = Sort.Fun(args.map(_.toSort), returns.toSort)
+    def constraint: Option[Expr] = throw UnsupportedOperationException()
 
-  given fromSort: Conversion[Sort, Type] = {
-    case Sort.Top => AnyType
-    case Sort.Bot => NoType
-    case Sort.I => IntType
-    case Sort.B => BoolType
-    case Sort.S => strType
-    case Sort.Tuple(ss) => TupleType(ss.map(fromSort))
-    case Sort.Array(s) => ArrayType(s)
-    case Sort.Fun(ss, s) => FunType(ss.map(fromSort), s)
-  }
+  final case class FunType(args: List[Type], returns: Type) extends Type:
+    def base: Sort = FunSort(args.map(_.base), returns.base)
+
+    def constraint: Option[Expr] = throw UnsupportedOperationException()
 
   /** Statement. */
   sealed trait Stmt:
@@ -211,9 +239,9 @@ object ast:
     protected def update(newChildren: List[Expr]): Expr = this
 
     def sort: Sort = value match
-      case _: Int => Sort.I
-      case _: Boolean => Sort.B
-      case _: String => Sort.S
+      case _: Int => IntSort
+      case _: Boolean => BoolSort
+      case _: String => StrSort
 
     override def toString: String = value match
       case s: String => "\"" + escapeJava(s) + "\""
@@ -228,7 +256,7 @@ object ast:
 
     protected def update(newChildren: List[Expr]): Expr = this
 
-    def sort: Sort = Sort.Bot
+    def sort: Sort = NoType
 
     override def toString: String = name
 
@@ -239,12 +267,12 @@ object ast:
 
     protected def update(newChildren: List[Expr]): Expr = this
 
-    private var theSort = Sort.Bot
+    private var theSort: Sort = NoType
 
     def sort: Sort = theSort
 
     def withSort(s: Sort): this.type =
-      require(theSort == Sort.Bot)
+      require(theSort == NoType)
       theSort = s
       this
 
@@ -261,7 +289,7 @@ object ast:
 
     protected def update(newChildren: List[Expr]): Expr = copy(elems = newChildren)
 
-    def sort: Sort = Sort.Tuple(elems.map(_.sort))
+    def sort: Sort = TupleSort(elems.map(_.sort))
 
     override def toString: String = "(" + elems.mkString(", ") + ")"
 
@@ -276,7 +304,7 @@ object ast:
       case List(e) => copy(value = e)
       case _ => assert(false)
 
-    def sort: Sort = Sort.B
+    def sort: Sort = BoolSort
 
     override def toString: String = typ match
       case LangType(r) => s"$value : $r"
@@ -292,7 +320,7 @@ object ast:
       case List(e1, e2) => copy(left = e1, right = e2)
       case _ => assert(false)
 
-    def sort: Sort = Sort.B
+    def sort: Sort = BoolSort
 
     override def toString: String = s"($left && $right)"
 
@@ -310,7 +338,7 @@ object ast:
       case List(e1, e2) => copy(left = e1, right = e2)
       case _ => assert(false)
 
-    def sort: Sort = Sort.B
+    def sort: Sort = BoolSort
 
     override def toString: String = s"($left || $right)"
 
@@ -328,7 +356,7 @@ object ast:
       case List(e) => copy(value = e)
       case _ => assert(false)
 
-    def sort: Sort = Sort.B
+    def sort: Sort = BoolSort
 
     override def toString: String = s"(!$value)"
 
@@ -356,7 +384,7 @@ object ast:
       case List(e1, e2) => copy(left = e1, right = e2)
       case _ => assert(false)
 
-    def sort: Sort = Sort.B
+    def sort: Sort = BoolSort
 
     override def toString: String = s"($left $op $right)"
 
@@ -373,7 +401,7 @@ object ast:
       case List(e) => copy(value = e)
       case _ => assert(false)
 
-    def sort: Sort = Sort.I
+    def sort: Sort = IntSort
 
     override def toString: String = s"-$value"
 
@@ -386,7 +414,7 @@ object ast:
       case List(e1, e2) => copy(left = e1, right = e2)
       case _ => assert(false)
 
-    def sort: Sort = Sort.I
+    def sort: Sort = IntSort
 
     override def toString: String = s"($left $op $right)"
 
@@ -430,7 +458,7 @@ object ast:
       case List(e1, e2) => copy(left = e1, right = e2)
       case _ => assert(false)
 
-    def sort: Sort = Sort.S
+    def sort: Sort = StrSort
 
     override def toString: String = s"($left ++ $right)"
 
@@ -443,7 +471,7 @@ object ast:
       case List(e) => copy(str = e)
       case _ => assert(false)
 
-    def sort: Sort = Sort.I
+    def sort: Sort = IntSort
 
     override def toString: String = s"|$str|"
 
@@ -456,7 +484,7 @@ object ast:
       case List(e, ei) => copy(str = e, idx = ei)
       case _ => assert(false)
 
-    def sort: Sort = Sort.S
+    def sort: Sort = StrSort
 
     override def toString: String = s"$str[$idx]"
 
@@ -469,7 +497,7 @@ object ast:
       case List(e, ei, ej) => copy(str = e, startIdx = ei, endIdx = ej)
       case _ => assert(false)
 
-    def sort: Sort = Sort.S
+    def sort: Sort = StrSort
 
     override def toString: String = endIdx match
       case Length(s) if s == str => s"$str[$startIdx:]"
@@ -477,7 +505,7 @@ object ast:
 
   /** String Testing Operations. */
   sealed trait StrTest extends Expr:
-    def sort: Sort = Sort.B
+    def sort: Sort = BoolSort
 
   final case class PrefixOf(prefix: Expr, str: Expr) extends StrTest:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitPrefixOf(this)
@@ -521,7 +549,7 @@ object ast:
       case List(e, et) => copy(str = e, pat = et)
       case _ => assert(false)
 
-    def sort: Sort = Sort.I
+    def sort: Sort = IntSort
 
     override def toString: String = s"$str.find($pat)"
 
@@ -534,7 +562,7 @@ object ast:
       case List(e, et) => copy(str = e, sep = et)
       case _ => assert(false)
 
-    def sort: Sort = Sort.Array(Sort.S)
+    def sort: Sort = ArraySort(StrSort)
 
     override def toString: String = s"$str.split($sep)"
 
@@ -547,7 +575,7 @@ object ast:
       case List(e) => copy(str = e)
       case _ => assert(false)
 
-    def sort: Sort = Sort.S
+    def sort: Sort = StrSort
 
     override def toString: String = s"$str.rev"
 
@@ -560,7 +588,7 @@ object ast:
       case List(e) => copy(chr = e)
       case _ => assert(false)
 
-    def sort: Sort = Sort.I
+    def sort: Sort = IntSort
 
   final case class StrFromCode(code: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitStrFromCode(this)
@@ -571,7 +599,7 @@ object ast:
       case List(e) => copy(code = e)
       case _ => assert(false)
 
-    def sort: Sort = Sort.S
+    def sort: Sort = StrSort
 
   final case class StrToInt(str: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitStrToInt(this)
@@ -582,7 +610,7 @@ object ast:
       case List(e) => copy(str = e)
       case _ => assert(false)
 
-    def sort: Sort = Sort.I
+    def sort: Sort = IntSort
 
   final case class StrFromInt(int: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitStrFromInt(this)
@@ -593,7 +621,18 @@ object ast:
       case List(e) => copy(int = e)
       case _ => assert(false)
 
-    def sort: Sort = Sort.S
+    def sort: Sort = StrSort
+
+  final case class StrIn(str: Expr, re: RegEx) extends Expr:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitStrIn(this)
+
+    protected def children: List[Expr] = List(str)
+
+    protected def update(newChildren: List[Expr]): Expr = newChildren match
+      case List(e) => copy(str = e)
+      case _ => assert(false)
+
+    def sort: Sort = BoolSort
 
   final case class ArrSelect(arr: Expr, idx: Expr) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitArrSelect(this)
@@ -605,7 +644,7 @@ object ast:
       case _ => assert(false)
 
     def sort: Sort = arr.sort match
-      case Sort.Array(s) => s
+      case ArraySort(s) => s
       case _ => assert(false)
 
   final case class Apply(fun: Expr, args: List[Expr]) extends Expr:
@@ -618,7 +657,7 @@ object ast:
       case _ => assert(false)
 
     def sort: Sort = fun.sort match
-      case Sort.Fun(_, s) => s
+      case FunSort(_, s) => s
       case _ => assert(false)
 
   val NoExpr: Expr = GlobalRef("")
@@ -675,6 +714,8 @@ object ast:
     def visitStrToInt(node: StrToInt)(using ctx: C): T
 
     def visitStrFromInt(node: StrFromInt)(using ctx: C): T
+
+    def visitStrIn(node: StrIn)(using ctx: C): T
 
     def visitArrSelect(node: ArrSelect)(using ctx: C): T
 

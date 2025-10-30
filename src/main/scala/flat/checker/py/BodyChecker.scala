@@ -1,9 +1,9 @@
 package flat.checker.py
 
 import flat.Issuer
+import flat.checker.ast
 import flat.checker.ast.CmpOp.*
 import flat.checker.py.ast.*
-import flat.checker.{Sort, ast}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
@@ -46,19 +46,19 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
           issuer.report(Unsupported("list", node.target.loc))
         case TupleExpr(values) =>
           val (t, e) = inferType(node.value, ctx)
-          t.toSort match
-            case Sort.S =>
-              val id = vm.declare(ast.strType)
+          t.base match
+            case ast.StrSort =>
+              val id = vm.declare(ast.StrSort)
               out += ast.Assign(id, e)
               out += ast.Assert(ast.Cmp(EQ,
-                ast.Length(ast.Var(id).withSort(Sort.S)),
+                ast.Length(ast.Var(id).withSort(ast.StrSort)),
                 ast.Const(values.length)).fillLocation(node.loc))
               var newCtx = ctx
               for i <- values.indices do
                 newCtx = checkAssign(values(i),
-                  ast.CharAt(ast.Var(id).withSort(Sort.S), ast.Const(i)).fillLocation(values(i).loc),
+                  ast.CharAt(ast.Var(id).withSort(ast.StrSort), ast.Const(i)).fillLocation(values(i).loc),
                   // NOTE: to skip checking the binder has type char
-                  ast.strType, (newCtx, com))
+                  ast.StrSort, (newCtx, com))
               return newCtx
             case _ =>
               issuer.report(Unsupported("tuple", node.target.loc))
@@ -120,7 +120,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
 
     override def visitAssert(node: Assert, env: (LCtx, LCtx)): LCtx =
       val (ctx, _) = env
-      val e = checkType(node.test, ast.BoolType, ctx)
+      val e = checkType(node.test, ast.BoolSort, ctx)
       out += ast.Assert(e)
       ctx
 
@@ -130,7 +130,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
 
     override def visitIf(node: If, env: (LCtx, LCtx)): LCtx =
       val (ctx, com) = env
-      val e = checkType(node.test, ast.BoolType, ctx)
+      val e = checkType(node.test, ast.BoolSort, ctx)
       val (b1, ctx1) = checkBody(node.body, ctx, com)
       val delta1 = ctx1 -- ctx.keySet
       val (b2, ctx2) = checkBody(node.orElse, ctx, com ++ delta1)
@@ -139,7 +139,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
 
     override def visitWhile(node: While, env: (LCtx, LCtx)): LCtx =
       val (ctx, com) = env
-      val e = checkType(node.test, ast.BoolType, ctx)
+      val e = checkType(node.test, ast.BoolSort, ctx)
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, _) = checkBody(realBody, ctx, com)(using insideLoop = true)
       if b.last.isInstanceOf[ast.Break] then // this while loop is just an if-statement
@@ -148,7 +148,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else
         val loop = ast.While(e, ast.mkStmtList(b))
-        val inv = for expr <- invNodes yield checkType(expr, ast.BoolType, ctx)
+        val inv = for expr <- invNodes yield checkType(expr, ast.BoolSort, ctx)
         loop.invariants ++= inv
         out += loop
       ctx
@@ -175,7 +175,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
           val e = checkType(expr, returnType, ctx)
           out += ast.Assign("return", e)
         case None =>
-          if returnType != ast.unitType then
+          if returnType != ast.UnitSort then
             issuer.report(TypeError("missing return value", node.loc))
           ast.mkUnit
       out += ast.Return()
@@ -185,7 +185,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
       val (ctx, _) = env
       node.expr match
         case Call(Name("show_type"), Seq(arg)) =>
-          val e = checkType(arg, ast.strType, ctx)
+          val e = checkType(arg, ast.StrSort, ctx)
           out += ast.ShowType(e)
           ctx
         case _ =>

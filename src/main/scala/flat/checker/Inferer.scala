@@ -201,4 +201,4 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
           case _ => assert(false)
         (bs, results.distinct.toList)
 
-  private inline def isValid(cond: Expr)(using ctx: PrfCtx): Boolean = ctx.proves(cond)
+  private inline def isValid(cond: Expr)(using ctx: PrfCtx): Boolean = ctx.isValid(cond)

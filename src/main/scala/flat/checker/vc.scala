@@ -80,7 +80,7 @@ final case class VCPre(cond: Expr)(using loc: Location) extends VCGoal:
   def diagnostic(msg: String): Diagnostic =
     Diagnostic(loc, "Pre-condition may fail", msg)
 
-class Fresh:
+final class Fresh:
   private val latest = mutable.Map.empty[String, Int]
 
   def apply(name: String): String =
@@ -90,19 +90,22 @@ class Fresh:
     s"$name@${k + 1}"
 
 object VCGenerator:
-  def generate(body: Stmt, types: Types): VC =
-    guessInvariants(body)
-    val fresh = new Fresh
-    wlp(body, VCTrue)(using types, fresh, VCTrue)
+  def generate(funDef: FunDef): VC =
+    guessInvariants(funDef.body)
+    val vcPre = wlp(funDef.body, VCTrue)(using funDef.lCtx, new Fresh, VCTrue)
+    funDef.params.foldRight(vcPre):
+      case (VarDef(x, t), vc) => t.constraint match
+        case Some(b) => VCImp(b.subst(Map("_" -> Var(x))), vc)
+        case None => vc
 
-  private def wlp(stmt: Stmt, post: VC)(using types: Types, fresh: Fresh, vcInv: VC): VC = stmt match
+  private def wlp(stmt: Stmt, post: VC)(using ctx: Map[String, Type], fresh: Fresh, vcInv: VC): VC = stmt match
     case Skip() => post
     case SeqStmt(s1, s2) => wlp(s1, wlp(s2, post))
     case Assume(b) =>
       mkVCGroup(checkSides(b), VCImp(b, post))
     case Assign(x, e) =>
-      val t = types(x)
-      val vcType = if t == ast.fromSort(t.toSort) then VCTrue else VCType(e, t)(using e.loc)
+      val t = ctx(x)
+      val vcType = if t.constraint.isEmpty then VCTrue else VCType(e, t)(using e.loc)
       mkVCGroup(checkSides(e), vcType, post.subst(Map(x -> e)))
     case Assert(b) =>
       mkVCGroup(checkSides(b), VCAssert(b)(using b.loc), post)

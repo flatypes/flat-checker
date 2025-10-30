@@ -15,7 +15,7 @@ import scala.annotation.tailrec
 class Narrower(using config: Config) extends LazyLogging:
   /** Performs type narrowing on the given `ctx`. */
   def narrow(ctx: PrfCtx): List[Expr] =
-    val res: Map[Expr, RegEx] = Map.from(for x <- ctx.types.strVars yield Var(x) -> ctx.getLang(Var(x)))
+    val res: Map[Expr, RegEx] = Map.from(for x <- ctx.varCtx.strVars yield Var(x) -> ctx.getLang(Var(x)))
     val res1 = iterate(ctx.premises, res)(using ctx)
     List.from(for es -> r <- res1 yield TypeTest(es, LangType(r)))
 

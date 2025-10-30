@@ -1,9 +1,18 @@
 package flat
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object util:
+  @tailrec
+  def allRight[T, L](xs: List[T], f: T => Either[L, Unit]): Either[L, Unit] = xs match
+    case Nil => Right(())
+    case x :: xs =>
+      f(x) match
+        case Left(l) => Left(l)
+        case Right(_) => allRight(xs, f)
+
   def bigProduct[T](xss: Seq[Seq[T]]): Seq[Seq[T]] = xss match
     case Nil => Seq.empty
     case Seq(xs) => for x <- xs yield Seq(x)

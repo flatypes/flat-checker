@@ -1,7 +1,7 @@
 package flat.checker.py
 
+import flat.checker.ast
 import flat.checker.py.ast.*
-import flat.checker.{Sort, ast}
 import flat.{Issuer, Location}
 import org.apache.commons.text.StringEscapeUtils.unescapeJava
 
@@ -21,20 +21,20 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
   private object InferMode extends NodeVisitor[LCtx, (ast.Type, ast.Expr)]:
     override def visitConstant(node: Constant, ctx: LCtx): (ast.Type, ast.Expr) =
       node.value match
-        case v: Int => (ast.IntType, ast.Const(v).copyLocation(node))
-        case v: Boolean => (ast.BoolType, ast.Const(v).copyLocation(node))
-        case v: String => (ast.strType, ast.Const(unescapeJava(v)).copyLocation(node))
+        case v: Int => (ast.IntSort, ast.Const(v).copyLocation(node))
+        case v: Boolean => (ast.BoolSort, ast.Const(v).copyLocation(node))
+        case v: String => (ast.StrSort, ast.Const(unescapeJava(v)).copyLocation(node))
 
     override def visitTupleExpr(node: TupleExpr, ctx: LCtx): (ast.Type, ast.Expr) =
       val (ts, es) = (for value <- node.values yield value.accept(this, ctx)).unzip
-      (ast.TupleType(ts), ast.TupleExpr(es.toList).copyLocation(node))
+      (ast.TupleType(ts.toList), ast.TupleExpr(es.toList).copyLocation(node))
 
     override def visitName(node: Name, ctx: LCtx): (ast.Type, ast.Expr) =
       val x = node.id
       ctx.get(x) match
         case Some(id) =>
           val t = vm.getType(id)
-          (t, ast.Var(id).withSort(t.toSort).copyLocation(node))
+          (t, ast.Var(id).withSort(t.base).copyLocation(node))
         case None =>
           gCtx.get(x) match
             case Some(info: FunInfo) =>
@@ -57,7 +57,7 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
     private def checkMemberCall(receiver: Expr, member: String, args: Seq[Expr],
                                 nodeLoc: Location, ctx: LCtx): (ast.Type, ast.Expr) =
       val (t, e) = receiver.accept(this, ctx)
-      selectMember(t.toSort, member) match
+      selectMember(t.base, member) match
         case Some(m) =>
           val es = checkArgs(nodeLoc, args, m.required, m.optional, ctx)
           if m.preCond.isDefined then
@@ -73,7 +73,7 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
           node.args match
             case Seq(arg) =>
               val (t, e) = arg.accept(this, ctx)
-              selectMember(t.toSort, s"__${f}__") match
+              selectMember(t.base, s"__${f}__") match
                 case Some(m) =>
                   assert(m.required.isEmpty && m.optional.isEmpty)
                   (m.returns, m(Seq(e)).copyLocation(node))
@@ -82,8 +82,8 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
                   (ast.NoType, ast.NoExpr)
             case Seq(obj, annot) if f == "isinstance" =>
               val t = checkAnnot(annot, gCtx)
-              val e = checkType(obj, t.toSort, ctx)
-              (ast.BoolType, ast.TypeTest(e, t).copyLocation(node))
+              val e = checkType(obj, t.base, ctx)
+              (ast.BoolSort, ast.TypeTest(e, t).copyLocation(node))
             case other =>
               issuer.report(TypeError(s"function $f takes exactly one argument", node.loc))
               (ast.NoType, ast.NoExpr)
@@ -99,8 +99,8 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
               issuer.report(TypeMismatch("Callable", te.show, expr.loc))
               (ast.NoType, ast.NoExpr)
 
-    private def checkArgs(nodeLoc: Location, args: Seq[Expr], required: Seq[Sort],
-                          optional: Seq[(Sort, ast.Expr)], ctx: LCtx): Seq[ast.Expr] =
+    private def checkArgs(nodeLoc: Location, args: Seq[Expr], required: Seq[ast.Sort],
+                          optional: Seq[(ast.Sort, ast.Expr)], ctx: LCtx): Seq[ast.Expr] =
       if args.length < required.length then
         issuer.report(TypeError(s"missing ${required.length - args.length} required positional arguments", nodeLoc))
       else if args.length > required.length + optional.length then
@@ -112,14 +112,14 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
       for (arg, s) <- args zip (required ++ optional.map(_._1)) yield arg.accept(CheckMode, (s, ctx))
 
     override def visitIfExp(node: IfExp, ctx: LCtx): (ast.Type, ast.Expr) =
-      val e = node.test.accept(CheckMode, (ast.BoolType, ctx))
+      val e = node.test.accept(CheckMode, (ast.BoolSort, ctx))
       val (t1, e1) = node.body.accept(this, ctx)
       val e2 = node.orElse.accept(CheckMode, (t1, ctx))
       (t1, ast.Ite(e, e1, e2).copyLocation(node))
 
   private object CheckMode extends NodeVisitor[(ast.Type, LCtx), ast.Expr]:
     override def visitIfExp(node: IfExp, ctx: (ast.Type, LCtx)): ast.Expr =
-      val e = node.test.accept(this, (ast.BoolType, ctx._2))
+      val e = node.test.accept(this, (ast.BoolSort, ctx._2))
       val e1 = node.body.accept(this, ctx)
       val e2 = node.orElse.accept(this, ctx)
       ast.Ite(e, e1, e2).copyLocation(node)
@@ -127,6 +127,6 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
     override def visitDefault(node: Node, arg: (ast.Type, LCtx)): ast.Expr =
       val (expected, ctx) = arg
       val (actual, e) = node.accept(InferMode, ctx)
-      if !(actual.toSort :<: expected.toSort) then
+      if !(actual.base subsortOf expected.base) then
         issuer.report(TypeMismatch(expected.show, actual.show, node.loc))
       e

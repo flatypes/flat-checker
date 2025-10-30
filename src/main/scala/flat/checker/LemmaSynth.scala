@@ -67,7 +67,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
     def apply(using ctx: PrfCtx): List[Expr] =
       val e = Length(str)
       ctx.lookupSuffixLang(str) match
-        case Some((eb, r)) if ctx.proves(And(GE(eb, 0), LT(eb, e))) =>
+        case Some((eb, r)) if ctx.isValid(And(GE(eb, 0), LT(eb, e))) =>
           val r1 = r.narrowByLength(Interval(lb = 1))
           List(inInterval(SUB(e, eb), r1.length))
         case _ =>

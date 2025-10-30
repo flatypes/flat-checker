@@ -1,17 +1,15 @@
 package flat.checker.py
 
-import flat.checker.{Sort, ast}
+import flat.checker.ast.*
 
-extension (sort: Sort)
-  def show: String = sort match
-    case Sort.Top => "Any"
-    case Sort.Bot => "?"
-    case Sort.I => "int"
-    case Sort.B => "bool"
-    case Sort.S => "str"
-    case Sort.Tuple(ss) => s"tuple[${ss.map(_.show).mkString(", ")}]"
-    case Sort.Array(s) => s"list[${s.show}]"
-    case Sort.Fun(ss, s) => s"Callable[[${ss.map(_.show).mkString(", ")}], ${s.show}]"
-
-extension (typ: ast.Type)
-  def show: String = typ.toSort.show
+extension (typ: Type)
+  def show: String = typ match
+    case TopType => "Any"
+    case NoType => "?"
+    case IntSort => "int"
+    case BoolSort => "bool"
+    case StrSort => "str"
+    case TupleSort(ss) => s"tuple[${ss.map(_.show).mkString(", ")}]"
+    case ArraySort(s) => s"list[${s.show}]"
+    case FunSort(ss, s) => s"Callable[[${ss.map(_.show).mkString(", ")}], ${s.show}]"
+    case _ => typ.base.show

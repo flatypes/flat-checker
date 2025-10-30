@@ -4,7 +4,7 @@ import flat.regex.RegEx.*
 
 object simpl:
   /** Longest common prefix. */
-  private def lcp[T](xss: List[List[T]])(using eq: (T, T) => Boolean): List[T] = xss match
+  def lcp[T](xss: List[List[T]])(using eq: (T, T) => Boolean): List[T] = xss match
     case Nil => throw IllegalArgumentException("empty cases")
     case _ =>
       if xss.forall(_.nonEmpty) then

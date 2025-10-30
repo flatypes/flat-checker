@@ -50,7 +50,6 @@ class Diagnostic(val loc: Location, val message: String,
     buf.map(_ + '\n').mkString
 
 enum DiagnosticSeverity:
-  case FATAL
   case ERROR
   case WARN
   case INFO

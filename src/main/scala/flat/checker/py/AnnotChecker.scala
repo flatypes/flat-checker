@@ -18,9 +18,9 @@ class AnnotChecker(using issuer: Issuer):
           ast.NoType
         case None =>
           x match
-            case "int" => ast.IntType
-            case "bool" => ast.BoolType
-            case "str" => ast.strType
+            case "int" => ast.IntSort
+            case "bool" => ast.BoolSort
+            case "str" => ast.StrSort
             case "Char" => ast.charType
             case "Callable" => "Callable"
             case "tuple" | "Tuple" => "Tuple"
@@ -50,7 +50,7 @@ class AnnotChecker(using issuer: Issuer):
                     case ListExpr(args) => for arg <- args yield arg.accept(this, ctx)
                     case arg => Seq(arg.accept(this, ctx))
                   val t = second.accept(this, ctx)
-                  ast.FunType(ts, t)
+                  ast.FunType(ts.toList, t)
                 case _ =>
                   issuer.report(TypeError(
                     "invalid arguments for typing.Callable\n" +
@@ -60,7 +60,7 @@ class AnnotChecker(using issuer: Issuer):
               node.index match
                 case TupleExpr(args) if args.length != 1 =>
                   val ts = for arg <- args yield arg.accept(this, ctx)
-                  ast.TupleType(ts)
+                  ast.TupleType(ts.toList)
                 case _ =>
                   issuer.report(TypeError(
                     "invalid arguments for typing.Tuple\n" +

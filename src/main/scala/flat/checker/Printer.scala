@@ -10,11 +10,24 @@ import org.apache.commons.text.StringEscapeUtils.escapeJava
 
 object Printer:
   def ppType(typ: Type): String = typ match
-    case AnyType => "Any"
+    case TopType => "Any"
     case NoType => "Nothing"
-    case IntType => "Int"
-    case BoolType => "Bool"
-    case LangType(r) => ppRE(r)
+    case IntSort => "Int"
+    case BoolSort => "Bool"
+    case StrSort => "String"
+    case UnitSort => "Unit"
+    case TupleSort(ts) =>
+      val elems = ts.map(ppType)
+      paren(elems.mkString(", "))
+    case ArraySort(s) =>
+      val elem = ppType(s)
+      s"Array[$elem]"
+    case FunSort(ts, t) =>
+      val ss = ts.map(ppType)
+      val left = if ss.length == 1 then ss.head else paren(ss.mkString(", "))
+      val right = ppType(t)
+      s"$left => $right"
+    case LangType(re) => ppRE(re)
     case TupleType(ts) =>
       val ss = ts.map(ppType)
       paren(ss.mkString(", "))
@@ -26,6 +39,10 @@ object Printer:
       val left = if ss.length == 1 then ss.head else paren(ss.mkString(", "))
       val right = ppType(t)
       s"$left => $right"
+    case rt: RefinedType =>
+      val typ = ppType(rt.typ)
+      val cond = ppExpr(rt.cond)
+      s"$typ{$cond}"
 
   private inline def paren(s: String): String = "(" + s + ")"
 
@@ -220,6 +237,12 @@ object Printer:
       val int = node.int.accept(this)
       s"fromInt($int)"
 
+    def visitStrIn(node: StrIn)(using ctx: Unit): String =
+      val s = node.str.accept(this)
+      val str = if getLevel(node.str) < Level.CMP then paren(s) else s
+      val re = ppRE(node.re)
+      s"$str ∈ $re"
+
     def visitArrSelect(node: ArrSelect)(using ctx: Unit): String =
       val s = node.arr.accept(this)
       val arr = if getLevel(node.arr) < Level.APPLY then paren(s) else s
@@ -246,7 +269,7 @@ object Printer:
 
   def ppStmt(stmt: Stmt): String = stmt.accept(StmtPrinter)(using 0)
 
-  object StmtPrinter extends StmtVisitor[Int, String]:
+  private object StmtPrinter extends StmtVisitor[Int, String]:
     def visitSkip(node: Skip)(using level: Int): String =
       ("  " * level) + "skip" + "\n"
 
@@ -290,16 +313,3 @@ object Printer:
 
     def visitReturn(node: Return)(using level: Int): String =
       ("  " * level) + "return" + "\n"
-
-  def ppVCGoal(goal: VCGoal): String = goal match
-    case VCType(e, t) =>
-      val value = ppExpr(e)
-      val expected = ppType(t)
-      s"$value ∈ $expected"
-    case _ =>
-      val cond = ppExpr(goal.cond)
-      s"$cond (${goal.getClass.getSimpleName})"
-
-  def ppCtx(ctx: PrfCtx): String =
-    val ss = ctx.premises.map(ppExpr)
-    if ss.isEmpty then "⊤" else ss.mkString(" ∧ ")

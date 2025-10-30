@@ -19,26 +19,22 @@ object CLI:
         .required()
         .action { (p, c) => c.copy(inputs = c.inputs :+ os.Path(p.toAbsolutePath)) }
         .text("input files/dirs"),
-      // option --fast-exit
-      opt[Unit]("fast-exit")
-        .action { (_, c) => c.copy(fastExit = true) }
-        .text("immediately exit upon the first error occurred"),
-      // option --non-inc
-      opt[Unit]("non-inc")
-        .action { (_, c) => c.copy(nonInc = true) }
-        .text("disable incremental checking"),
-      // option --metrics
+      // option: --no-error
+      opt[Unit]("no-error")
+        .action { (_, c) => c.copy(noError = true) }
+        .text("ensure no type errors (if not, exit on first error)"),
+      // option: --metrics
       opt[Path]("metrics")
         .action: (p, c) =>
           c.copy(metrics = Some(MetricCollector(os.Path(p.toAbsolutePath), Aggregator.AllCount, Aggregator.AllTime)))
         .valueName("<file>")
         .text("collect and save statistical metrics to a JSON file"),
-      // option --smt-time-limit
+      // option: --smt-time-limit
       opt[Int]("smt-time-limit")
         .action { (n, c) => c.copy(smtTimeLimit = n) }
         .valueName("<time>")
         .text("time limit per SMT query in ms (default 3000)"),
-      // option -h
+      // option: -h, --help
       help('h', "help")
         .text("print this usage text"),
       // subcommand: extract
@@ -46,11 +42,16 @@ object CLI:
         .text("Extract VCs only, without doing type checking")
         .action((_, c) => c.copy(extractMode = true))
         .children(
+          // option: -o <dir> (required)
           opt[Path]('o', "output")
             .required()
             .action { (p, c) => c.copy(extractOutput = Some(os.Path(p.toAbsolutePath))) }
             .valueName("<dir>")
             .text("extract to this directory"),
+          // option: --multi-goals
+          opt[Unit]("multi-goals")
+            .action { (_, c) => c.copy(extractMultiGoals = true) }
+            .text("split VCs into multiple goals")
         )
     )
 
