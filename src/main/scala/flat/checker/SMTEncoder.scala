@@ -166,6 +166,10 @@ class SMTEncoder(using config: Config, varCtx: VarCtx) extends LazyLogging:
       val t = encodeExpr(e)
       // NOTE: only nonnegative values are supported
       tm.mkTerm(Kind.STRING_FROM_INT, t)
+    case StrIn(e, r) =>
+      if config.extractMode then
+        encodeTypeTest(e, LangType(r))
+      else tm.mkConst(tm.getBooleanSort)
 
     // Array operations
     case ArrSelect(ea, ei) =>

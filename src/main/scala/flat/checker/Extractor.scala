@@ -2,23 +2,27 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.ast.{Expr, FunDef, Module}
-import flat.{Config, checker}
+import flat.{Config, ExtractConfig, checker}
 import io.github.cvc5
 import io.github.cvc5.Kind
 
 import scala.collection.mutable.ListBuffer
 
 /** SMT Formula Extractor */
-class Extractor(using config: Config) extends LazyLogging:
-  /** Extracts the SMT formulae generated from the given `module` and saves them as SMT-LIB files in the `outDir`. */
-  def extract(module: Module, outDir: os.Path): Unit = module.body.foreach(extract(_, outDir))
+class Extractor(using config: ExtractConfig) extends LazyLogging:
+  /** Extracts the SMT formulae generated from the given `module` compiled from the source in `path`.
+   * Saves as SMT-LIB files. */
+  def extract(module: Module, path: os.Path): Unit =
+    val relPath = (path / "..").relativeTo(config.input)
+    val outDir = config.output / relPath / path.baseName
+    module.body.foreach(extract(_, outDir))
 
   private def extract(funDef: FunDef, outDir: os.Path): Unit =
     val lines = ListBuffer.empty[String]
     lines ++= head
     val vc = VCGenerator.generate(funDef)
     val varCtx = VarCtx.from(funDef)
-    val encoder = new SMTEncoder(using config, varCtx)
+    val encoder = new SMTEncoder(using Config(extractMode = true), varCtx)
     val term = encode(vc)(using encoder)
     for x -> t <- encoder.getCtx do
       lines += declare(x, t.getSort)
@@ -28,9 +32,10 @@ class Extractor(using config: Config) extends LazyLogging:
     os.write.over(outPath, lines.mkString("\n"), createFolders = true)
     logger.info("Written: {}", outPath)
 
-    if config.extractMultiGoals then // multi-goals
+    if config.multiGoals then // multi-goals
       for (hs -> c, i) <- split(vc).zipWithIndex do
-        val encoder = new SMTEncoder(using config, varCtx)
+        val lines = ListBuffer.empty[String]
+        val encoder = new SMTEncoder(using Config(extractMode = true), varCtx)
         val assumptions = hs.map(encoder.encodeExpr)
         val conclusion = encoder.encodeExpr(c)
         for x -> t <- encoder.getCtx do
