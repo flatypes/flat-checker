@@ -2,51 +2,81 @@
 
 Type checking regular language types.
 
-## Build (Via Docker)
+## Building via Docker
 
-Simply run `docker build . -t flat-checker:dev` to build a Docker image.
-If succeeds, launch it by `docker run -it flat-checker:dev`.
+Building the image:
 
-## Build (From Source)
+```shell
+docker build . -t flat-checker:dev
+```
 
-For building this Scala project, you need [sbt](https://www.scala-sbt.org) (in this project: version `1.10.0`).
+Running the image:
 
-We use [CVC5](https://cvc5.github.io) as a backend SMT solver to discharge queries about integer arithmetic.
-We call it using the official Java-bindings. A prebuilt JAR dependency (version `1.2.0`) is included in the `lib/`
-folder.
-But you need to compile a shared library on your local machine and if necessary, add it to your Java library path so
-that JVM can correctly load it.
-For example, on macOS (M1 and later), you may need to copy `libcvc5jni.dylib` to `~/Library/Java/Extensions/lib/`.
-Also, you should copy the `cvc5.jar` from the CVC5 folder into the `lib/` folder of this project.
-See [here](https://cvc5.github.io/docs/cvc5-1.2.0/api/java/java.html) for more details on building the Java bindings.
+```shell
+docker run -it flat-checker:dev
+```
 
-In the project root folder:
+This will drop you into a bash shell inside the container.
+You can run the type checker using the command `./flat-checker` as described below in the Usage section.
 
-- Run `sbt test` to compile and run all unit tests.
-- Run `sbt assembly` to build a standalone jar. Then you can run it using the command `./flat-checker`.
+## Building from Source
+
+Prerequisites:
+
+- Java version 21 or later
+- [sbt](https://www.scala-sbt.org) version 1.10.0
+- Python version 3.12 or later
+- [CVC5](https://cvc5.github.io) version 1.3.1 with Java bindings
+
+For the first two prerequisites, you may install them through [sdkman](https://sdkman.io):
+
+```shell
+sdk install java 21.0.2-open
+sdk install sbt 1.10.0
+```
+
+We use CVC5 as our backend SMT solver and invoke it through its Java bindings.
+Starting from version 1.2.1, a self-contained JAR file
+is [available](https://github.com/cvc5/cvc5/releases/tag/cvc5-1.3.1).
+Please download the JAR file that matches your platform and put it into the `lib/` directory in the project root.
+For example, on macOS with Apple Silicon:
+
+```shell
+cd PROJECT_ROOT/lib
+wget https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.1/cvc5-macOS-arm64-java-api.jar -O cvc5.jar
+```
+
+In case your platform is not listed in the release page, build it yourself following the
+official [instructions](https://cvc5.github.io/docs/cvc5-1.3.1/api/java/java.html).
+
+Now, we are ready to build FLAT-Checker from source. In the project root:
+
+- Run `sbt compile` to compile the source code.
+- Run `sbt test` to run all unit tests.
+- Run `sbt assembly` to build a standalone JAR.
+- Run `./flat-checker examples/a_star.py` to type-check an example.
 
 ## Usage
 
-Type `./flat-checker -h` to see the usage.
+Type `./flat-checker -h` to see the usage:
 
-For example, to type check `examples/a_star.py`, simply run
+```text
+Usage: flat-checker [options] <file>...
 
-```shell
-./flat-checker examples/a_star.py 
+  <file>...                input files/directories
+  --no-error               ensure no type errors (if not, exit on first error)
+  --metrics <file>         collect and save statistical metrics to a JSON file
+  --smt-time-limit <time>  time limit per SMT query in ms (default 3000)
+  -h, --help               print this usage text
 ```
 
-By default, logs will be directly output to stdout.
-You may modify `src/main/resources/logback.xml` to change the configuration (including log level).
-The input file can also be a folder, in which FLAT-Checker will type check all Python files found in that folder.
+Each input file can be either a Python file or a directory.
+For the latter, FLAT-Checker will recursively search for all Python files in the directory (and every subdirectory) and
+type-check them.
 
-To just extract the SMT queries without doing type checking, use the `extract` subcommand and specify an output folder
-for the SMT-lib2 files for the `-o` option:
+By default, logs are output to stdout and a file `scala-logging.log`.
+To change the log level as well as destinations, modify the logback configuration file `src/main/resources/logback.xml`
+and rebuild the project via `sbt assembly`.
 
-```shell
-./flat-checker extract -o smt/ examples/panini-bench
-```
-
-This command will extract all generated SMT queries and output them into the `smt/` folder.
-It will create a file for each query of each input Python source, in the path `smt/<SOURCE_NAME>/<QUERY_ID>.smt2`.
-In compatibility consideration, we only extract the SMT assertions and assume each query may use `ALL` SMT logic.
-No options are specified as they can be different from solvers to solvers; add them through command line if needed.
+To just extract the SMT queries as SMT-LIB files without performing type checking, type `./flat-checker extract -h` to
+see the usage.
