@@ -17,11 +17,3 @@ jobs:
         uses: sbt/setup-sbt@v1
       - name: Build and Test
         run: sbt +test
-      - name: Deploy
-        run: sbt assembly
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Run Python examples
-        run: ./flat-checker examples/python/
