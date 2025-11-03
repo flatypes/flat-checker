@@ -26,7 +26,7 @@ Prerequisites:
 - Java version 21 or later
 - [sbt](https://www.scala-sbt.org) version 1.10.0
 - Python version 3.12 or later
-- [CVC5](https://cvc5.github.io) version 1.3.1 with Java bindings
+- [cvc5](https://cvc5.github.io) version 1.3.1 with Java bindings
 
 For the first two prerequisites, you may install them through [sdkman](https://sdkman.io):
 
@@ -35,19 +35,15 @@ sdk install java 21.0.2-open
 sdk install sbt 1.10.0
 ```
 
-We use CVC5 as our backend SMT solver and invoke it through its Java bindings.
-Starting from version 1.2.1, a self-contained JAR file
-is [available](https://github.com/cvc5/cvc5/releases/tag/cvc5-1.3.1).
-Please download the JAR file that matches your platform and put it into the `lib/` directory in the project root.
-For example, on macOS with Apple Silicon:
+We use cvc5 as our backend SMT solver and invoke it through its Java bindings.
+Starting from version 1.2.1, a self-contained JAR file is [available](https://github.com/cvc5/cvc5/releases/tag/cvc5-1.3.1).
+Run the following Python script to download this platform-specific JAR (available for 64-bit x86/arm Linux/macOS): 
 
 ```shell
-cd PROJECT_ROOT/lib
-wget https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.1/cvc5-macOS-arm64-java-api.jar -O cvc5.jar
+python3 scripts/install_cvc5.py
 ```
 
-In case your platform is not listed in the release page, build it yourself following the
-official [instructions](https://cvc5.github.io/docs/cvc5-1.3.1/api/java/java.html).
+In case your platform is not supported, check the official building [instructions](https://cvc5.github.io/docs/cvc5-1.3.1/api/java/java.html).
 
 Now, we are ready to build FLAT-Checker from source. In the project root:
 

@@ -19,24 +19,10 @@ RUN source "$HOME/.sdkman/bin/sdkman-init.sh" \
 ENV PATH=/root/.sdkman/candidates/java/current/bin:$PATH
 ENV PATH=/root/.sdkman/candidates/sbt/current/bin:$PATH
 
-# Building CVC5 and its Java bindings from source.
-RUN apt-get -y install git g++ cmake m4
-WORKDIR /work
-RUN git clone https://github.com/cvc5/cvc5
-WORKDIR /work/cvc5
-RUN git checkout cvc5-1.3.1
-RUN ./configure.sh production --java-bindings --auto-download --prefix=build/install
-WORKDIR /work/cvc5/build
-RUN make -j$(nproc)
-RUN make install
-# Copy the JNI shared library to `/usr/lib/` to make sure that JVM can find and load it.
-RUN ln -s /work/cvc5/build/install/lib/libcvc5jni.so /usr/lib/
-
 # Setting up our main working directory.
 WORKDIR /work/flat-checker
 COPY . .
-RUN mkdir lib
-RUN cp /work/cvc5/build/install/share/java/cvc5.jar lib/cvc5.jar
+RUN python3 scripts/install_cvc5.py
 
 # Finally, we build and test FLAT-Checker.
 RUN sbt test
