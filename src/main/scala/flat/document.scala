@@ -28,11 +28,11 @@ trait Locational:
     this
 
   def copyLocation(from: Locational): this.type =
-    this.optLoc = Some(from.loc)
+    this.optLoc = from.optLoc
     this
 
-class Diagnostic(val loc: Location, val severity: DiagnosticSeverity, val message: String,
-                 val detail: String = ""):
+class Diagnostic(val loc: Location, val message: String,
+                 val detail: String = "", val severity: DiagnosticSeverity = DiagnosticSeverity.ERROR):
   def longString: String =
     val buf = ListBuffer.empty[String]
     val lineNumberWidth = (loc.end.row + 1).toString.length
@@ -50,7 +50,6 @@ class Diagnostic(val loc: Location, val severity: DiagnosticSeverity, val messag
     buf.map(_ + '\n').mkString
 
 enum DiagnosticSeverity:
-  case FATAL
   case ERROR
   case WARN
   case INFO

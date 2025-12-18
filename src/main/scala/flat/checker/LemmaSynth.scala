@@ -3,8 +3,8 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
-import flat.checker.core.*
-import flat.checker.core.ArithOp.*
+import flat.checker.ast.*
+import flat.checker.ast.ArithOp.*
 import flat.regex.*
 import flat.regex.AOps.*
 import flat.regex.NarrowOps.*
@@ -63,13 +63,11 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
         case BoolSet.False => List(Not(test))
         case _ => Nil
 
-  private val smtSolver = new SMTSolver
-
   final case class InferLength(str: Expr) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
       val e = Length(str)
       ctx.lookupSuffixLang(str) match
-        case Some((eb, r)) if smtSolver.proves(And(GE(eb, 0), LT(eb, e))) =>
+        case Some((eb, r)) if ctx.isValid(And(GE(eb, 0), LT(eb, e))) =>
           val r1 = r.narrowByLength(Interval(lb = 1))
           List(inInterval(SUB(e, eb), r1.length))
         case _ =>

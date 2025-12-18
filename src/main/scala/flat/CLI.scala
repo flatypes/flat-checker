@@ -18,39 +18,72 @@ object CLI:
         .unbounded()
         .required()
         .action { (p, c) => c.copy(inputs = c.inputs :+ os.Path(p.toAbsolutePath)) }
-        .text("input files/dirs"),
-      // option --fast-exit
-      opt[Unit]("fast-exit")
-        .action { (_, c) => c.copy(fastExit = true) }
-        .text("immediately exit upon the first error occurred"),
-      // option --metrics
+        .text("input files/directories"),
+      // option: --no-error
+      opt[Unit]("no-error")
+        .action { (_, c) => c.copy(noError = true) }
+        .text("ensure no type errors (if not, exit on first error)"),
+      // option: --metrics
       opt[Path]("metrics")
         .action: (p, c) =>
           c.copy(metrics = Some(MetricCollector(os.Path(p.toAbsolutePath), Aggregator.AllCount, Aggregator.AllTime)))
         .valueName("<file>")
         .text("collect and save statistical metrics to a JSON file"),
-      // option --smt-time-limit
+      // option: --smt-time-limit
       opt[Int]("smt-time-limit")
         .action { (n, c) => c.copy(smtTimeLimit = n) }
         .valueName("<time>")
         .text("time limit per SMT query in ms (default 3000)"),
-      // option -h
+      // option: -h, --help
       help('h', "help")
         .text("print this usage text"),
-      // subcommand: extract
-      cmd("extract")
-        .text("Extract VCs only, without doing type checking")
-        .action((_, c) => c.copy(extractMode = true))
-        .children(
-          opt[Path]('o', "output")
-            .required()
-            .action { (p, c) => c.copy(extractOutput = Some(os.Path(p.toAbsolutePath))) }
-            .valueName("<dir>")
-            .text("extract to this directory"),
-        )
+      // available subcommands
+      note("\nAvailable subcommand: extract")
+    )
+
+  private val extractBuilder = OParser.builder[ExtractConfig]
+
+  private val extractParser =
+    import extractBuilder.*
+    OParser.sequence(
+      programName("flat-checker extract"),
+      // arg: input directory
+      arg[Path]("<dir>")
+        .required()
+        .action { (p, c) => c.copy(input = os.Path(p.toAbsolutePath)) }
+        .text("input directory"),
+      // option: -o <dir> (required)
+      opt[Path]('o', "output")
+        .required()
+        .action { (p, c) => c.copy(output = os.Path(p.toAbsolutePath)) }
+        .valueName("<dir>")
+        .text("extract to this directory"),
+      // option: --multi-goals
+      opt[Unit]("multi-goals")
+        .action { (_, c) => c.copy(multiGoals = true) }
+        .text("split VCs into multiple goals"),
+      // option: -h, --help
+      help('h', "help")
+        .text("print this usage text")
     )
 
   def main(args: Array[String]): Unit =
+    if args.isEmpty then
+      Console.err.println(OParser.usage(parser))
+      System.exit(1)
+
+    if args.head == "extract" then
+      // subcommand: extract
+      OParser.parse(extractParser, args.tail, ExtractConfig()) match
+        case Some(config) =>
+          Driver.runExtract(using config)
+          return
+        case _ =>
+          System.exit(1)
+
+    // normal command
     OParser.parse(parser, args, Config()) match
-      case Some(config) => Driver.run(using config)
+      case Some(config) =>
+        Driver.run(using config)
       case _ =>
+        System.exit(1)

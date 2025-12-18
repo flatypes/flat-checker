@@ -7,21 +7,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup JDK
-        uses: actions/setup-java@v4
+        uses: actions/checkout@v5
+      - name: Setup Java
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-      - name: Setup sbt launcher
+      - name: Setup sbt
         uses: sbt/setup-sbt@v1
-      - name: Build and Test
-        run: sbt +test
-      - name: Deploy
-        run: sbt assembly
-      - name: Setup Python
-        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Run Python examples
-        run: ./flat-checker examples/python/
+          sbt-runner-version: 1.10.0
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.12
+      - name: Install cvc5
+        run: python scripts/install_cvc5.py
+      - name: Build & Test
+        run: sbt -v +test
+      - name: Check example file
+        run: sbt assembly && ./flat-checker examples/a_star.py

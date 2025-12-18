@@ -102,12 +102,20 @@ object AOps extends LazyLogging:
         case _ => drop1.drop(k - 1)
 
     /** Abstract version of `s.take(k)`. */
-    def take(k: Int): RegEx =
+    def takeOld(k: Int): RegEx =
       require(k >= 0)
       k match
         case 0 => RENull
         case 1 => take1
-        case _ => take1 ++ drop1.take(k - 1)
+        case _ => take1 ++ drop1.takeOld(k - 1)
+
+    def take(k: Int): RegEx =
+      k match
+        case 0 => RENull
+        case _ =>
+          val cs = re.first
+          val r = if cs.isEmpty then RENone else fromCharSet(cs) ++ re.derivativeAny.take(k - 1)
+          if re.nullable then r | RENull else r
 
     /** Returns a sub-language of this regex of which ''all'' members no longer contain `c`. */
     def exclude(c: Char): RegEx = re match

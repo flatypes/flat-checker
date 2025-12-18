@@ -1,9 +1,23 @@
 package flat
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object util:
+  @tailrec
+  def allRight[T, L](xs: List[T], f: T => Either[L, Unit]): Either[L, Unit] = xs match
+    case Nil => Right(())
+    case x :: xs =>
+      f(x) match
+        case Left(l) => Left(l)
+        case Right(_) => allRight(xs, f)
+
+  def bigProduct[T](xss: Seq[Seq[T]]): Seq[Seq[T]] = xss match
+    case Nil => Seq.empty
+    case Seq(xs) => for x <- xs yield Seq(x)
+    case xs +: yss => for x <- xs; ys <- bigProduct(yss) yield x +: ys
+
   private val unicodeSubscripts: String = "₀₁₂₃₄₅₆₇₈₉"
 
   def renderSubscript(k: Int): String =
@@ -12,6 +26,16 @@ object util:
 
   private val mxBean =
     java.lang.management.ManagementFactory.getPlatformMXBean(classOf[java.lang.management.ThreadMXBean])
+
+  final class Stopwatch:
+    private var startTime = 0L
+
+    def start(): Unit =
+      startTime = mxBean.getCurrentThreadCpuTime
+
+    def stop(): Double =
+      val endTime = mxBean.getCurrentThreadCpuTime
+      (endTime - startTime) / 1.0e6
 
   enum Aggregator:
     case AllCount

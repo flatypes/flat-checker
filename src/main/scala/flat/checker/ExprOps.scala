@@ -1,7 +1,7 @@
 package flat.checker
 
-import flat.checker.core.*
-import flat.checker.core.ArithOp.*
+import flat.checker.ast.*
+import flat.checker.ast.ArithOp.*
 
 object ExprOps:
   extension (expr: Expr)
@@ -12,38 +12,38 @@ object ExprOps:
       case Not(And(b1, b2)) => Or(Not(b1).simpl, Not(b2).simpl)
       case Not(Or(b1, b2)) => And(Not(b1).simpl, Not(b2).simpl)
       case Not(Not(b)) => b.simpl
-      case Not(Cmp(op, e1, e2)) => Cmp(Analyzer.negateCmpOp(op), e1, e2)
+      case Not(Cmp(op, e1, e2)) => Cmp(op.negation, e1, e2)
       case Ite(b, e1, e2) => Ite(b.simpl, e1, e2)
       case _ => expr
 
     /** Returns all conjuncts. */
     def conjuncts: List[Expr] =
       expr match
-        case And(e1, e2) => e1.conjuncts ++ e2.conjuncts
         case Const(true) => Nil
+        case And(e1, e2) => e1.conjuncts ++ e2.conjuncts
         case _ => List(expr)
 
     /** Returns all disjuncts. */
     def disjuncts: List[Expr] =
       expr match
-        case Or(e1, e2) => e1.disjuncts ++ e2.disjuncts
         case Const(false) => Nil
+        case Or(e1, e2) => e1.disjuncts ++ e2.disjuncts
         case _ => List(expr)
 
     // Arithmetic
 
     /** Returns the negation `-expr`. */
     private def negation: Expr = expr match
-      case Negate(e) => e
       case Const(n: Int) => Const(-n)
-      case e => Negate(e)
+      case Negate(e) => e
+      case _ => Negate(expr)
 
     /** Returns all summands. */
     def summands: List[Expr] = expr match
+      case Const(0) => Nil
       case Arith(ADD, e1, e2) => e1.summands ++ e2.summands
       case Arith(SUB, e1, e2) => e1.summands ++ e2.summands.map(_.negation)
-      case Const(0) => Nil
-      case e => List(e)
+      case _ => List(expr)
 
     /** Returns the difference `expr - base` if it is a nonnegative constant. */
     def diffNonneg(base: Expr): Option[Int] =

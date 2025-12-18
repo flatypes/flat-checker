@@ -4,8 +4,9 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
-import flat.checker.core.*
-import flat.checker.core.ArithOp.*
+import flat.checker.Printer.ppExpr
+import flat.checker.ast.*
+import flat.checker.ast.ArithOp.*
 import flat.regex.*
 import flat.regex.AOps.*
 
@@ -34,12 +35,12 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       case Reverse(es) => inferLang(es).reverse
       case CharAt(es, ei) =>
         // es[ei] = es[ei:].take1
-        val (rOpt, rOrd) = inferSubstr(es, ei, Length(es))
+        val (rOpt, rOrd) = inferSubstr(es, ei, Length(es))(using ctx + LT(ei, Length(es)))
         val cs = rOpt match
           case Some(r) => // select the more premise one
             val cs1 = r.first
             val cs2 = rOrd.first
-            if cs1.subsetOf(cs2) then cs1 else cs2
+            if cs2.subsetOf(cs1) then cs2 else cs1
           case None => rOrd.first
         if cs.isEmpty then RegEx.RENull else RegEx.fromCharSet(cs)
       case Substr(es, ei, Arith(ADD, Find(Substr(e1, e2, Length(e3)), Const(t: String)), e4))
@@ -50,13 +51,15 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         val r1 = substr(r, i, IndexR(0), startIdx = Some(ei))(using es)
         r1.take(IndexAt(t))
       case Substr(es, ei, ej) =>
-        val (rOpt, rOrd) = inferSubstr(es, ei, ej)
-        rOpt.getOrElse(rOrd)
+        inferSubstr(es, ei, ej) match
+          case (Some(r1), r2) => // select the more precise one; if neither is a subset of another, prefer r1
+            if r2.subsetOf(r1) then r2 else r1
+          case (None, r) => r
       case _ => throw IllegalArgumentException(str.toString)
 
   /** Infer the type of `Substr(str, start, end)`.
    * Return two solutions: one using the suffix lang (if specified), and the other using the ordinary method. */
-  private def inferSubstr(str: Expr, start: Expr, end: Expr): (Option[RegEx], RegEx) =
+  private def inferSubstr(str: Expr, start: Expr, end: Expr)(using ctx: PrfCtx): (Option[RegEx], RegEx) =
     // Optional attempt: Given that the language of `str[base:]` (for some `base` index) is `r`,
     // and that `start` equals to `base + ki` for some constant ki >= 0.
     // - If `end` is the end index, then it suffices to infer `r[ki:]`;
@@ -64,20 +67,23 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     val rOpt = for
       (base, r) <- ctx.lookupSuffixLang(str)
       ki <- start.diffNonneg(base)
-      j <- if end == Length(str) then Some(IndexR(0)) else end.diffNonneg(base).map(IndexR(_))
-    yield substr(r, IndexL(ki), j)(using Substr(str, base, Length(str)))
+      j <- if end == Length(str) then Some(IndexR(0)) else end.diffNonneg(base).map(IndexL(_))
+      r1 = substr(r, IndexL(ki), j)(using str = Substr(str, base, Length(str)))
+      _ = logger.debug("infer {}[{}:{}] as {}[{}:][{}:{}]: {}",
+        ppExpr(str), ppExpr(start), ppExpr(end), ppExpr(str), ppExpr(base), ki, j, r1)
+    yield r1
 
     // Ordinary attempt in a compositional manner.
     val r = inferLang(str)
     val i = indexInferer.infer(start, str)
     val j = indexInferer.infer(end, str)
-    val rOrd = substr(r, i, j, startIdx = Some(start), endIdx = Some(end))(using str)
+    val rOrd = substr(r, i, j, startIdx = Some(start), endIdx = Some(end))(using str = str)
 
     // Return both results.
     (rOpt, rOrd)
 
   private def substr(r: RegEx, startIndex: Index, endIndex: Index,
-                     startIdx: Option[Expr] = None, endIdx: Option[Expr] = None)(using str: Expr): RegEx =
+                     startIdx: Option[Expr] = None, endIdx: Option[Expr] = None)(using str: Expr, ctx: PrfCtx): RegEx =
     (startIndex, endIndex) match
       case (IndexL(0), IndexR(0)) => r
       case (i: BasicIndex, IndexR(0)) => r.drop(i)
@@ -195,6 +201,4 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
           case _ => assert(false)
         (bs, results.distinct.toList)
 
-  private val smtSolver = new SMTSolver
-
-  private def isValid(cond: Expr): Boolean = ctx.premises.contains(cond) || smtSolver.proves(cond)
+  private inline def isValid(cond: Expr)(using ctx: PrfCtx): Boolean = ctx.isValid(cond)

@@ -1,6 +1,5 @@
 package flat.checker.py
 
-import flat.checker.core.Ident
 import flat.checker.py.ast.*
 import flat.{Document, Issuer, Location, Position}
 

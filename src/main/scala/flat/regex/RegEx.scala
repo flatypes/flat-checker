@@ -125,6 +125,17 @@ enum RegEx:
   /** Returns the Brzozowski derivative at the string `t`. */
   def derivative(t: String): RegEx = if t.isEmpty then this else derivative(t.head).derivative(t.tail)
 
+  /** Returns the Brzozowski derivative at any char. */
+  def derivativeAny: RegEx = this match
+    case RENone => RENone
+    case RENull => RENone
+    case RELit(cs) => if !cs.isEmpty then RENull else RENone
+    case REConcat(r1, r2) =>
+      if r1.nullable then (r1.derivativeAny ++ r2) | r2.derivativeAny
+      else r1.derivativeAny ++ r2
+    case REUnion(r1, r2) => r1.derivativeAny | r2.derivativeAny
+    case REStar(r) => r.derivativeAny ++ this
+
   /** Tests if the given string `s` is a member. */
   def contains(s: String): Boolean = derivative(s).nullable
 

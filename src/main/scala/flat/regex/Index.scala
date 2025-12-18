@@ -8,7 +8,7 @@ sealed trait BasicIndex extends Index
 
 /** Absolute index from left: `k`. */
 final case class IndexL(k: Int) extends BasicIndex:
-  require(k >= 0, "negative index")
+  require(k >= 0, s"negative index $k")
 
 /**
  * Absolute index from right: |s| - `k`.
@@ -17,7 +17,7 @@ final case class IndexL(k: Int) extends BasicIndex:
  * @note `IndexR(0)` is the end of the string |s|
  */
 final case class IndexR(k: Int) extends BasicIndex:
-  require(k >= 0, "negative index")
+  require(k >= 0, s"negative index $k")
 
 /** Relative index that is the first occurrence of the nonempty pattern `t`, i.e., s.find(`t`). */
 final case class IndexAt(t: String) extends BasicIndex:

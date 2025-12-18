@@ -1,24 +1,21 @@
 package flat.checker.py
 
 import flat.Issuer
-import flat.checker.core.{CharAt, CmpOp, Ident, Length}
+import flat.checker.ast
+import flat.checker.ast.CmpOp.*
 import flat.checker.py.ast.*
-import flat.checker.{Sort, core}
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 
-class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: VarManager):
-
-  import CmpOp.*
-
-  def checkBody(body: Seq[LocalStmt], ctx: LCtx, com: LCtx)(using insideLoop: Boolean): (List[core.Stmt], LCtx) =
-    val out = ListBuffer.empty[core.Stmt]
+class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: VarManager):
+  def checkBody(body: Seq[LocalStmt], ctx: LCtx, com: LCtx)(using insideLoop: Boolean): (List[ast.Stmt], LCtx) =
+    val out = ListBuffer.empty[ast.Stmt]
     val checker = Checker(out)
     val newCtx = body.foldLeft(ctx) { (c, s) => s.accept(checker, (c, com)) }
     (out.toList, newCtx)
 
-  private class Checker(out: ListBuffer[core.Stmt])(using insideLoop: Boolean)
+  private class Checker(out: ListBuffer[ast.Stmt])(using insideLoop: Boolean)
     extends NodeVisitor[(LCtx, LCtx), LCtx]:
     private val annotChecker = new AnnotChecker
 
@@ -27,16 +24,16 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
     private val exprChecker = ExprChecker(out)
     import exprChecker.*
 
-    private def checkAssign(left: Expr, right: core.Expr, typ: core.Type, env: (LCtx, LCtx)): LCtx =
+    private def checkAssign(left: Expr, right: ast.Expr, typ: ast.Type, env: (LCtx, LCtx)): LCtx =
       val (ctx, com) = env
       left match
         case name@Name(x) =>
           ctx.get(x) match
             case Some(id) => // assignment
-              out += core.Assign(id, right)
+              out += ast.Assign(id, right)
             case None => // declaration
               val id = declare(name.asIdent, typ, com)
-              out += core.Assign(id, right)
+              out += ast.Assign(id, right)
               return ctx + (x -> id)
         case _ =>
           ???
@@ -49,19 +46,19 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
           issuer.report(Unsupported("list", node.target.loc))
         case TupleExpr(values) =>
           val (t, e) = inferType(node.value, ctx)
-          t.toSort match
-            case Sort.S =>
-              val id = vm.declare(core.strType)
-              out += core.Assign(id, e)
-              out += core.Assert(core.Cmp(EQ,
-                Length(core.Var(id).withSort(Sort.S)),
-                core.Const(values.length)).fillLocation(node.loc))
+          t.base match
+            case ast.StrSort =>
+              val id = vm.declare(ast.StrSort)
+              out += ast.Assign(id, e)
+              out += ast.Assert(ast.Cmp(EQ,
+                ast.Length(ast.Var(id).withSort(ast.StrSort)),
+                ast.Const(values.length)).fillLocation(node.loc))
               var newCtx = ctx
               for i <- values.indices do
                 newCtx = checkAssign(values(i),
-                  CharAt(core.Var(id).withSort(Sort.S), core.Const(i)).fillLocation(values(i).loc),
+                  ast.CharAt(ast.Var(id).withSort(ast.StrSort), ast.Const(i)).fillLocation(values(i).loc),
                   // NOTE: to skip checking the binder has type char
-                  core.strType, (newCtx, com))
+                  ast.StrSort, (newCtx, com))
               return newCtx
             case _ =>
               issuer.report(Unsupported("tuple", node.target.loc))
@@ -69,11 +66,11 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
           ctx.get(x) match
             case Some(id) => // assignment
               val e = checkType(node.value, vm.getType(id), ctx)
-              out += core.Assign(id, e)
+              out += ast.Assign(id, e)
             case None => // declaration
               val (t, e) = inferType(node.value, ctx)
               val id = declare(name.asIdent, t, com)
-              out += core.Assign(id, e)
+              out += ast.Assign(id, e)
               return ctx + (x -> id)
         case Attribute(_, _) =>
           issuer.report(Unsupported("attribute", node.target.loc))
@@ -86,7 +83,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
                     case Some(id) =>
                       val call = Call(Attribute(name, "__setitem__"), Seq(expr, node.value))
                       val (_, e) = inferType(call, ctx)
-                      core.Assign(id, e)
+                      ast.Assign(id, e)
                     case None =>
                       issuer.report(Undefined(name.asIdent))
                 case _ =>
@@ -105,13 +102,13 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
           val id = declare(node.ident, t, com)
           for value <- node.init do
             val e = checkType(value, vm.getType(id), ctx)
-            out += core.Assign(id, e)
+            out += ast.Assign(id, e)
           ctx + (node.ident.name -> id)
         case Some(_) =>
           issuer.report(Redefined(node.ident))
           ctx
 
-    private def declare(ident: Ident, typ: core.Type, com: LCtx): String =
+    private def declare(ident: Ident, typ: ast.Type, com: LCtx): String =
       com.get(ident.name) match
         case Some(id) => // parallel declaration
           val t = vm.getType(id)
@@ -123,8 +120,8 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
 
     override def visitAssert(node: Assert, env: (LCtx, LCtx)): LCtx =
       val (ctx, _) = env
-      val e = checkType(node.test, core.BoolType, ctx)
-      out += core.Assert(e)
+      val e = checkType(node.test, ast.BoolSort, ctx)
+      out += ast.Assert(e)
       ctx
 
     override def visitPass(node: Pass, env: (LCtx, LCtx)): LCtx =
@@ -133,25 +130,27 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
 
     override def visitIf(node: If, env: (LCtx, LCtx)): LCtx =
       val (ctx, com) = env
-      val e = checkType(node.test, core.BoolType, ctx)
+      val e = checkType(node.test, ast.BoolSort, ctx)
       val (b1, ctx1) = checkBody(node.body, ctx, com)
       val delta1 = ctx1 -- ctx.keySet
       val (b2, ctx2) = checkBody(node.orElse, ctx, com ++ delta1)
-      out += core.IfStmt(e, b1, b2)
+      out += ast.IfStmt(e, ast.mkStmtList(b1), ast.mkStmtList(b2))
       ctx ++ delta1.view.filterKeys(ctx2.contains)
 
     override def visitWhile(node: While, env: (LCtx, LCtx)): LCtx =
       val (ctx, com) = env
-      val e = checkType(node.test, core.BoolType, ctx)
+      val e = checkType(node.test, ast.BoolSort, ctx)
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, _) = checkBody(realBody, ctx, com)(using insideLoop = true)
-      if b.last.isInstanceOf[core.Break] then // this while loop is just an if-statement
-        out += core.IfStmt(e, b.dropRight(1), Nil)
+      if b.last.isInstanceOf[ast.Break] then // this while loop is just an if-statement
+        out += ast.IfStmt(e, ast.mkStmtList(b.dropRight(1)), ast.Skip())
         if invNodes.nonEmpty then
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else
-        val inv = for expr <- invNodes yield checkType(expr, core.BoolType, ctx)
-        out += core.While(e, b, inv)
+        val loop = ast.While(e, ast.mkStmtList(b))
+        val inv = for expr <- invNodes yield checkType(expr, ast.BoolSort, ctx)
+        loop.invariants ++= inv
+        out += loop
       ctx
 
     @tailrec
@@ -164,7 +163,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
     override def visitBreak(node: Break, env: (LCtx, LCtx)): LCtx =
       val (ctx, _) = env
       if insideLoop then
-        out += core.Break()
+        out += ast.Break()
       else
         issuer.report(SyntaxError("'break' outside loop", node.loc))
       ctx
@@ -174,23 +173,23 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: core.Type, vm: V
       val e = node.value match
         case Some(expr) =>
           val e = checkType(expr, returnType, ctx)
-          out += core.Assign("return", e)
+          out += ast.Assign("return", e)
         case None =>
-          if returnType != core.unitType then
+          if returnType != ast.UnitSort then
             issuer.report(TypeError("missing return value", node.loc))
-          core.mkUnit
-      out += core.Return()
+          ast.mkUnit
+      out += ast.Return()
       ctx
 
     override def visitExprStmt(node: ExprStmt, env: (LCtx, LCtx)): LCtx =
       val (ctx, _) = env
       node.expr match
         case Call(Name("show_type"), Seq(arg)) =>
-          val e = checkType(arg, core.strType, ctx)
-          out += core.ShowType(e)
+          val e = checkType(arg, ast.StrSort, ctx)
+          out += ast.ShowType(e)
           ctx
         case _ =>
           val (t, e) = inferType(node.expr, ctx)
           val freshId = vm.declare(t)
-          out += core.Assign(freshId, e)
+          out += ast.Assign(freshId, e)
           ctx
