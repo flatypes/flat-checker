@@ -11,7 +11,7 @@ import io.github.cvc5.Kind
 
 import scala.collection.mutable
 
-class SMTEncoder(using config: Config, varCtx: VarCtx) extends LazyLogging:
+class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging:
   val tm = cvc5.TermManager()
 
   def encodeSort(sort: Sort): cvc5.Sort = sort match
@@ -70,7 +70,7 @@ class SMTEncoder(using config: Config, varCtx: VarCtx) extends LazyLogging:
       val ts = es.map(encodeExpr)
       tm.mkTuple(ts.toArray)
     case TypeTest(e, t) =>
-      if config.extractMode then encodeTypeTest(e, t) else tm.mkConst(tm.getBooleanSort)
+      if extractMode then encodeTypeTest(e, t) else tm.mkConst(tm.getBooleanSort)
 
     // Boolean operations
     case And(b1, b2) =>
@@ -167,7 +167,7 @@ class SMTEncoder(using config: Config, varCtx: VarCtx) extends LazyLogging:
       // NOTE: only nonnegative values are supported
       tm.mkTerm(Kind.STRING_FROM_INT, t)
     case StrIn(e, r) =>
-      if config.extractMode then
+      if extractMode then
         encodeTypeTest(e, LangType(r))
       else tm.mkConst(tm.getBooleanSort)
 

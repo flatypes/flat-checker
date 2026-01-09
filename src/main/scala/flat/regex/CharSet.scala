@@ -25,7 +25,7 @@ final class CharSet private(private val set: Set[Char], private val isInc: Boole
   def head: Char = if isInc then set.head else CharSet.allChars.find(!set.contains(_)).get
 
   /** Returns the number of characters in this CS. Note: Full CS has 65536 characters. */
-  def size: Int = if isInc then set.size else 65536 - set.size
+  def size: Int = if isInc then set.size else CharSet.allChars.size - set.size
 
   /** Tests if this CS is a subset of `that`. */
   def subsetOf(that: CharSet): Boolean =
@@ -66,7 +66,7 @@ final class CharSet private(private val set: Set[Char], private val isInc: Boole
     case _ => false
 
   /** Returns the usual `Set` encoding of this CS. */
-  def toSet: Set[Char] = if isInc then set else CharSet.allChars.toSet -- set
+  lazy val toSet: Set[Char] = if isInc then set else CharSet.allChars.toSet -- set
 
   /** Returns the SMT-LIB encoding that consists of:
    *  - a sequence of characters or character ranges (both inclusive), and
@@ -80,6 +80,20 @@ final class CharSet private(private val set: Set[Char], private val isInc: Boole
       for (i, j) <- is.zip(is.tail :+ pts.length)
         yield if i == j - 1 then pts(i).toChar else (pts(i).toChar, pts(j - 1).toChar)
     (chars, isInc)
+
+  def toJavaRegex: String =
+    if isEmpty then "[]"
+    else if isFull then "."
+    else
+      val pts = set.toList.sorted.map(_.toInt)
+      val is = 0 +: pts.indices.filter(i => i > 0 && pts(i) != pts(i - 1) + 1)
+      val sb = new StringBuilder
+      for (i, j) <- is.zip(is.tail :+ pts.length) do
+        if i == j - 1 then
+          sb ++= String.format("\\u%04X", pts(i))
+        else
+          sb ++= String.format("\\u%04X-\\u%04X", pts(i), pts(j - 1))
+      (if isInc then "[" else "[^") + sb.toString + "]"
 
   override def toString: String =
     val (chars, _) = toSMT
@@ -96,13 +110,22 @@ object CharSet:
   val full: CharSet = new CharSet(Set.empty, false)
 
   /** The sequence of all Unicode characters. */
-  val allChars: Seq[Char] = 0.toChar to 65535.toChar
+  val allChars: Seq[Char] = Character.MIN_VALUE to Character.MAX_VALUE
 
-  /** Creates a CS with the given `c`s. */
-  def apply(c: Char*): CharSet = new CharSet(Set(c *), true)
+  /** ASCII digit characters: \d. */
+  val asciiDigit: CharSet = from('0' to '9')
 
-  /** Creates a CS that contains all characters but ''not'' the given `c`s. */
-  def not(c: Char*): CharSet = new CharSet(Set(c *), false)
+  /** ASCII whitespace characters: \s. */
+  val asciiSpace: CharSet = apply(' ', '\t', '\n', '\r', '\f', 0xb.toChar)
+
+  /** ASCII word characters: \w. */
+  val asciiWord: CharSet = from('A' to 'Z') | from('a' to 'z') | from('0' to '9') | apply('_')
+
+  /** Creates a CS with the given `chars`. */
+  def apply(chars: Char*): CharSet = new CharSet(Set(chars *), true)
+
+  /** Creates a CS that contains all characters but ''not'' the given `chars`. */
+  def not(chars: Char*): CharSet = new CharSet(Set(chars *), false)
 
   /** Creates a CS with the given characters in the collection `it`. */
   def from(it: IterableOnce[Char]): CharSet = new CharSet(Set.from(it), true)

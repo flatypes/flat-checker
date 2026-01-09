@@ -14,7 +14,7 @@ object AOps extends LazyLogging:
       case RENull => RENull
       case RELit(_) => re
       case REConcat(r1, r2) =>
-        if r1.nullable then r1.minusNull.take1 | r2.take1 // the character comes from either r1 or r2
+        if r1.nullable then r1.take1.minusNull | r2.take1 // the character comes from either r1 or r2
         else r1.take1
       case REUnion(r1, r2) => r1.take1 | r2.take1
       case REStar(r) => r.take1 | RENull

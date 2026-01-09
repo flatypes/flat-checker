@@ -23,6 +23,8 @@ final class VarCtx private(vars: Map[String, Sort]):
 object VarCtx:
   def from(funDef: FunDef): VarCtx = VarCtx(funDef.lCtx.view.mapValues(_.base).toMap)
 
+  def from(vars: (String, Sort)*): VarCtx = VarCtx(vars.toMap)
+
 /** Proof Context. Recently added premises first. */
 class PrfCtx private(val premises: List[Expr])(using prover: Verifier#Prover) extends LazyLogging:
   val varCtx: VarCtx = prover.varCtx
@@ -117,7 +119,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
 
   final class Prover(using val varCtx: VarCtx):
     private val cachedHypotheses = ListBuffer.empty[Expr]
-    private val smtSolver = new SMTSolver
+    private val smtSolver = new SMTSolver(using extractMode = config.extractMode)
 
     /** Adds the given `hypothesis`. */
     def assume(hypothesis: Expr): Unit =

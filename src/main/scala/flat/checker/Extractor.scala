@@ -22,7 +22,7 @@ class Extractor(using config: ExtractConfig) extends LazyLogging:
     lines ++= head
     val vc = VCGenerator.generate(funDef)
     val varCtx = VarCtx.from(funDef)
-    val encoder = new SMTEncoder(using Config(extractMode = true), varCtx)
+    val encoder = new SMTEncoder(using varCtx, true)
     val term = encode(vc)(using encoder)
     for x -> t <- encoder.getCtx do
       lines += declare(x, t.getSort)
@@ -35,7 +35,7 @@ class Extractor(using config: ExtractConfig) extends LazyLogging:
     if config.multiGoals then // multi-goals
       for (hs -> c, i) <- split(vc).zipWithIndex do
         val lines = ListBuffer.empty[String]
-        val encoder = new SMTEncoder(using Config(extractMode = true), varCtx)
+        val encoder = new SMTEncoder(using varCtx, true)
         val assumptions = hs.map(encoder.encodeExpr)
         val conclusion = encoder.encodeExpr(c)
         for x -> t <- encoder.getCtx do
