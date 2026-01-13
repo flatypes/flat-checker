@@ -60,6 +60,9 @@ object ast:
   final case class TupleExpr(values: Seq[Expr]) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitTupleExpr(this, ctx)
 
+  final case class DictExpr(keys: Seq[Expr], values: Seq[Expr]) extends Expr:
+    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitDictExpr(this, ctx)
+
   final case class Name(id: String) extends Expr:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitName(this, ctx)
 
@@ -115,6 +118,8 @@ object ast:
     def visitListExpr(node: ListExpr, ctx: C): T = visitDefault(node, ctx)
 
     def visitTupleExpr(node: TupleExpr, ctx: C): T = visitDefault(node, ctx)
+
+    def visitDictExpr(node: DictExpr, ctx: C): T = visitDefault(node, ctx)
 
     def visitName(node: Name, ctx: C): T = visitDefault(node, ctx)
 

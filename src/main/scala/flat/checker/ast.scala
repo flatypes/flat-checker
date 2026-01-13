@@ -50,6 +50,8 @@ object ast:
 
   final case class ArraySort(elem: Sort) extends Sort
 
+  final case class DictSort(keySort: Sort, valueSort: Sort) extends Sort
+
   final case class FunSort(args: List[Sort], returns: Sort) extends Sort
 
   extension (lower: Sort)
@@ -421,16 +423,19 @@ object ast:
   enum ArithOp:
     case ADD
     case SUB
+    case MUL
 
     def unary_! : ArithOp = this match
       case ADD => SUB
       case SUB => ADD
+      case MUL => throw IllegalArgumentException("no ! operation for MUL")
 
     def apply(left: Expr, right: Expr): Arith = Arith(this, left, right)
 
     override def toString: String = this match
       case ADD => "+"
       case SUB => "-"
+      case MUL => "*"
 
   import ArithOp.*
 
@@ -647,6 +652,52 @@ object ast:
       case ArraySort(s) => s
       case _ => assert(false)
 
+  final case class DictExpr(items: List[(Expr, Expr)]) extends Expr:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitDictExpr(this)
+
+    protected def children: List[Expr] = items.flatMap { (k, v) => List(k, v) }
+
+    protected def update(newChildren: List[Expr]): Expr =
+      val pairs = ListBuffer.empty[(Expr, Expr)]
+      val it = newChildren.iterator
+      while it.hasNext do
+        val k = it.next()
+        val v = it.next()
+        pairs.append((k, v))
+      copy(items = pairs.toList)
+
+    def sort: Sort =
+      if items.isEmpty then DictSort(NoType, NoType)
+      else
+        val (k, v) = items.head
+        DictSort(k.sort, v.sort)
+
+    def keys: List[Expr] = items.map(_._1)
+
+  final case class DictContainsKey(dict: Expr, key: Expr) extends Expr:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitDictContainsKey(this)
+
+    protected def children: List[Expr] = List(dict, key)
+
+    protected def update(newChildren: List[Expr]): Expr = newChildren match
+      case List(e, ek) => copy(dict = e, key = ek)
+      case _ => assert(false)
+
+    def sort: Sort = BoolSort
+
+  final case class DictSelect(dict: Expr, key: Expr) extends Expr:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitDictSelect(this)
+
+    protected def children: List[Expr] = List(dict, key)
+
+    protected def update(newChildren: List[Expr]): Expr = newChildren match
+      case List(e, ek) => copy(dict = e, key = ek)
+      case _ => assert(false)
+
+    def sort: Sort = dict.sort match
+      case DictSort(_, s) => s
+      case _ => assert(false)
+
   final case class Apply(fun: Expr, args: List[Expr]) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitApply(this)
 
@@ -718,5 +769,11 @@ object ast:
     def visitStrIn(node: StrIn)(using ctx: C): T
 
     def visitArrSelect(node: ArrSelect)(using ctx: C): T
+
+    def visitDictExpr(node: DictExpr)(using ctx: C): T
+
+    def visitDictContainsKey(node: DictContainsKey)(using ctx: C): T
+
+    def visitDictSelect(node: DictSelect)(using ctx: C): T
 
     def visitApply(node: Apply)(using ctx: C): T

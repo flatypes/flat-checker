@@ -29,6 +29,18 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
       val (ts, es) = (for value <- node.values yield value.accept(this, ctx)).unzip
       (ast.TupleType(ts.toList), ast.TupleExpr(es.toList).copyLocation(node))
 
+    override def visitDictExpr(node: DictExpr, ctx: LCtx): (ast.Type, ast.Expr) =
+      var keySort: ast.Sort = ast.UnitSort
+      var valueSort: ast.Sort = ast.UnitSort
+      val items = for (k, v) <- node.keys zip node.values yield
+        val (tk, ek) = k.accept(this, ctx)
+        val (tv, ev) = v.accept(this, ctx)
+        keySort = tk.base
+        valueSort = tv.base
+        ek -> ev
+      val dictExpr = ast.DictExpr(items.toList).copyLocation(node)
+      (ast.DictSort(keySort, valueSort), dictExpr)
+
     override def visitName(node: Name, ctx: LCtx): (ast.Type, ast.Expr) =
       val x = node.id
       ctx.get(x) match

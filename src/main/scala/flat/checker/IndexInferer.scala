@@ -42,6 +42,7 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     case Var(x) => solve(x, str)
     case Arith(ADD, Var(x), Const(k: Int)) => solve(x, str).shift(k)
     case Arith(SUB, Var(x), Const(k: Int)) => solve(x, str).shift(-k)
+    case Arith(ADD, Arith(ADD, Var(x), Const(k1: Int)), Const(k2: Int)) => solve(x, str).shift(k1 + k2)
     case _ => throw UnsupportedOperationException(idx.toString)
 
   private def solve(x: String, str: Expr): Index =

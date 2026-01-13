@@ -60,6 +60,15 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
                   // NOTE: to skip checking the binder has type char
                   ast.StrSort, (newCtx, com))
               return newCtx
+            case ast.TupleSort(_) if node.value.isInstanceOf[TupleExpr] =>
+              val tupleValues = node.value.asInstanceOf[TupleExpr].values
+              if tupleValues.length != values.length then
+                issuer.report(TypeError("sizes of tuple on both sides do not match", node.loc))
+              var newCtx = ctx
+              for (x, e) <- values.zip(tupleValues) do
+                val (et, ev) = inferType(e, newCtx)
+                newCtx = checkAssign(x, ev, et, (newCtx, com))
+              return newCtx
             case _ =>
               issuer.report(Unsupported("tuple", node.target.loc))
         case name@Name(x) =>

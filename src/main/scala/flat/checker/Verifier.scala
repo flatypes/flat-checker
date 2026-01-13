@@ -347,6 +347,8 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
             case NE => CharSet.not(c)
           ss += syn.InferLang(ec, target = Some(t))
           ss += syn.InferIndexCharAt(es, ei, cs)
+        case DictContainsKey(_, ec@CharAt(_, _)) =>
+          ss += syn.InferLang(ec)
         case Cmp(EQ | NE, es, Const(t: String)) =>
           ss += syn.InferLang(es, target = Some(t))
         case Cmp(EQ | NE, es1, es2) if es1.sort == StrSort && es2.sort == StrSort =>

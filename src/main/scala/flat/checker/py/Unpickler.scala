@@ -59,7 +59,11 @@ class Unpickler(path: os.Path):
         val ident = Ident(f).setLocation(
           Location(doc, Position(loc.start.row, fOffset), Position(loc.start.row, fOffset + f.length)))
         val args = m("args") |> arguments
-        val body = m("body") |> list(localStmt)
+        var body = m("body") |> list(localStmt)
+        if body.nonEmpty then
+          body.head match
+            case ExprStmt(Constant(_: String)) => body = body.tail // remove docstring
+            case _ =>
         val decorators = m("decorator_list").arr
         if decorators.nonEmpty then
           issuer.report(Unsupported("decorator", decorators.head |> location))
@@ -175,6 +179,10 @@ class Unpickler(path: os.Path):
       case "Tuple" =>
         val values = m("elts") |> list(expr)
         TupleExpr(values).setLocation(loc)
+      case "Dict" =>
+        val keys = m("keys") |> list(expr)
+        val values = m("values") |> list(expr)
+        DictExpr(keys, values).setLocation(loc)
       case "Name" =>
         val id = m("id").str
         Name(id).setLocation(loc)
@@ -236,6 +244,9 @@ class Unpickler(path: os.Path):
             Slice(lower, upper).setLocation(loc1)
           else m("slice") |> expr
         Subscript(value, slice).setLocation(loc)
+      case other =>
+        issuer.report(Unsupported(other, loc))
+        Name(other)
 
   private def binOp: Parser[String] = json =>
     json.obj("_constr").str match

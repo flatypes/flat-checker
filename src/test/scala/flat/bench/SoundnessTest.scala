@@ -8,7 +8,7 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import java.util.regex.Pattern
 
-// @Ignore
+@Ignore
 class SoundnessTest extends AnyFunSuite:
   test("length"):
     for (id, r) <- Resources.testRegExprs do

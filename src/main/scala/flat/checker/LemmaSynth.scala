@@ -38,7 +38,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
     private def isSmall: Boolean = re match
       case RENone => true
       case RENull => true
-      case RELit(cs) => cs.size <= 20
+      case RELit(cs) => cs.size <= 100
       case REConcat(r1, r2) => r1.isSmall && r2.isSmall
       case REUnion(r1, r2) => r1.isSmall && r2.isSmall
       case REStar(_) => false

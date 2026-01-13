@@ -249,6 +249,28 @@ object Printer:
       val idx = node.idx.accept(this)
       s"$arr[$idx]"
 
+    def visitDictExpr(node: DictExpr)(using ctx: Unit): String =
+      if node.items.isEmpty then "{}"
+      else
+        val ss = node.items.take(3).map: (key, value) =>
+          val ks = key.accept(this)
+          val vs = value.accept(this)
+          s"$ks: $vs"
+        "{" + ss.mkString(", ") + (if node.items.length > 3 then ", ..." else "") + "}"
+
+    def visitDictContainsKey(node: DictContainsKey)(using ctx: Unit): String =
+      val s1 = node.key.accept(this)
+      val key = if getLevel(node.key) <= Level.CMP then paren(s1) else s1
+      val s2 = node.dict.accept(this)
+      val dict = if getLevel(node.dict) <= Level.CMP then paren(s2) else s2
+      s"$key in $dict"
+
+    def visitDictSelect(node: DictSelect)(using ctx: Unit): String =
+      val s = node.dict.accept(this)
+      val dict = if getLevel(node.dict) < Level.APPLY then paren(s) else s
+      val key = node.key.accept(this)
+      s"$dict[$key]"
+
     def visitApply(node: Apply)(using ctx: Unit): String =
       val s = node.fun.accept(this)
       val fun = if getLevel(node.fun) < Level.APPLY then paren(s) else s
@@ -262,7 +284,7 @@ object Printer:
       case _: Ite => Level.ITE
       case _: Or => Level.OR
       case _: And => Level.AND
-      case _: Cmp | _: StrTest | _: TypeTest => Level.CMP
+      case _: Cmp | _: StrTest | _: TypeTest | _: DictContainsKey => Level.CMP
       case _: Arith | _: Concat => Level.ADD
       case _: Not | _: Negate => Level.UNARY
       case _ => Level.APPLY

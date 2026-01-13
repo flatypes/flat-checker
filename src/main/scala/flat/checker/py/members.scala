@@ -30,6 +30,7 @@ val intMemberTable = Map(
   }),
   "__add__" -> MemberInfo(Seq(IntSort), Seq(), IntSort, { case Seq(x, y) => ADD(x, y) }),
   "__sub__" -> MemberInfo(Seq(IntSort), Seq(), IntSort, { case Seq(x, y) => SUB(x, y) }),
+  "__mul__" -> MemberInfo(Seq(IntSort), Seq(), IntSort, { case Seq(x, y) => MUL(x, y) }),
   "__eq__" -> MemberInfo(Seq(IntSort), Seq(), BoolSort, { case Seq(x, y) => EQ(x, y) }),
   "__ne__" -> MemberInfo(Seq(IntSort), Seq(), BoolSort, { case Seq(x, y) => NE(x, y) }),
   "__lt__" -> MemberInfo(Seq(IntSort), Seq(), BoolSort, { case Seq(x, y) => LT(x, y) }),
@@ -73,10 +74,11 @@ val strMemberTable = Map(
 def arrayMemberTable(elemSort: Sort) = Map(
   "__contains__" -> MemberInfo(Seq(elemSort), Seq(), BoolSort, { case Seq(xs, x) => ??? }),
   "__getitem__" -> MemberInfo(Seq(IntSort), Seq(), elemSort, { case Seq(xs, i) => ArrSelect(xs, i) }),
-  "__setitem__" -> MemberInfo(Seq(IntSort, elemSort), Seq(), NoType,
-    { case Seq(xs, i, x) => ??? }),
-  "__all__" -> MemberInfo(Seq(), Seq(), BoolSort, { case Seq(xs) => ??? }),
-  "__any__" -> MemberInfo(Seq(), Seq(), BoolSort, { case Seq(xs) => ??? }),
+)
+
+def dictMemberTable(keySort: Sort, valueSort: Sort) = Map(
+  "__contains__" -> MemberInfo(Seq(keySort), Seq(), BoolSort, { case Seq(d, k) => DictContainsKey(d, k) }),
+  "__getitem__" -> MemberInfo(Seq(keySort), Seq(), valueSort, { case Seq(d, k) => DictSelect(d, k) }),
 )
 
 def selectMember(receiverSort: Sort, memberName: String): Option[MemberInfo] =
@@ -85,4 +87,5 @@ def selectMember(receiverSort: Sort, memberName: String): Option[MemberInfo] =
     case BoolSort => boolMemberTable.get(memberName)
     case StrSort => strMemberTable.get(memberName)
     case ArraySort(s) => arrayMemberTable(s).get(memberName)
+    case DictSort(sk, sv) => dictMemberTable(sk, sv).get(memberName)
     case _ => None

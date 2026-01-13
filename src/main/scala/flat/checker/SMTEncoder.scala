@@ -1,7 +1,6 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.Config
 import flat.Ops.CmpOp
 import flat.checker.ast.*
 import flat.regex.RegEx
@@ -178,6 +177,27 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
       // Given an index sort `I` and element sort `E`, an array sort `Array I E` is defined for every index `i` in `I`,
       // i.e., a total map from `I` to `E`. Here we simply set `I` to the integer sort.
       tm.mkTerm(Kind.SELECT, ta, ti)
+
+    // Dict operations
+    case DictExpr(items) =>
+      val keys = items.map { case (k, _) => encodeExpr(k) }
+      val values = items.map { case (_, v) => encodeExpr(v) }
+      val dictSort = tm.mkArraySort(keys.head.getSort, values.head.getSort)
+      var dictTerm = tm.mkConst(dictSort)
+      for i <- items.indices do
+        dictTerm = tm.mkTerm(Kind.STORE, dictTerm, keys(i), values(i))
+      dictTerm
+
+    case DictContainsKey(d: DictExpr, ek) =>
+      val keys = d.keys.map(encodeExpr)
+      val keySet = keys.map(tm.mkTerm(Kind.SET_SINGLETON, _)).reduce(tm.mkTerm(Kind.SET_UNION, _, _))
+      val tk = encodeExpr(ek)
+      tm.mkTerm(Kind.SET_MEMBER, tk, keySet)
+
+    case DictSelect(dict, key) =>
+      val td = encodeExpr(dict)
+      val tk = encodeExpr(key)
+      tm.mkTerm(Kind.SELECT, td, tk)
 
     // Others
     case _ => tm.mkConst(encodeSort(expr.sort))
