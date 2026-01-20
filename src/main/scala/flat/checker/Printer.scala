@@ -19,9 +19,9 @@ object Printer:
     case TupleSort(ts) =>
       val elems = ts.map(ppType)
       paren(elems.mkString(", "))
-    case ArraySort(s) =>
+    case ListSort(s) =>
       val elem = ppType(s)
-      s"Array[$elem]"
+      s"List($elem)"
     case FunSort(ts, t) =>
       val ss = ts.map(ppType)
       val left = if ss.length == 1 then ss.head else paren(ss.mkString(", "))
@@ -31,9 +31,9 @@ object Printer:
     case TupleType(ts) =>
       val ss = ts.map(ppType)
       paren(ss.mkString(", "))
-    case ArrayType(t) =>
+    case ListType(t) =>
       val s = ppType(t)
-      s"Array[$s]"
+      s"List($s)"
     case FunType(ts, t) =>
       val ss = ts.map(ppType)
       val left = if ss.length == 1 then ss.head else paren(ss.mkString(", "))
@@ -46,7 +46,11 @@ object Printer:
 
   private inline def paren(s: String): String = "(" + s + ")"
 
-  def ppRE(re: RegEx): String = re match
+  def ppRE(re: RegEx): String =
+    val s = ppREImpl(re)
+    if s.length > 80 then s.take(80) + "..." else s
+
+  def ppREImpl(re: RegEx): String = re match
     case RENone => "∅"
     case RENull => "ε"
     case RELit(cs) =>
@@ -60,15 +64,15 @@ object Printer:
           case (c1, c2) => s"$c1-$c2"
         "[" + (if pos then "" else "^") + ss.mkString + "]"
     case REConcat(r1, r2) =>
-      val s1 = if r1.isInstanceOf[REUnion] then paren(ppRE(r1)) else ppRE(r1)
-      val s2 = if r2.isInstanceOf[REUnion] then paren(ppRE(r2)) else ppRE(r2)
+      val s1 = if r1.isInstanceOf[REUnion] then paren(ppREImpl(r1)) else ppREImpl(r1)
+      val s2 = if r2.isInstanceOf[REUnion] then paren(ppREImpl(r2)) else ppREImpl(r2)
       s1 + s2
     case REUnion(r1, r2) => // right associative
-      val s1 = if r1.isInstanceOf[REUnion] then paren(ppRE(r1)) else ppRE(r1)
-      val s2 = ppRE(r2)
+      val s1 = if r1.isInstanceOf[REUnion] then paren(ppREImpl(r1)) else ppREImpl(r1)
+      val s2 = ppREImpl(r2)
       s"$s1|$s2"
     case REStar(r) =>
-      val s = ppRE(r)
+      val s = ppREImpl(r)
       if s.length == 1 then s + "*" else paren(s) + "*"
 
   def ppExpr(expr: Expr): String = expr.accept(ExprPrinter)(using ())
@@ -159,6 +163,14 @@ object Printer:
       val right = if getLevel(node.right) <= Level.CMP then paren(s2) else s2
       s"$left ${node.op} $right"
 
+    override def visitBitwise(node: Bitwise)(using ctx: Unit): String =
+      // left associative
+      val s1 = node.left.accept(this)
+      val left = if getLevel(node.left) < Level.CMP then paren(s1) else s1
+      val s2 = node.right.accept(this)
+      val right = if getLevel(node.right) <= Level.CMP then paren(s2) else s2
+      s"$left ${node.op} $right"
+
     def visitConcat(node: Concat)(using ctx: Unit): String =
       // right associative
       val s1 = node.left.accept(this)
@@ -205,6 +217,11 @@ object Printer:
       val str = if getLevel(node.str) <= Level.CMP then paren(s2) else s2
       s"$infix in $str"
 
+    override def visitStrIs(node: StrIs)(using ctx: Unit): String =
+      val s = node.str.accept(this)
+      val str = if getLevel(node.str) < Level.APPLY then paren(s) else s
+      s"$str.is(${node.kind})"
+
     def visitFind(node: Find)(using ctx: Unit): String =
       val s = node.str.accept(this)
       val str = if getLevel(node.str) < Level.APPLY then paren(s) else s
@@ -231,11 +248,17 @@ object Printer:
 
     def visitStrToInt(node: StrToInt)(using ctx: Unit): String =
       val str = node.str.accept(this)
-      s"toInt($str)"
+      val base = node.base.accept(this)
+      s"toInt($str, $base)"
 
     def visitStrFromInt(node: StrFromInt)(using ctx: Unit): String =
       val int = node.int.accept(this)
       s"fromInt($int)"
+
+    override def visitStrToSet(node: StrToSet)(using ctx: Unit): String =
+      val s = node.str.accept(this)
+      val str = if getLevel(node.str) < Level.APPLY then paren(s) else s
+      s"toSet($str)"
 
     def visitStrIn(node: StrIn)(using ctx: Unit): String =
       val s = node.str.accept(this)
@@ -243,13 +266,51 @@ object Printer:
       val re = ppRE(node.re)
       s"$str ∈ $re"
 
-    def visitArrSelect(node: ArrSelect)(using ctx: Unit): String =
-      val s = node.arr.accept(this)
-      val arr = if getLevel(node.arr) < Level.APPLY then paren(s) else s
-      val idx = node.idx.accept(this)
-      s"$arr[$idx]"
+    override def visitListExpr(node: ListExpr)(using ctx: Unit): String =
+      val ss = node.elems.map(_.accept(this))
+      "[" + ss.mkString(", ") + "]"
 
-    def visitDictExpr(node: DictExpr)(using ctx: Unit): String =
+    override def visitListLen(node: ListLen)(using ctx: Unit): String =
+      val lst = node.lst.accept(this)
+      s"|$lst|"
+
+    def visitListLookup(node: ListLookup)(using ctx: Unit): String =
+      val s = node.lst.accept(this)
+      val lst = if getLevel(node.lst) < Level.APPLY then paren(s) else s
+      val idx = node.idx.accept(this)
+      s"$lst[$idx]"
+
+    override def visitListSlice(node: ListSlice)(using ctx: Unit): String =
+      val s = node.lst.accept(this)
+      val lst = if getLevel(node.lst) < Level.APPLY then paren(s) else s
+      val startIdx = if node.startIdx == Const(0) then "" else node.startIdx.accept(this)
+      val endIdx = if node.endIdx == ListLen(node.lst) then "" else node.endIdx.accept(this)
+      s"$lst[$startIdx:$endIdx]"
+
+    override def visitListAppend(node: ListAppend)(using ctx: Unit): String =
+      val s = node.lst.accept(this)
+      val lst = if getLevel(node.lst) < Level.APPLY then paren(s) else s
+      val elem = node.elem.accept(this)
+      s"$lst :+ $elem"
+
+    override def visitListMap(node: ListMap)(using ctx: Unit): String =
+      val s = node.lst.accept(this)
+      val arr = if getLevel(node.lst) < Level.APPLY then paren(s) else s
+      val f = node.fun.accept(this)
+      s"$arr.map($f)"
+
+    override def visitSetExpr(node: SetExpr)(using ctx: Unit): String =
+      val ss = node.elems.map(_.accept(this))
+      "{" + ss.mkString(", ") + "}"
+
+    override def visitSubset(node: Subset)(using ctx: Unit): String =
+      val s1 = node.lower.accept(this)
+      val subset = if getLevel(node.lower) <= Level.CMP then paren(s1) else s1
+      val s2 = node.upper.accept(this)
+      val superset = if getLevel(node.upper) <= Level.CMP then paren(s2) else s2
+      s"$subset ⊆ $superset"
+
+    def visitMapExpr(node: MapExpr)(using ctx: Unit): String =
       if node.items.isEmpty then "{}"
       else
         val ss = node.items.take(3).map: (key, value) =>
@@ -258,14 +319,14 @@ object Printer:
           s"$ks: $vs"
         "{" + ss.mkString(", ") + (if node.items.length > 3 then ", ..." else "") + "}"
 
-    def visitDictContainsKey(node: DictContainsKey)(using ctx: Unit): String =
+    def visitMapContains(node: MapContains)(using ctx: Unit): String =
       val s1 = node.key.accept(this)
       val key = if getLevel(node.key) <= Level.CMP then paren(s1) else s1
       val s2 = node.dict.accept(this)
       val dict = if getLevel(node.dict) <= Level.CMP then paren(s2) else s2
       s"$key in $dict"
 
-    def visitDictSelect(node: DictSelect)(using ctx: Unit): String =
+    def visitMapLookup(node: MapLookup)(using ctx: Unit): String =
       val s = node.dict.accept(this)
       val dict = if getLevel(node.dict) < Level.APPLY then paren(s) else s
       val key = node.key.accept(this)
@@ -277,6 +338,8 @@ object Printer:
       val args = node.args.map(_.accept(this))
       fun + paren(args.mkString(", "))
 
+    override def visitNoExpr(node: ast.NoExpr.type)(using ctx: Unit): String = "?"
+
     private object Level extends Enumeration:
       val ITE, OR, AND, CMP, ADD, UNARY, APPLY = Value
 
@@ -284,7 +347,7 @@ object Printer:
       case _: Ite => Level.ITE
       case _: Or => Level.OR
       case _: And => Level.AND
-      case _: Cmp | _: StrTest | _: TypeTest | _: DictContainsKey => Level.CMP
+      case _: Cmp | _: StrTest | _: TypeTest | _: MapContains => Level.CMP
       case _: Arith | _: Concat => Level.ADD
       case _: Not | _: Negate => Level.UNARY
       case _ => Level.APPLY

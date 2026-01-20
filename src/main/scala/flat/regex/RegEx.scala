@@ -141,7 +141,8 @@ enum RegEx:
     case REStar(r) => r.derivativeAny ++ this
 
   /** Tests if the given string `s` is a member. */
-  def contains(s: String): Boolean = derivative(s).nullable
+  def contains(s: String): Boolean =
+    if s.isEmpty then nullable else derivative(s).nullable
 
   /** Tests if this RE is subset of `that`. */
   infix def subsetOf(that: RegEx): Boolean = RESub.check(this, that)

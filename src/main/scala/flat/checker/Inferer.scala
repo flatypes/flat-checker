@@ -55,6 +55,17 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
           case (Some(r1), r2) => // select the more precise one; if neither is a subset of another, prefer r1
             if r2.subsetOf(r1) then r2 else r1
           case (None, r) => r
+      // split
+      case ListLookup(lst@Split(str, Const(t: String)), ei) if t.length == 1 =>
+        val r = inferLang(str)
+        val i = indexInferer.inferArrayIndex(ei, lst).asInstanceOf[BasicIndex]
+        r.splitPart(t.head, i)
+      case ListSlice(lst@Split(str, Const(t: String)), Const(0), Arith(SUB, ListLen(e1), Const(1)))
+        if t.length == 1 && e1 == lst =>
+        val c = t.head
+        val r = inferLang(str)
+        r.reverse.findSuffix(c).drop1.reverse
+
       case _ => throw IllegalArgumentException(str.toString)
 
   /** Infer the type of `Substr(str, start, end)`.
@@ -147,6 +158,12 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     case SuffixOf(_, _) => BoolSet.All
     case InfixOf(Const(t: String), es) => infixOf(t, es)
     case InfixOf(_, _) => BoolSet.All
+    case StrIs(es, _, p) =>
+      val r = inferLang(es)
+      val chars = r.alphabet.toSet
+      if chars.forall(p) then BoolSet.True
+      else if chars.forall(!p(_)) then BoolSet.False
+      else BoolSet.All
 
   private def prefixOf(t: String, str: Expr): BoolSet =
     if t.isEmpty then
@@ -202,3 +219,11 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         (bs, results.distinct.toList)
 
   private inline def isValid(cond: Expr)(using ctx: PrfCtx): Boolean = ctx.isValid(cond)
+
+  def inferSplitLength(str: Expr, c: Char): Interval =
+    val r = inferLang(str)
+    r.count(c) + 1
+
+  def inferSplitLang(str: Expr, c: Char): RegEx =
+    val r = inferLang(str)
+    r.splitBy(c)

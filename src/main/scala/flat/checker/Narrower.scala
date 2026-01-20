@@ -28,7 +28,7 @@ class Narrower(using config: Config) extends LazyLogging:
         for
           es <- res1.keys
           if !res.contains(es) || res1(es) != res(es)
-        do logger.debug(s"Narrow $es: ${res1(es)}")
+        do logger.debug(s"Narrow $es: ${Printer.ppRE(res1(es))}")
         if res1.values.exists(_.isEmpty) then res1
         else iterate(rest, res1)
 
@@ -82,6 +82,18 @@ class Narrower(using config: Config) extends LazyLogging:
           case EQ => r.narrowByEq(t)
           case NE => r.narrowByNotEq(t)
         res + (es -> r1)
+
+      case InfixOf(Const(t1: String), ListLookup(ea@Split(es, Const(t2: String)), ei)) =>
+        val c1 = t1.head
+        val c2 = t2.head
+        val r = res(es)
+        val indexInferer = new IndexInferer
+        val r1 = indexInferer.inferArrayIndex(ei, ea) match
+          case IndexL(k) => r.narrowPartBy(k, _.narrowByContain(c1), c2)
+          case IndexR(k) if k > 0 => r.reverse.narrowPartBy(k - 1, _.narrowByContain(c1), c2).reverse
+          case _ => r
+        res + (es -> r1)
+
       case _ => res
 
   private def mkIntervals(op: CmpOp, n: Int): List[Interval] = op match

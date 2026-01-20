@@ -30,20 +30,30 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
           t <- target
           if !r.contains(t)
         yield NE(str, t)
-      val l2 = if r.isSmall then mkOr(r.words.map(EQ(str, _))) else TypeTest(str, LangType(r))
-      l1.toList :+ l2
+      val l2 = if r.isSmall then List(mkOr(r.words.map(EQ(str, _)))) else Nil // TypeTest(str, LangType(r))
+      l1.toList ++ l2
 
   extension (re: RegEx)
     /** Tests if this regular language is *small*: free of Kleene stars and big CS. */
-    private def isSmall: Boolean = re match
-      case RENone => true
-      case RENull => true
-      case RELit(cs) => cs.size <= 100
-      case REConcat(r1, r2) => r1.isSmall && r2.isSmall
-      case REUnion(r1, r2) => r1.isSmall && r2.isSmall
-      case REStar(_) => false
+    def isSmall: Boolean = re.size match
+      case n: BigInt if n < 50 => true
+      case _ => false
 
-    private def words: Set[String] = re match
+    def size: BigInt | Inf.type = re match
+      case RENone => 0
+      case RENull => 1
+      case RELit(cs) => cs.size
+      case REConcat(r1, r2) =>
+        (r1.size, r2.size) match
+          case (n1: BigInt, n2: BigInt) => n1 * n2
+          case _ => Inf
+      case REUnion(r1, r2) =>
+        (r1.size, r2.size) match
+          case (n1: BigInt, n2: BigInt) => n1 + n2
+          case _ => Inf
+      case REStar(_) => Inf
+
+    def words: Set[String] = re match
       case RENone => Set.empty
       case RENull => Set("")
       case RELit(cs) => cs.toSet.map(_.toString)
@@ -136,3 +146,24 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
 
   /** Tests if the first index of `c1` is always ''less than'' the first occurrence of `c2`. */
   private def findLT(re: RegEx, c1: Char, c2: Char): Boolean = !re.findPrefix(c1).alphabet.contains(c2)
+
+  final case class InferSplitLength(str: Expr, sep: Char) extends Sketch:
+    def apply(using ctx: PrfCtx): List[Expr] =
+      val inferer = new Inferer
+      val len = inferer.inferSplitLength(str, sep)
+      if len == Interval(lb = 0) then Nil else List(inInterval(ListLen(Split(str, Const(sep.toString))), len))
+
+  final case class InferToNumber(str: Expr, base: Int) extends Sketch:
+    def apply(using ctx: PrfCtx): List[Expr] =
+      val inferer = new Inferer
+      val r = inferer.inferLang(str)
+      val interval = r.toNumber(base)
+      List(inInterval(StrToInt(str, base), interval))
+
+  final case class InferToSet(str: Expr) extends Sketch:
+    def apply(using ctx: PrfCtx): List[Expr] =
+      val inferer = new Inferer
+      val r = inferer.inferLang(str)
+      val chars = r.alphabet
+      val elems = chars.toSet.toList.sorted.map(c => Const(c.toString))
+      List(EQ(StrToSet(str), SetExpr(elems)))

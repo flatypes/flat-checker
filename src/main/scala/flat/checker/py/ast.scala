@@ -31,6 +31,9 @@ object ast:
   final case class Assert(test: Expr) extends LocalStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitAssert(this, ctx)
 
+  final case class Raise() extends LocalStmt:
+    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitRaise(this, ctx)
+
   final case class Pass() extends LocalStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitPass(this, ctx)
 
@@ -40,6 +43,9 @@ object ast:
   final case class While(test: Expr, body: Seq[LocalStmt]) extends LocalStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitWhile(this, ctx)
 
+  final case class For(target: Name, start: Expr, end: Expr, step: Expr, body: Seq[LocalStmt]) extends LocalStmt:
+    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitFor(this, ctx)
+
   final case class Break() extends LocalStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitBreak(this, ctx)
 
@@ -48,6 +54,9 @@ object ast:
 
   final case class ExprStmt(expr: Expr) extends LocalStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitExprStmt(this, ctx)
+
+  final case class Block(body: List[LocalStmt]) extends LocalStmt:
+    def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitBlock(this, ctx)
 
   sealed trait Expr extends Node
 
@@ -100,17 +109,23 @@ object ast:
 
     def visitAssert(node: Assert, ctx: C): T = visitDefault(node, ctx)
 
+    def visitRaise(node: Raise, ctx: C): T = visitDefault(node, ctx)
+
     def visitPass(node: Pass, ctx: C): T = visitDefault(node, ctx)
 
     def visitIf(node: If, ctx: C): T = visitDefault(node, ctx)
 
     def visitWhile(node: While, ctx: C): T = visitDefault(node, ctx)
 
+    def visitFor(node: For, ctx: C): T = visitDefault(node, ctx)
+
     def visitBreak(node: Break, ctx: C): T = visitDefault(node, ctx)
 
     def visitReturn(node: Return, ctx: C): T = visitDefault(node, ctx)
 
     def visitExprStmt(node: ExprStmt, ctx: C): T = visitDefault(node, ctx)
+
+    def visitBlock(node: Block, ctx: C): T = visitDefault(node, ctx)
 
     // expr
     def visitConstant(node: Constant, ctx: C): T = visitDefault(node, ctx)

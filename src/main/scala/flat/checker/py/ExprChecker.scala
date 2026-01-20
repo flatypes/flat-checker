@@ -24,6 +24,9 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
         case v: Int => (ast.IntSort, ast.Const(v).copyLocation(node))
         case v: Boolean => (ast.BoolSort, ast.Const(v).copyLocation(node))
         case v: String => (ast.StrSort, ast.Const(unescapeJava(v)).copyLocation(node))
+        case null =>
+          issuer.report(TypeError(s"unsupported constant type: ${node.value.getClass}", node.loc))
+          (ast.NoType, ast.NoExpr)
 
     override def visitTupleExpr(node: TupleExpr, ctx: LCtx): (ast.Type, ast.Expr) =
       val (ts, es) = (for value <- node.values yield value.accept(this, ctx)).unzip
@@ -38,8 +41,8 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
         keySort = tk.base
         valueSort = tv.base
         ek -> ev
-      val dictExpr = ast.DictExpr(items.toList).copyLocation(node)
-      (ast.DictSort(keySort, valueSort), dictExpr)
+      val dictExpr = ast.MapExpr(items.toList).copyLocation(node)
+      (ast.MapSort(keySort, valueSort), dictExpr)
 
     override def visitName(node: Name, ctx: LCtx): (ast.Type, ast.Expr) =
       val x = node.id
@@ -50,7 +53,7 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
         case None =>
           gCtx.get(x) match
             case Some(info: FunInfo) =>
-              (info.funType, ast.GlobalRef(x).copyLocation(node))
+              (info.funType, ast.GlobalRef(x).withSort(info.funType.base).copyLocation(node))
             case Some(info: TypeInfo) =>
               issuer.report(TypeError("expect a term, but found type", node.loc))
               (ast.NoType, ast.NoExpr)
@@ -74,7 +77,18 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
           val es = checkArgs(nodeLoc, args, m.required, m.optional, ctx)
           if m.preCond.isDefined then
             out += ast.Assert(m.applyPre(e +: es).fillLocation(nodeLoc))
-          (m.returns, m.apply(e +: es).setLocation(nodeLoc))
+          val value = m.sideEffect match
+            case Some(f) =>
+              val y = vm.declare(m.returns)
+              out += ast.Assign(y, m.apply(e +: es).setLocation(nodeLoc))
+              e match
+                case ast.Var(x) =>
+                  out += ast.Assign(x, f.apply(e +: es).setLocation(nodeLoc))
+                case _ =>
+                  issuer.report(Unsupported("in-place update on non-variable", receiver.loc))
+              ast.Var(y)
+            case None => m.apply(e +: es).setLocation(nodeLoc)
+          (m.returns, value)
         case None =>
           issuer.report(NoAttribute(t.show, member, nodeLoc))
           (ast.NoType, ast.NoExpr)
@@ -83,21 +97,34 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
       node.func match
         case Name(f) if !ctx.contains(f) && !gCtx.contains(f) =>
           node.args match
-            case Seq(arg) =>
-              val (t, e) = arg.accept(this, ctx)
-              selectMember(t.base, s"__${f}__") match
-                case Some(m) =>
-                  assert(m.required.isEmpty && m.optional.isEmpty)
-                  (m.returns, m(Seq(e)).copyLocation(node))
-                case None =>
-                  issuer.report(NoAttribute(t.show, s"__${f}__", node.loc))
-                  (ast.NoType, ast.NoExpr)
             case Seq(obj, annot) if f == "isinstance" =>
               val t = checkAnnot(annot, gCtx)
               val e = checkType(obj, t.base, ctx)
               (ast.BoolSort, ast.TypeTest(e, t).copyLocation(node))
-            case other =>
-              issuer.report(TypeError(s"function $f takes exactly one argument", node.loc))
+            case Seq(fun, arr) if f == "map" =>
+              val (tf, ef) = inferType(fun, ctx)
+              tf match
+                case ast.FunType(List(t1), t2) =>
+                  val ea = checkType(arr, ast.ListType(t1), ctx)
+                  val e = ast.ListMap(ea, ef).copyLocation(node)
+                  (ast.ListType(t2), e)
+                case other =>
+                  issuer.report(TypeError(s"expected a function, but found $other", fun.loc))
+                  (ast.NoType, ast.NoExpr)
+            case es if es.nonEmpty =>
+              checkMemberCall(es.head, s"__${f}__", es.tail, node.loc, ctx)
+            case _ =>
+              issuer.report(TypeError(s"function $f takes arguments", node.loc))
+              (ast.NoType, ast.NoExpr)
+        case Attribute(Name("int"), f) =>
+          intModuleTable.get(f) match
+            case Some(m) =>
+              val es = checkArgs(node.loc, node.args, m.required, m.optional, ctx)
+              if m.preCond.isDefined then
+                out += ast.Assert(m.applyPre(es).fillLocation(node.loc))
+              (m.returns, m.apply(ast.NoExpr +: es).setLocation(node.loc))
+            case None =>
+              issuer.report(NoAttribute("int", f, node.loc))
               (ast.NoType, ast.NoExpr)
         case Attribute(receiver, f) =>
           checkMemberCall(receiver, f, node.args, node.loc, ctx)
@@ -141,4 +168,6 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
       val (actual, e) = node.accept(InferMode, ctx)
       if !(actual.base subsortOf expected.base) then
         issuer.report(TypeMismatch(expected.show, actual.show, node.loc))
+      if expected.constraint.isDefined then
+        out += ast.Assert(ast.TypeTest(e, expected).fillLocation(node.loc))
       e

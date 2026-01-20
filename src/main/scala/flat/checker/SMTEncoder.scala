@@ -19,7 +19,8 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
     case StrSort => tm.getStringSort
     case UnitSort => tm.mkTupleSort(Array.empty)
     case TupleSort(ss) => tm.mkTupleSort(ss.map(encodeSort).toArray)
-    case ArraySort(s) => tm.mkArraySort(tm.getIntegerSort, encodeSort(s))
+    case ListSort(s) => tm.mkSequenceSort(encodeSort(s))
+    case SetSort(s) => tm.mkSetSort(encodeSort(s))
     case _ => throw IllegalArgumentException(sort.toString)
 
   def encodeRE(re: RegEx): cvc5.Term = re match
@@ -47,18 +48,29 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
       val t = encodeRE(r)
       tm.mkTerm(Kind.REGEXP_STAR, t)
 
-  private val ctx = mutable.Map.empty[String, cvc5.Term]
+  private val ctx = mutable.Map.empty[Expr, cvc5.Term]
 
-  def getCtx: Map[String, cvc5.Term] = ctx.toMap
+  def getCtx: Map[Expr, cvc5.Term] = ctx.toMap
 
-  private def encodeVar(name: String): cvc5.Term =
-    ctx.get(name) match
+//  private def encodeVar(name: String): cvc5.Term =
+//    ctx.get(name) match
+//      case Some(t) => t
+//      case None =>
+//        val s = encodeSort(varCtx.getSort(name))
+//        val t = tm.mkConst(s, name)
+//        ctx(name) = t
+//        t
+
+  private def encodeAtomicExpr(expr: Expr): cvc5.Term =
+    ctx.get(expr) match
       case Some(t) => t
       case None =>
-        val s = encodeSort(varCtx.getSort(name))
-        val t = tm.mkConst(s, name)
-        ctx(name) = t
+        val t = tm.mkConst(encodeSort(expr.sort))
+        ctx(expr) = t
         t
+
+  private def encodeVar(name: String): cvc5.Term =
+    encodeAtomicExpr(Var(name).withSort(varCtx.getSort(name)))
 
   def encodeExpr(expr: Expr): cvc5.Term = expr match
     case Const(n: Int) => tm.mkInteger(n)
@@ -108,6 +120,7 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
       val kind = op match
         case ArithOp.ADD => Kind.ADD
         case ArithOp.SUB => Kind.SUB
+        case ArithOp.MUL => Kind.MULT
       val t1 = encodeExpr(e1)
       val t2 = encodeExpr(e2)
       tm.mkTerm(kind, t1, t2)
@@ -157,7 +170,7 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
     case StrFromCode(e) =>
       val t = encodeExpr(e)
       tm.mkTerm(Kind.STRING_FROM_CODE, t)
-    case StrToInt(es) =>
+    case StrToInt(es, Const(10)) =>
       val ts = encodeExpr(es)
       // NOTE: only nonnegative values are supported
       tm.mkTerm(Kind.STRING_TO_INT, ts)
@@ -170,16 +183,48 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
         encodeTypeTest(e, LangType(r))
       else tm.mkConst(tm.getBooleanSort)
 
-    // Array operations
-    case ArrSelect(ea, ei) =>
-      val ta = encodeExpr(ea)
-      val ti = encodeExpr(ei)
-      // Given an index sort `I` and element sort `E`, an array sort `Array I E` is defined for every index `i` in `I`,
-      // i.e., a total map from `I` to `E`. Here we simply set `I` to the integer sort.
-      tm.mkTerm(Kind.SELECT, ta, ti)
+    // List operations
+    case ListExpr(es) =>
+      val elems = es.map(encodeExpr)
+      val singletons = elems.map(tm.mkTerm(Kind.SEQ_UNIT, _))
+      singletons.reduce(tm.mkTerm(Kind.SEQ_CONCAT, _, _))
 
-    // Dict operations
-    case DictExpr(items) =>
+    case ListLen(e) =>
+      val seq = encodeExpr(e)
+      tm.mkTerm(Kind.SEQ_LENGTH, seq)
+
+    case ListLookup(e, ei) =>
+      val seq = encodeExpr(e)
+      val idx = encodeExpr(ei)
+      tm.mkTerm(Kind.SEQ_NTH, seq, idx)
+
+    case ListSlice(e, ei, ej) =>
+      val seq = encodeExpr(e)
+      val start = encodeExpr(ei)
+      val end = encodeExpr(ej)
+      val len = tm.mkTerm(Kind.SUB, end, start)
+      tm.mkTerm(Kind.SEQ_EXTRACT, seq, start, len)
+
+    case ListAppend(e, ex) =>
+      val seq = encodeExpr(e)
+      val elem = encodeExpr(ex)
+      val singleton = tm.mkTerm(Kind.SEQ_UNIT, elem)
+      tm.mkTerm(Kind.SEQ_CONCAT, seq, singleton)
+
+    // Set operations
+    case SetExpr(elems) =>
+      val sets = elems.map: e =>
+        val te = encodeExpr(e)
+        tm.mkTerm(Kind.SET_SINGLETON, te)
+      if sets.isEmpty then tm.mkEmptySet(tm.getIntegerSort) else sets.reduce(tm.mkTerm(Kind.SET_UNION, _, _))
+
+    case Subset(e1, e2) =>
+      val t1 = encodeExpr(e1)
+      val t2 = encodeExpr(e2)
+      tm.mkTerm(Kind.SET_SUBSET, t1, t2)
+
+    // Map operations
+    case MapExpr(items) =>
       val keys = items.map { case (k, _) => encodeExpr(k) }
       val values = items.map { case (_, v) => encodeExpr(v) }
       val dictSort = tm.mkArraySort(keys.head.getSort, values.head.getSort)
@@ -188,19 +233,19 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
         dictTerm = tm.mkTerm(Kind.STORE, dictTerm, keys(i), values(i))
       dictTerm
 
-    case DictContainsKey(d: DictExpr, ek) =>
+    case MapContains(d: MapExpr, ek) =>
       val keys = d.keys.map(encodeExpr)
       val keySet = keys.map(tm.mkTerm(Kind.SET_SINGLETON, _)).reduce(tm.mkTerm(Kind.SET_UNION, _, _))
       val tk = encodeExpr(ek)
       tm.mkTerm(Kind.SET_MEMBER, tk, keySet)
 
-    case DictSelect(dict, key) =>
+    case MapLookup(dict, key) =>
       val td = encodeExpr(dict)
       val tk = encodeExpr(key)
       tm.mkTerm(Kind.SELECT, td, tk)
 
     // Others
-    case _ => tm.mkConst(encodeSort(expr.sort))
+    case _ => encodeAtomicExpr(expr)
 
   private def encodeTypeTest(value: Expr, typ: Type): cvc5.Term = typ match
     case LangType(r) =>

@@ -6,99 +6,116 @@ import scala.jdk.CollectionConverters.*
 import scala.util.parsing.combinator.Parsers
 import scala.util.parsing.input.{CharSequenceReader, OffsetPosition}
 
-object REParser extends Parsers:
-  type Elem = Char
-
+object REParser:
   def parse(input: CharSequence): RegEx = tryParse(input) match
     case Left(err) => throw IllegalArgumentException(err)
     case Right(r) => r
 
-  def tryParse(input: CharSequence): Either[String, RegEx] =
+  def tryParse(input: CharSequence, rules: Map[String, RegEx] = Map.empty): Either[String, RegEx] =
     val in = CharSequenceReader(input)
-    phrase(expr)(in) match
-      case Success(r, _) => Right(r)
-      case Failure(msg, nxt) => Left(formatError(input, nxt.offset, msg))
-      case Error(msg, nxt) => Left(formatError(input, nxt.offset, msg))
+    val parsers = REParsers(rules)
+    parsers.phrase(parsers.expr)(in) match
+      case parsers.Success(r, _) => Right(r)
+      case parsers.Failure(msg, nxt) => Left(formatError(input, nxt.offset, msg))
+      case parsers.Error(msg, nxt) => Left(formatError(input, nxt.offset, msg))
 
   private def formatError(source: CharSequence, offset: Int, msg: String): String =
     val pos = OffsetPosition(source, offset)
     val indentation = " ".repeat(pos.column - 1)
     "regular expression has invalid syntax:\n" + pos.lineContents + "\n" + indentation + "^\n" + indentation + msg
 
-  // expr -> alt ('|' alt)*
-  private def expr: Parser[RegEx] = rep1sep(alt, '|') ^^ RegEx.union
+  private class REParsers(rules: Map[String, RegEx]) extends Parsers:
+    type Elem = Char
 
-  // alt -> term*
-  private def alt: Parser[RegEx] = term.* ^^ RegEx.concat
+    // expr -> alt ('|' alt)*
+    def expr: Parser[RegEx] = rep1sep(alt, '|') ^^ RegEx.union
 
-  // term -> atom quantifier?
-  private def term: Parser[RegEx] = atom >> parseQuantifier
+    // alt -> term*
+    private def alt: Parser[RegEx] = term.* ^^ RegEx.concat
 
-  // quantifier -> '*' | '+' | '?' | '{' (interval | int) '}'
-  private def parseQuantifier(r: RegEx): Parser[RegEx] =
-    '*' ^^^ r.* | '+' ^^^ r.+ | '?' ^^^ r.? | '{' ~>! (interval ^^ r.loop | int ^^ (r ^ _)) <~ '}' | success(r)
+    // term -> atom quantifier?
+    private def term: Parser[RegEx] = atom >> parseQuantifier
 
-  // interval -> int? ',' int?
-  private inline def interval: Parser[Interval] =
-    (int | success(0)) ~ (',' ~> (int | success(Inf))) ^^ { case lb ~ ub => Interval(lb, ub) }
+    // quantifier -> '*' | '+' | '?' | '{' (interval | int) '}'
+    private def parseQuantifier(r: RegEx): Parser[RegEx] =
+      '*' ^^^ r.* | '+' ^^^ r.+ | '?' ^^^ r.? | '{' ~> (interval ^^ r.loop | int ^^ (r ^ _)) <~ '}' | success(r)
 
-  // Reserved characters in regex syntax
-  private val syntaxChars: String = "^$\\.*+?()[]{}|"
+    // interval -> int? ',' int?
+    private inline def interval: Parser[Interval] =
+      (int | success(0)) ~ (',' ~> (int | success(Inf))) ^^ { case lb ~ ub => Interval(lb, ub) }
 
-  // atom -> char (EXCEPT syntaxChars) | '\' (charEscape | classEscape) | '.' | '[' classContents ']' | '(' expr ')'
-  private def atom: Parser[RegEx] =
-    acceptMatch("character", { case c if !syntaxChars.contains(c) => RegEx.fromChar(c) }) |
-      '\\' ~>! (charEscape ^^ RegEx.fromChar | classEscape ^^ RegEx.fromCharSet) |
-      '.' ^^^ RegEx.allChar | '[' ~>! classContents <~ ']' | '(' ~>! expr <~ ')'
+    // Reserved characters in regex syntax
+    private val syntaxChars: String = "^$\\.*+?()[]{}|"
 
-  // classContents -> '^'? classContent*
-  private def classContents: Parser[RegEx] =
-    for
-      neg <- '^'.?
-      css <- classContent.*
-      cs = if css.isEmpty then CharSet.empty else css.reduce(_ | _)
-    yield RegEx.fromCharSet(if neg.isDefined then !cs else cs)
+    // atom -> char (EXCEPT syntaxChars) | '\' (charEscape | classEscape) | '.' | '[' classContents ']' | '(' expr ')'
+    //       | '{' rule '}'
+    private def atom: Parser[RegEx] =
+      acceptMatch("character", { case c if !syntaxChars.contains(c) => RegEx.fromChar(c) }) |
+        '\\' ~>! (charEscape ^^ RegEx.fromChar | classEscape ^^ RegEx.fromCharSet) |
+        '.' ^^^ RegEx.allChar | '[' ~>! classContents <~ ']' | '(' ~>! expr <~ ')' |
+        '{' ~>! rule <~ '}'
 
-  // classContent -> classChar ('-' classChar)? | classEscape
-  private def classContent: Parser[CharSet] =
-    classChar ~ ('-' ~> classChar).? >> {
-      case c ~ None => success(CharSet(c))
-      case c1 ~ Some(c2) =>
-        if c1 <= c2 then success(CharSet.from(c1 to c2))
-        else err("invalid character range")
-    } | '\\' ~> classEscape
+    // classContents -> '^'? classContent*
+    private def classContents: Parser[RegEx] =
+      for
+        neg <- '^'.?
+        css <- classContent.*
+        cs = if css.isEmpty then CharSet.empty else css.reduce(_ | _)
+      yield RegEx.fromCharSet(if neg.isDefined then !cs else cs)
 
-  // classChar -> char (EXCEPT '\' '[' ']' '-') | '\' charEscape
-  private def classChar: Parser[Char] =
-    acceptMatch("character", { case c if !"\\[]-".contains(c) => c }) | '\\' ~> charEscape
+    // classContent -> classChar ('-' classChar)? | classEscape
+    private def classContent: Parser[CharSet] =
+      classChar ~ ('-' ~> classChar).? >> {
+        case c ~ None => success(CharSet(c))
+        case c1 ~ Some(c2) =>
+          if c1 <= c2 then success(CharSet.from(c1 to c2))
+          else err("invalid character range")
+      } | '\\' ~> classEscape
 
-  // charEscape -> controlEscape | identityEscape | 'c' letter | 'x' hexDigit{2} | 'u' hexDigit{4}
-  private def charEscape: Parser[Char] =
-    'f' ^^^ '\f' | 'n' ^^^ '\n' | 'r' ^^^ '\r' | 't' ^^^ '\t' | 'v' ^^^ 11.toChar |
-      acceptMatch("identity escape", { case c if (syntaxChars + "-'\"/").contains(c) => c }) |
-      'c' ~>! letter ^^ { c => (c % 32).toChar } |
-      'x' ~>! repN(2, hexDigit) ^^ { cs => Integer.parseInt(cs.mkString, 16).toChar } |
-      'u' ~>! repN(4, hexDigit) ^^ { cs => Integer.parseInt(cs.mkString, 16).toChar }
+    // classChar -> char (EXCEPT '\' '[' ']' '-') | '\' charEscape
+    private def classChar: Parser[Char] =
+      acceptMatch("character", { case c if !"\\[]-".contains(c) => c }) | '\\' ~> charEscape
 
-  // classEscape -> 'd' | 'D' | 's' | 'S' | 'w' | 'W' | 'p' '{' propertyValueExpr '}'
-  private def classEscape: Parser[CharSet] =
-    'd' ^^^ CharSet.asciiDigit | 'D' ^^^ !CharSet.asciiDigit |
-      's' ^^^ CharSet.asciiSpace | 'S' ^^^ !CharSet.asciiSpace |
-      'w' ^^^ CharSet.asciiWord | 'W' ^^^ !CharSet.asciiWord |
-      'p' ~>! '{' ~> acceptIf(_ != '}')(_ => "").+ <~ '}' >> { cs => parsePropertyValueExpr(cs.mkString) }
+    // charEscape -> controlEscape | identityEscape | 'c' letter | 'x' hexDigit{2} | 'u' hexDigit{4}
+    private def charEscape: Parser[Char] =
+      'f' ^^^ '\f' | 'n' ^^^ '\n' | 'r' ^^^ '\r' | 't' ^^^ '\t' | 'v' ^^^ 11.toChar |
+        acceptMatch("identity escape", { case c if (syntaxChars + "-'\"/").contains(c) => c }) |
+        'c' ~>! letter ^^ { c => (c % 32).toChar } |
+        'x' ~>! repN(2, hexDigit) ^^ { cs => Integer.parseInt(cs.mkString, 16).toChar } |
+        'u' ~>! repN(4, hexDigit) ^^ { cs => Integer.parseInt(cs.mkString, 16).toChar }
 
-  private def parsePropertyValueExpr(input: String): Parser[CharSet] =
-    try
-      val set = UnicodeSet(s"\\p{$input}")
-      success(CharSet.from(set.codePoints().asScala.map(_.toChar)))
-    catch
-      case ex: IllegalArgumentException => err(s"invalid Unicode escape: ${ex.getMessage}")
+    // classEscape -> 'd' | 'D' | 's' | 'S' | 'w' | 'W' | 'p' '{' propertyValueExpr '}'
+    private def classEscape: Parser[CharSet] =
+      'd' ^^^ CharSet.asciiDigit | 'D' ^^^ !CharSet.asciiDigit |
+        's' ^^^ CharSet.asciiSpace | 'S' ^^^ !CharSet.asciiSpace |
+        'w' ^^^ CharSet.asciiWord | 'W' ^^^ !CharSet.asciiWord |
+        'p' ~>! '{' ~> acceptIf(_ != '}')(_ => "").+ <~ '}' >> { cs => parsePropertyValueExpr(cs.mkString) }
 
-  private def int: Parser[Int] = rep1(acceptMatch("decimal digit",
-    { case c if (c >= '0' && c <= '9') => c })) ^^ (_.mkString.toInt)
+    private def rule: Parser[RegEx] =
+      ident >> { name =>
+        rules.get(name) match
+          case Some(r) => success(r)
+          case None => err(s"undefined rule: $name")
+      }
 
-  private def hexDigit: Parser[Char] = acceptMatch("hexadecimal digit",
-    { case c if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f') => c })
+    private def parsePropertyValueExpr(input: String): Parser[CharSet] =
+      try
+        val set = UnicodeSet(s"\\p{$input}")
+        success(CharSet.from(set.codePoints().asScala.map(_.toChar)))
+      catch
+        case ex: IllegalArgumentException => err(s"invalid Unicode escape: ${ex.getMessage}")
 
-  private def letter: Parser[Char] = acceptMatch("ASCII letter",
-    { case c if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') => c })
+    private def int: Parser[Int] = rep1(acceptMatch("decimal digit",
+      { case c if (c >= '0' && c <= '9') => c })) ^^ (_.mkString.toInt)
+
+    private def hexDigit: Parser[Char] = acceptMatch("hexadecimal digit",
+      { case c if (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f') => c })
+
+    private def letter: Parser[Char] = acceptMatch("ASCII letter",
+      { case c if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') => c })
+
+    private def ident: Parser[String] =
+      acceptMatch("identifier start character", { case c if c.isLetter || c == '_' => c }) ~
+        rep1(acceptMatch("identifier character", { case c if c.isLetterOrDigit || c == '_' => c })) ^^ {
+        case c ~ cs => (c :: cs).mkString
+      }

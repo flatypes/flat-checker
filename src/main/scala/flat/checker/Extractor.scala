@@ -1,8 +1,8 @@
 package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.ast.{Expr, FunDef, Module}
-import flat.{Config, ExtractConfig, checker}
+import flat.checker.ast.{Expr, FunDef, Module, Var}
+import flat.{ExtractConfig, checker}
 import io.github.cvc5
 import io.github.cvc5.Kind
 
@@ -25,7 +25,10 @@ class Extractor(using config: ExtractConfig) extends LazyLogging:
     val encoder = new SMTEncoder(using varCtx, true)
     val term = encode(vc)(using encoder)
     for x -> t <- encoder.getCtx do
-      lines += declare(x, t.getSort)
+      val name = x match
+        case Var(x) => x
+        case _ => x.toString.replaceAll("\\s+", "_")
+      lines += declare(name, t.getSort)
     lines ++= prove(term)
     lines += "(exit)"
     val outPath = outDir / s"${funDef.name}-full.smt2"
@@ -39,7 +42,10 @@ class Extractor(using config: ExtractConfig) extends LazyLogging:
         val assumptions = hs.map(encoder.encodeExpr)
         val conclusion = encoder.encodeExpr(c)
         for x -> t <- encoder.getCtx do
-          lines += declare(x, t.getSort)
+          val name = x match
+            case Var(x) => x
+            case _ => x.toString.replaceAll("\\s+", "_")
+          lines += declare(name, t.getSort)
         for term <- assumptions do
           lines += assume(term)
         lines ++= prove(conclusion)

@@ -129,3 +129,12 @@ object CharSet:
 
   /** Creates a CS with the given characters in the collection `it`. */
   def from(it: IterableOnce[Char]): CharSet = new CharSet(Set.from(it), true)
+
+object CharExt:
+  extension (c: Char)
+    def isASCII: Boolean = c.toInt <= 127
+
+    def isNumber(base: Int = 10): Boolean =
+      require(2 <= base && base <= 36)
+      if base <= 10 then '0' <= c && c < ('0' + base)
+      else ('0' <= c && c <= '9') || ('A' <= c.toUpper && c.toUpper < ('A' + (base - 10)))

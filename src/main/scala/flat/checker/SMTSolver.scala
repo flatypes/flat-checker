@@ -36,7 +36,7 @@ final class SMTSolver(using varCtx: VarCtx, extractMode: Boolean) extends LazyLo
       if slvResult.isUnsat then
         Right(())
       else if slvResult.isSat then
-        val model = for (x, t) <- encoder.getCtx yield x + " = " + slv.getValue(t).toString
+        val model = for (x, t) <- encoder.getCtx yield x.toString + " = " + slv.getValue(t).toString
         Left(model.mkString("\n"))
       else
         Left(slvResult.getUnknownExplanation.toString)

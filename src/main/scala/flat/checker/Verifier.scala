@@ -304,6 +304,13 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
               case (t, Right(_)) => t
             }))
           case _ => throw UnsupportedOperationException()
+      case ListType(LangType(r2)) =>
+        expr match
+          case Split(str, Const(t: String)) if t.length == 1 =>
+            val inferer = new Inferer(using ctx = getCtx)()
+            val r1 = inferer.inferSplitLang(str, t.head)
+            if r1.subsetOf(r2) then Right(()) else Left(ListType(LangType(r1)))
+          case _ => throw UnsupportedOperationException(s"checkType $expr : $typ")
       case _ =>
         throw UnsupportedOperationException(s"checkType $expr : $typ")
 
@@ -314,6 +321,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       for mc <- config.metrics do
         mc.timeStart("time/verif/type")
       val sketches = seeds.flatMap(collectSketches).distinct
+      logger.trace("Sketches: {}", sketches.map(_.toString).mkString(", "))
       val lemmas = syn.synth(sketches)(using getCtx)
       for mc <- config.metrics do
         mc.timePause("time/verif/type")
@@ -347,7 +355,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
             case NE => CharSet.not(c)
           ss += syn.InferLang(ec, target = Some(t))
           ss += syn.InferIndexCharAt(es, ei, cs)
-        case DictContainsKey(_, ec@CharAt(_, _)) =>
+        case MapContains(_, ec@CharAt(_, _)) =>
           ss += syn.InferLang(ec)
         case Cmp(EQ | NE, es, Const(t: String)) =>
           ss += syn.InferLang(es, target = Some(t))
@@ -360,6 +368,12 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
           ss += syn.InferTest(t)
         case Length(es) =>
           ss += syn.InferLength(es)
+        case ListLen(Split(es, Const(t: String))) if t.length == 1 =>
+          ss += syn.InferSplitLength(es, t.head)
         case Find(es, Const(t: String)) =>
           ss += syn.InferFind(es, t)
+        case StrToInt(es, Const(n: Int)) =>
+          ss += syn.InferToNumber(es, n)
+        case StrToSet(es) =>
+          ss += syn.InferToSet(es)
       ss.toList

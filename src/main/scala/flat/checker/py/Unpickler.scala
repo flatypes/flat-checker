@@ -72,7 +72,7 @@ class Unpickler(path: os.Path):
         if typeParams.nonEmpty then
           issuer.report(Unsupported("type param", typeParams.head |> location))
         Some(FunctionDef(ident, args, body, returns).setLocation(loc))
-      case "Import" | "ImportFrom" =>
+      case "Import" | "ImportFrom" | "ClassDef" =>
         None
       case other =>
         issuer.report(Unsupported(other, loc))
@@ -131,7 +131,7 @@ class Unpickler(path: os.Path):
         val value = m("value") |> expr
         Assign(target, mkInfix(attr, target, value)).setLocation(loc)
       case "Raise" => // regarded as `assert False`
-        Assert(Constant(false).setLocation(loc)).setLocation(loc)
+        Raise().setLocation(loc)
       case "Assert" =>
         val test = m("test") |> expr
         Assert(test).setLocation(loc)
@@ -149,6 +149,22 @@ class Unpickler(path: os.Path):
         if orElse.nonEmpty then
           issuer.report(Unsupported("else block in while-statement", orElse.head.loc))
         While(test, body).setLocation(loc)
+      case "For" =>
+        val target = m("target") |> expr
+        val iter = m("iter") |> expr
+        val body = m("body") |> list(localStmt)
+        val orElse = m("orelse") |> list(localStmt)
+        if orElse.nonEmpty then
+          issuer.report(Unsupported("else block in for-statement", orElse.head.loc))
+        (target, iter) match
+          case (name: Name, call@Call(Name("range"), rangeArgs)) =>
+            val start = if rangeArgs.length >= 2 then rangeArgs.head else Constant(0).setLocation(call.loc)
+            val end = if rangeArgs.length == 1 then rangeArgs.head else rangeArgs(1)
+            val step = if rangeArgs.length == 3 then rangeArgs(2) else Constant(1).setLocation(call.loc)
+            For(name, start, end, step, body).setLocation(loc)
+          case _ =>
+            issuer.report(Unsupported("for-statement, expected: for i in range(..., ...)", loc))
+            Pass().setLocation(loc)
       case "Break" =>
         Break().setLocation(loc)
       case "Return" =>
@@ -157,6 +173,15 @@ class Unpickler(path: os.Path):
       case "Expr" =>
         val value = m("value") |> expr
         ExprStmt(value).setLocation(loc)
+      case "Try" =>
+        val body = m("body") |> list(localStmt)
+        val orElse = m("orelse") |> list(localStmt)
+        val finalBody = m("finalbody") |> list(localStmt)
+        if orElse.nonEmpty then
+          issuer.report(Unsupported("else block in try-statement", orElse.head.loc))
+        if finalBody.nonEmpty then
+          issuer.report(Unsupported("finally block in try-statement", finalBody.head.loc))
+        Block(body.toList).setLocation(loc)
       case other =>
         issuer.report(Unsupported(other, loc))
         Pass()
@@ -275,16 +300,12 @@ class Unpickler(path: os.Path):
 
   private def mkCmp(cmpConstr: String, left: Expr, right: Expr): Expr =
     cmpConstr match
-      case "Eq" => mkInfix("__eq__", left, right)
-      case "NotEq" => mkInfix("__ne__", left, right)
+      case "Eq" | "Is" => mkInfix("__eq__", left, right)
+      case "NotEq" | "IsNot" => mkInfix("__ne__", left, right)
       case "Lt" => mkInfix("__lt__", left, right)
       case "LtE" => mkInfix("__le__", left, right)
       case "Gt" => mkInfix("__gt__", left, right)
       case "GtE" => mkInfix("__ge__", left, right)
-      case "Is" | "IsNot" =>
-        val err = mkInfix("__is__", left, right)
-        issuer.report(Unsupported("is", err.loc))
-        err
       case "In" => mkInfix("__contains__", right, left)
       case "NotIn" =>
         val e = mkInfix("__contains__", right, left)

@@ -19,7 +19,7 @@ final class VarManager:
   private var nextTmp = 0
 
   def declare(typ: ast.Type, ident: Ident): String =
-    assert(!data.contains(ident.name))
+    assert(!data.contains(ident.name), "Variable already declared: " + ident.name)
     data(ident.name) = VarInfo(typ, ident)
     ident.name
 
@@ -95,6 +95,6 @@ final class Transpiler:
 
       val checker = BodyChecker(using gCtx = ctx, returnType = returnType, vm = vm)()
       val lCtx = Map.from(for (Arg(a, _), t) <- node.args zip info.funType.args yield a.name -> vm.declare(t, a))
-      val (ss, _) = checker.checkBody(node.body, lCtx, Map.empty)(using insideLoop = false)
+      val (ss, _) = checker.checkBody(node.body, lCtx)(using insideLoop = false)
       val locals = List.from(for x -> t <- vm.getTypes.removedAll(node.args.map(_.ident.name)) yield VarDef(x, t))
       out += ast.FunDef(name, params, returns, locals, ast.mkStmtList(ss))

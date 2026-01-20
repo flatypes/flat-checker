@@ -92,3 +92,8 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       case (None, None, None) => IndexR(0)
       case _ => throw UnsupportedOperationException(s"solve $x: ambiguous choice of ub from $ubA, $ubL, $ubR")
     IndexInterval(lb, ub)
+
+  def inferArrayIndex(idx: Expr, arr: Expr): Index = idx match
+    case Const(n: Int) if n >= 0 => IndexL(n)
+    case Arith(SUB, ListLen(e), Const(n: Int)) if e == arr && n > 0 => IndexR(n)
+    case _ => throw UnsupportedOperationException()

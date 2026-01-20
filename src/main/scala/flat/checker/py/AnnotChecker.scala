@@ -70,7 +70,7 @@ class AnnotChecker(using issuer: Issuer):
               node.index match
                 case e: Expr =>
                   val t = e.accept(this, ctx)
-                  ast.ArrayType(t)
+                  ast.ListType(t)
                 case _ =>
                   issuer.report(TypeError(
                     "invalid argument for typing.List\n" + "expect a type", node.index.loc))
@@ -85,7 +85,7 @@ class AnnotChecker(using issuer: Issuer):
             case "lang" =>
               node.index match
                 case c@Constant(s: String) =>
-                  ast.LangType(parseReExpr(s, c.loc))
+                  ast.LangType(parseReExpr(s, c.loc, ctx))
                 case _ =>
                   issuer.report(TypeError("invalid argument for flat.py.lang\n" +
                     "expect a string (that compiles to a regular expression)", node.index.loc))
@@ -111,7 +111,7 @@ class AnnotChecker(using issuer: Issuer):
             case "lang" =>
               node.args match
                 case Seq(c@Constant(s: String)) =>
-                  ast.LangType(parseReExpr(s, c.loc))
+                  ast.LangType(parseReExpr(s, c.loc, ctx))
                 case Seq(arg) =>
                   issuer.report(TypeError("invalid argument for flat.py.lang\n" +
                     "expect a string (that compiles to a regular expression)", arg.loc))
@@ -133,8 +133,9 @@ class AnnotChecker(using issuer: Issuer):
       issuer.report(TypeError("expect a type", node.loc))
       ast.NoType
 
-    def parseReExpr(input: CharSequence, loc: Location): RegEx =
-      REParser.tryParse(input) match
+    private def parseReExpr(input: CharSequence, loc: Location, ctx: GCtx): RegEx =
+      val rules = Map.from(ctx.collect { case (x, TypeInfo(ast.LangType(r), _)) => x -> r })
+      REParser.tryParse(input, rules) match
         case Left(detail) =>
           issuer.report(SyntaxError(detail, loc))
           RegEx.RENone

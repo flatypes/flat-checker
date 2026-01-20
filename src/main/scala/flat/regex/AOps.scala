@@ -1,9 +1,11 @@
 package flat.regex
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.regex
 import flat.regex.RegEx.*
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 
 /** Abstract string operations, defined over the domain of `RegEx`es. */
 object AOps extends LazyLogging:
@@ -138,6 +140,38 @@ object AOps extends LazyLogging:
     def findPrefix(c: Char): RegEx = union(find(c).map(_._1))
     def findSuffix(c: Char): RegEx = union(find(c).map(_._2))
 
+    /** Abstract version of `s.count`. */
+    def count(c: Char): Interval = re match
+      case RENone => Interval.at(0)
+      case RENull => Interval.at(0)
+      case RELit(cs) => if cs.contains(c) then Interval.at(1) else Interval.at(0)
+      case REConcat(r1, r2) => r1.count(c) + r2.count(c)
+      case REUnion(r1, r2) => r1.count(c) | r2.count(c)
+      case REStar(r) => if r.count(c) == Interval(0, 0) then Interval.at(0) else Interval(lb = 0)
+
+    def splitBy(c: Char): RegEx =
+      require(re.count(c) != Inf, "finite split")
+      val parts = mutable.Set.empty[RegEx]
+      var r = re
+      while r.alphabet.contains(c) do
+        parts += r.findPrefix(c)
+        r = r.findSuffix(c).drop1
+      parts += r
+      RegEx.union(parts.toList)
+
+    def splitPart(c: Char, k: Int): RegEx =
+      require(re.count(c) != Inf, "finite split")
+      require(k >= 0)
+      var r = re
+      for _ <- 0 until k do
+        r = r.drop(IndexAt(c.toString)).drop1
+      r.findPrefix(c)
+
+    def splitPart(c: Char, index: BasicIndex): RegEx = index match
+      case IndexL(k) => splitPart(c, k)
+      case IndexR(k) => re.reverse.splitPart(c, k - 1).reverse
+      case IndexAt(_) => throw IllegalArgumentException()
+
     /** Abstract version of `s.drop(k)` where `k = index.concretize(s)`. */
     def drop(index: BasicIndex): RegEx = index match
       case IndexL(k) => drop(k)
@@ -166,3 +200,39 @@ object AOps extends LazyLogging:
       case REConcat(r1, r2) => r1.length + r2.length
       case REUnion(r1, r2) => r1.length | r2.length
       case REStar(r) => Interval(lb = 0)
+
+    def toNumber(base: Int = 10): Interval =
+      require(2 <= base && base <= 36)
+      val lb = parseInt(re.minNumber(base), base)
+      val ub = re.maxNumber(base) match
+        case Some(s) => Integer.parseInt(s, base)
+        case None => Inf
+      Interval(lb, ub)
+
+    private def minNumber(base: Int): String = re match
+      case RENone => throw IllegalArgumentException()
+      case RENull => ""
+      case RELit(cs) => cs.toSet.map(_.toUpper).min.toString
+      case REConcat(r1, r2) =>
+        val s1 = r1.minNumber(base)
+        val s2 = r2.minNumber(base)
+        s1 + s2
+      case REUnion(r1, r2) =>
+        val s1 = r1.minNumber(base)
+        val s2 = r2.minNumber(base)
+        if parseInt(s1, base) <= parseInt(s2, base) then s1 else s2
+      case REStar(_) => ""
+
+    private def maxNumber(base: Int): Option[String] = re match
+      case RENone => throw IllegalArgumentException()
+      case RENull => Some("")
+      case RELit(cs) => Some(cs.toSet.map(_.toUpper).max.toString)
+      case REConcat(r1, r2) =>
+        for s1 <- r1.maxNumber(base); s2 <- r2.maxNumber(base) yield s1 + s2
+      case REUnion(r1, r2) =>
+        for s1 <- r1.maxNumber(base); s2 <- r2.maxNumber(base) yield
+          if parseInt(s1, base) >= parseInt(s2, base) then s1 else s2
+      case REStar(_) => None
+
+  private inline def parseInt(s: String, base: Int): Int =
+    if s.isEmpty then 0 else Integer.parseInt(s, base)

@@ -82,7 +82,7 @@ object NarrowOps extends LazyLogging:
 
     /** Narrows by the constraint that `s != t`. */
     def narrowByNotEq(t: String): RegEx = t.length match
-      case 0 => narrowByLength(Interval(lb = 1))
+      case 0 => if re.nullable then re.minusNull else re
       case n =>
         val r1 = narrowByLength(Interval(0, n - 1)) | narrowByLength(Interval(lb = n + 1))
         val r2 = narrowByLength(Interval.at(n)).exclude(t)
@@ -90,6 +90,27 @@ object NarrowOps extends LazyLogging:
 
     private def exclude(t: String): RegEx =
       union(for k <- t.indices.toList yield re.narrowByChatAt(k, CharSet.not(t.charAt(k))))
+
+    def narrowPartBy(k: Int, f: RegEx => RegEx, c: Char): RegEx =
+      var r = re
+      var rp = RENull
+      for _ <- 0 until k do
+        rp ++= r.findPrefix(c) ++ fromChar(c)
+        r = r.findSuffix(c).drop1
+      val cases = for
+        (r1, r2) <- r.find(c)
+        rl = f(r1)
+        if !rl.isEmpty
+      yield rp ++ rl ++ r2
+      union(cases).extractCommonFactor
+
+    def narrowByFirstSplitPart(c: Char, f: RegEx => RegEx): RegEx =
+      val cases = for
+        (r1, r2) <- re.find(c)
+        rl = f(r1)
+        if !rl.isEmpty
+      yield rl ++ r2
+      union(cases).extractCommonFactor
 
   extension (re: RegEx)
     private def splitAt0: List[(CharSet, RegEx)] = re match
