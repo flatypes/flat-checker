@@ -170,8 +170,6 @@ def parse_ipv6_address(ip_str: IPv6Address) -> int:
     inv(skip_index == parts.index('', 1, len(parts) - 1) if skip_index != -1 else '' not in parts[1:i])
     if not parts[i]:
       if skip_index != -1:
-        hint(parts[1:len(parts) - 1].count('') <= 1)
-        hint(parts[skip_index] == '')
         # Can't have more than one '::'
         msg = "At most one '::' permitted in %r" % ip_str
         raise AddressValueError(msg)

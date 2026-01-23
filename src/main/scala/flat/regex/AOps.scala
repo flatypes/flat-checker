@@ -339,6 +339,18 @@ extension (trace: Trace)
     if mid.exists(_.isEmpty) then None
     else Some(trace.take(fromLeft) ++ mid ++ trace.takeRight(untilRight))
 
+  def narrowSomeFromIndexOfUntil(indexOf: (String, Int, Int), shift: Int, untilRight: Int,
+                                 f: RegEx => RegEx): List[Trace] =
+    val indices = trace.find(indexOf._1, indexOf._2, indexOf._3).excl(-1)
+    if indices.isEmpty then Nil
+    else
+      List.from:
+        for
+          i <- indices.min + shift until trace.length - untilRight
+          r = f(trace(i))
+          if !r.isEmpty
+        yield trace.updated(i, r)
+
 final class AList(val traces: List[List[RegEx]]):
   def isEmpty: Boolean = traces.isEmpty
 
@@ -398,6 +410,9 @@ final class AList(val traces: List[List[RegEx]]):
   def narrowEach(fromLeft: Int, untilRight: Int, f: RegEx => RegEx): AList =
     require(fromLeft >= 0 && untilRight >= 1)
     AList(traces.flatMap(_.narrowEach(fromLeft, untilRight, f)))
+
+  def narrowSomeFromIndexOfUntil(indexOf: (String, Int, Int), shift: Int, untilRight: Int, f: RegEx => RegEx): AList =
+    AList(traces.flatMap(_.narrowSomeFromIndexOfUntil(indexOf, shift, untilRight, f)))
 
   def unsplit(c: Char): RegEx =
     union(traces.map(trace => trace.reduce(_ ++ fromChar(c) ++ _)).distinct)

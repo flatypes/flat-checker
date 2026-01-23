@@ -138,6 +138,10 @@ class Narrower(using config: Config) extends LazyLogging:
                 op match
                   case EQ => list.narrowRight(i, _.narrowByEq(t))
                   case NE => list.narrowRight(i, _.narrowByNotEq(t))
+              case IndexInterval(IndexShifted(ListIndexAt(t1, ti, tj), k), IndexR(j)) =>
+                op match
+                  case EQ => list.narrowSomeFromIndexOfUntil((t1, ti, tj), k, j, _.narrowByEq(t))
+                  case NE => list.narrowSomeFromIndexOfUntil((t1, ti, tj), k, j, _.narrowByNotEq(t))
               case other =>
                 logger.trace(s"unsupported index: $other (${ppExpr(ei)} of list ${ppExpr(e)})")
                 list

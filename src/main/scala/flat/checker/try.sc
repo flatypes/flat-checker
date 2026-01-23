@@ -58,6 +58,8 @@ parts.length
 val partsMid = parts.drop(1).dropRight(1)
 partsMid.count("")
 
+parts.narrowSomeFromIndexOfUntil(("", 1, 1), 1, 1, _.narrowByEq(""))
+
 val partsWithV4 = parts.narrowRight(1, _.narrowByContain('.'))
 partsWithV4.getRight(1).alphabet
 
@@ -75,35 +77,3 @@ partsWithV4Updated.narrow(0, _.narrowByNotEq("")).takeIndexOf("", 1, 1).getAny
 
 val partsWithoutV4 = parts.narrowRight(1, _.narrowByNotContain('.'))
 partsWithoutV4.narrowEach(1, 1, _.narrowByNotEq("")).length
-
-
-val ctx = VarCtx.from("i" -> IntSort, "skip" -> IntSort, "ps" -> ListSort(StrSort))
-val solver = SMTSolver(using ctx, false)
-val i = Var("i")
-val skip = Var("skip")
-val ps = Var("ps")
-// 1 <= i < ps.length - 1
-solver.assume(And(LE(1, i), LT(i, SUB(ListLen(ps), 1))))
-// skip = -1 or 1 <= skip < i
-solver.assume(Or(EQ(skip, -1), And(LE(1, skip), LT(skip, i))))
-// skip = 1 + ps[1:i].indexOf("")
-solver.assume(EQ(skip, ADD(1, ListIndexOf(ListSlice(ps, 1, i), "", 0, 0))))
-// ps[i] = ""
-solver.assume(EQ(ListGet(ps, i), ""))
-// hint: ps[skip] = ""
-assert(solver.proves(EQ(ListGet(ps, skip), "")))
-solver.assume(EQ(ListGet(ps, skip), ""))
-// hint: ps[1:-1].count("") <= 1
-val k1 = Var("k1").withSort(IntSort)
-val k2 = Var("k2").withSort(IntSort)
-solver.assume(
-  Forall(List(k1, k2), mkImplies(
-    mkAnd(LE(1, k1), LT(k1, SUB(ListLen(ps), 1)),
-      LE(1, k2), LT(k2, SUB(ListLen(ps), 1)),
-      EQ(ListGet(ps, k1), ""),
-      EQ(ListGet(ps, k2), "")),
-    EQ(k1, k2))))
-assert(solver.proves(false))
-
-val rABC = REParser.parse("a?b?c?")
-rABC.narrowByLength(Interval.at(3))

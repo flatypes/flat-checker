@@ -116,7 +116,7 @@ object VCGenerator:
     case Assert(b) =>
       mkVCGroup(checkSides(b), VCAssert(b)(using b.loc), post)
     case Hint(b) =>
-      mkVCGroup(checkSides(b), VCHint(b)(using b.loc), VCImp(desugarHint(b), post))
+      mkVCGroup(checkSides(b), VCHint(b)(using b.loc), VCImp(b, post))
     case ShowType(e) =>
       mkVCGroup(checkSides(e), VCInfer(e)(using e.loc), post)
     case IfStmt(b, s1, s2) =>
@@ -150,15 +150,3 @@ object VCGenerator:
         if ej != Length(es) then
           goals += VCIdxNonneg(ej)(using ej.loc)
     goals.toList
-
-  private def desugarHint(expr: Expr): Expr = expr match
-    case Cmp(LE, ListCount(ListSlice(e, ei, ej), ex), Const(1)) => // uniqueness
-      val i = Var("?1").withSort(IntSort)
-      val j = Var("?2").withSort(IntSort)
-      Forall(List(i, j), mkImplies(
-        mkAnd(LE(ei, i), LT(i, ej),
-          LE(ei, j), LT(j, ej),
-          EQ(ListGet(e, i), ex),
-          EQ(ListGet(e, j), ex)),
-        EQ(i, j)))
-    case _ => expr

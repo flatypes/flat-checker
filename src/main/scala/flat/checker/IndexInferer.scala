@@ -109,6 +109,8 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       return if preferIndexL then IndexL(minL.get) else IndexR(minR.get)
 
     // Choose interval bounds
+    logger.trace("choose lb from: {}, {}, {}", lbA, lbL, lbR)
+    logger.trace("choose ub from: {}, {}, {}", ubA, ubL, ubR)
     val lb = (lbA, lbL, lbR) match
       case (Some(i), None | Some(IndexL(0)), None) => i
       case (None, Some(i), None) => i
@@ -119,19 +121,20 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         else IndexL(i1) // otherwise prefer absolute
       case (None, None, None) => IndexL(0)
       case _ =>
-        logger.trace("choose lb from: {}, {}, {}", lbA, lbL, lbR)
+        logger.warn("choose lb from: {}, {}, {}", lbA, lbL, lbR)
         throw UnsupportedOperationException(s"solve $x: ambiguous choice of lb")
     val ub = (ubA, ubL, ubR) match
       case (Some(i), None, None | Some(IndexR(1))) => i
       case (None, Some(i), None | Some(IndexR(1))) => i
       case (None, None, Some(i)) => i
       case (None, Some(_), Some(i)) => i // for finite list, prefer IndexR
-      case (Some(index@IndexShifted(ListIndexAt(_, i, _), k)), Some(IndexL(i1)), _) =>
-        if i + k >= i1 then IndexL(i1) // relative position >= absolute position, prefer absolute
+      case (Some(index@IndexShifted(ListIndexAt(_, i, _), k)), Some(indexL@IndexL(i1)), indexR) =>
+        // relative position >= absolute position, prefer absolute
+        if i + k >= i1 then if indexR.isDefined then indexR.get else indexL
         else index
       case (None, None, None) => IndexR(0)
       case _ =>
-        logger.trace("choose ub from: {}, {}, {}", ubA, ubL, ubR)
+        logger.warn("choose ub from: {}, {}, {}", ubA, ubL, ubR)
         throw UnsupportedOperationException(s"solve $x: ambiguous choice of ub")
     IndexInterval(lb, ub)
 
