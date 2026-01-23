@@ -142,6 +142,10 @@ object Printer:
       val elseValue = if getLevel(node.elseValue) < Level.ITE then paren(s2) else s2
       s"if $cond then $thenValue else $elseValue"
 
+    override def visitForall(node: Forall)(using ctx: Unit): String =
+      val body = node.body.accept(this)
+      s"forall ${node.binders.map(_.name).mkString(",")}, $body"
+
     def visitCmp(node: Cmp)(using ctx: Unit): String =
       // not associative
       val s1 = node.left.accept(this)
@@ -158,25 +162,25 @@ object Printer:
     def visitArith(node: Arith)(using ctx: Unit): String =
       // left associative
       val s1 = node.left.accept(this)
-      val left = if getLevel(node.left) < Level.CMP then paren(s1) else s1
+      val left = if getLevel(node.left) < Level.ADD then paren(s1) else s1
       val s2 = node.right.accept(this)
-      val right = if getLevel(node.right) <= Level.CMP then paren(s2) else s2
+      val right = if getLevel(node.right) <= Level.ADD then paren(s2) else s2
       s"$left ${node.op} $right"
 
     override def visitBitwise(node: Bitwise)(using ctx: Unit): String =
       // left associative
       val s1 = node.left.accept(this)
-      val left = if getLevel(node.left) < Level.CMP then paren(s1) else s1
+      val left = if getLevel(node.left) < Level.ADD then paren(s1) else s1
       val s2 = node.right.accept(this)
-      val right = if getLevel(node.right) <= Level.CMP then paren(s2) else s2
+      val right = if getLevel(node.right) <= Level.ADD then paren(s2) else s2
       s"$left ${node.op} $right"
 
     def visitConcat(node: Concat)(using ctx: Unit): String =
       // right associative
       val s1 = node.left.accept(this)
-      val left = if getLevel(node.left) <= Level.CMP then paren(s1) else s1
+      val left = if getLevel(node.left) <= Level.ADD then paren(s1) else s1
       val s2 = node.right.accept(this)
-      val right = if getLevel(node.right) < Level.CMP then paren(s2) else s2
+      val right = if getLevel(node.right) < Level.ADD then paren(s2) else s2
       s"$left ⧺ $right"
 
     def visitLength(node: Length)(using ctx: Unit): String =
@@ -260,6 +264,10 @@ object Printer:
       val str = if getLevel(node.str) < Level.APPLY then paren(s) else s
       s"toSet($str)"
 
+    override def visitStrFormat(node: StrFormat)(using ctx: Unit): String =
+      val formatStr = node.fmt.accept(this)
+      s"format($formatStr)"
+
     def visitStrIn(node: StrIn)(using ctx: Unit): String =
       val s = node.str.accept(this)
       val str = if getLevel(node.str) < Level.CMP then paren(s) else s
@@ -274,7 +282,7 @@ object Printer:
       val lst = node.lst.accept(this)
       s"|$lst|"
 
-    def visitListLookup(node: ListLookup)(using ctx: Unit): String =
+    def visitListGet(node: ListGet)(using ctx: Unit): String =
       val s = node.lst.accept(this)
       val lst = if getLevel(node.lst) < Level.APPLY then paren(s) else s
       val idx = node.idx.accept(this)
@@ -298,6 +306,31 @@ object Printer:
       val arr = if getLevel(node.lst) < Level.APPLY then paren(s) else s
       val f = node.fun.accept(this)
       s"$arr.map($f)"
+
+    override def visitListContains(node: ListContains)(using ctx: Unit): String =
+      val s1 = node.elem.accept(this)
+      val elem = if getLevel(node.elem) <= Level.CMP then paren(s1) else s1
+      val s2 = node.lst.accept(this)
+      val lst = if getLevel(node.lst) <= Level.CMP then paren(s2) else s2
+      s"$elem in $lst"
+
+    override def visitListIndexOf(node: ListIndexOf)(using ctx: Unit): String =
+      val s1 = node.lst.accept(this)
+      val lst = if getLevel(node.lst) < Level.APPLY then paren(s1) else s1
+      val s2 = node.elem.accept(this)
+      val s3 = node.from.accept(this)
+      val s4 = node.until.accept(this)
+      if node.until == ListLen(node.lst) then
+        if s3 == "0" then s"$lst.indexOf($s2)" else s"$lst.indexOf($s2, $s3)"
+      else s"$lst.indexOf($s2, $s3, $s4)"
+
+    override def visitListCount(node: ListCount)(using ctx: Unit): String =
+      val s1 = node.lst.accept(this)
+      val lst = if getLevel(node.lst) < Level.APPLY then paren(s1) else s1
+      val s2 = node.elem.accept(this)
+      s"$lst.count($s2)"
+
+    override def visitListHasType(node: ListHasType)(using ctx: Unit): String = "<ListHasType>"
 
     override def visitSetExpr(node: SetExpr)(using ctx: Unit): String =
       val ss = node.elems.map(_.accept(this))
@@ -347,8 +380,8 @@ object Printer:
       case _: Ite => Level.ITE
       case _: Or => Level.OR
       case _: And => Level.AND
-      case _: Cmp | _: StrTest | _: TypeTest | _: MapContains => Level.CMP
-      case _: Arith | _: Concat => Level.ADD
+      case _: Cmp | _: StrTest | _: TypeTest | _: Subset | _: ListContains | _: MapContains => Level.CMP
+      case _: Arith | _: Concat | _: ListAppend => Level.ADD
       case _: Not | _: Negate => Level.UNARY
       case _ => Level.APPLY
 
@@ -374,6 +407,14 @@ object Printer:
     def visitAssume(node: Assume)(using level: Int): String =
       val cond = ppExpr(node.cond)
       ("  " * level) + s"assume $cond" + "\n"
+
+    override def visitHint(node: Hint)(using ctx: Int): String =
+      val cond = ppExpr(node.cond)
+      ("  " * ctx) + s"hint $cond" + "\n"
+
+    override def visitLemma(node: Lemma)(using ctx: Int): String =
+      val cond = ppExpr(node.body)
+      ("  " * ctx) + s"lemma $cond" + "\n"
 
     def visitShowType(node: ShowType)(using level: Int): String =
       val value = ppExpr(node.value)

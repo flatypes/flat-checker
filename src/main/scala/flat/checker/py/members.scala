@@ -70,7 +70,7 @@ val strMemberTable = Map(
   "__ne__" -> MemberInfo(Seq(StrSort), Seq(), BoolSort, { case Seq(x, y) => NE(x, y) }),
   "__not__" -> MemberInfo(Seq(), Seq(), BoolSort, { case Seq(s) => EQ(s, Const("")) }),
   "__add__" -> MemberInfo(Seq(StrSort), Seq(), StrSort, { case Seq(s1, s2) => Concat(s1, s2) }),
-  "__mod__" -> MemberInfo(Seq(TopType), Seq(), StrSort, { case Seq(s, _) => s }),
+  "__mod__" -> MemberInfo(Seq(TopType), Seq(), StrSort, { case Seq(s, x) => StrFormat(s, x) }),
   "__len__" -> MemberInfo(Seq(), Seq(), IntSort, { case Seq(s) => Length(s) }),
   "__reversed__" -> MemberInfo(Seq(), Seq(), StrSort, { case Seq(s) => Reverse(s) }),
   "__contains__" -> MemberInfo(Seq(StrSort), Seq(), BoolSort, { case Seq(s, s1) => InfixOf(s1, s) }),
@@ -94,9 +94,16 @@ val strMemberTable = Map(
   "isdigit" -> MemberInfo(Seq(), Seq(), BoolSort, { case Seq(s) => StrIs(s, "digit", _.isDigit) }),
 )
 
-def arrayMemberTable(elemSort: Sort) = Map(
+def listMemberTable(elemSort: Sort) = Map(
   "__len__" -> MemberInfo(Seq(), Seq(), IntSort, { case Seq(xs) => ListLen(xs) }),
-  "__getitem__" -> MemberInfo(Seq(IntSort), Seq(), elemSort, { case Seq(xs, i) => ListLookup(xs, i) }),
+  "__contains__" -> MemberInfo(Seq(elemSort), Seq(), BoolSort, { case Seq(xs, x) => ListContains(xs, x) }),
+  "__getitem__" -> MemberInfo(Seq(IntSort), Seq(), elemSort, { case Seq(xs, i) => ListGet(xs, i) },
+    preCond = Some({ case Seq(xs, i) => And(LE(0, i), LT(i, ListLen(xs))) })),
+  "__getitem_slice__" -> MemberInfo(Seq(IntSort), Seq(IntSort -> mkUnit), ListSort(elemSort),
+    { case Seq(xs, i, j) => ListSlice(xs, i, if j == mkUnit then ListLen(xs) else j) }),
+  "index" -> MemberInfo(Seq(StrSort), Seq(IntSort -> Const(0), IntSort -> mkUnit), IntSort,
+    { case Seq(xs, t, i, j) => ListIndexOf(xs, t, i, if j == mkUnit then ListLen(xs) else j) }),
+  "count" -> MemberInfo(Seq(elemSort), Seq(), IntSort, { case Seq(xs, x) => ListCount(xs, x) }),
   "append" -> MemberInfo(Seq(elemSort), Seq(), UnitSort, { case Seq(_, _) => NoExpr },
     sideEffect = Some({ case Seq(xs, x) => ListAppend(xs, x) })),
   "pop" -> MemberInfo(Seq(), Seq(), elemSort, { case Seq(xs) => mkListLast(xs) },
@@ -118,7 +125,7 @@ def selectMember(receiverSort: Sort, memberName: String): Option[MemberInfo] =
     case IntSort => intMemberTable.get(memberName)
     case BoolSort => boolMemberTable.get(memberName)
     case StrSort => strMemberTable.get(memberName)
-    case ListSort(s) => arrayMemberTable(s).get(memberName)
+    case ListSort(s) => listMemberTable(s).get(memberName)
     case SetSort(s) => setMemberTable(s).get(memberName)
     case MapSort(sk, sv) => dictMemberTable(sk, sv).get(memberName)
     case _ => None

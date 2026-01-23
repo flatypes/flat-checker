@@ -6,6 +6,7 @@ import flat.regex.RegEx.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 /** Abstract string operations, defined over the domain of `RegEx`es. */
 object AOps extends LazyLogging:
@@ -149,28 +150,40 @@ object AOps extends LazyLogging:
       case REUnion(r1, r2) => r1.count(c) | r2.count(c)
       case REStar(r) => if r.count(c) == Interval(0, 0) then Interval.at(0) else Interval(lb = 0)
 
-    def splitBy(c: Char): RegEx =
-      require(re.count(c) != Inf, "finite split")
-      val parts = mutable.Set.empty[RegEx]
-      var r = re
-      while r.alphabet.contains(c) do
-        parts += r.findPrefix(c)
-        r = r.findSuffix(c).drop1
-      parts += r
-      RegEx.union(parts.toList)
+    def splitAtFirst(c: Char): (List[(RegEx, RegEx)], RegEx) = re match
+      case RENone => (Nil, RENone)
+      case RENull => (Nil, RENull)
+      case RELit(cs) =>
+        if !cs.contains(c) then (Nil, re)
+        else (List(RENull -> fromChar(c)), fromCharSet(cs - c))
+      case REConcat(r1, r2) =>
+        val (splits1, r1NotFound) = r1.splitAtFirst(c)
+        val splits = ListBuffer.empty[(RegEx, RegEx)]
+        for (r1l, r1r) <- splits1 do
+          splits += (r1l -> (r1r ++ r2))
+        if r1NotFound.isEmpty then
+          (splits.toList, RENone)
+        else
+          val (splits2, r2NotFound) = r2.splitAtFirst(c)
+          for (r2l, r2r) <- splits2 do
+            splits += (r1NotFound ++ r2l) -> r2r
+          (splits.toList, r1NotFound ++ r2NotFound)
+      case REUnion(r1, r2) =>
+        val (splits1, r1NotFound) = r1.splitAtFirst(c)
+        val (splits2, r2NotFound) = r2.splitAtFirst(c)
+        (splits1 ++ splits2, r1NotFound | r2NotFound)
+      case REStar(r) =>
+        val (splits1, r1NotFound) = r.splitAtFirst(c)
+        if r1NotFound.isEmpty then
+          (for (r1l, r1r) <- splits1 yield r1l -> (r1r ++ re), RENull)
+        else
+          (for (r1l, r1r) <- splits1 yield (r1NotFound.* ++ r1l) -> (r1r ++ re), r1NotFound.*)
 
-    def splitPart(c: Char, k: Int): RegEx =
-      require(re.count(c) != Inf, "finite split")
-      require(k >= 0)
-      var r = re
-      for _ <- 0 until k do
-        r = r.drop(IndexAt(c.toString)).drop1
-      r.findPrefix(c)
-
-    def splitPart(c: Char, index: BasicIndex): RegEx = index match
-      case IndexL(k) => splitPart(c, k)
-      case IndexR(k) => re.reverse.splitPart(c, k - 1).reverse
-      case IndexAt(_) => throw IllegalArgumentException()
+    def splitWith(c: Char): AList =
+      require(count(c) != Inf, "finite split")
+      val (splits, rNotFound) = splitAtFirst(c)
+      AList((if rNotFound.isEmpty then Nil else List(List(rNotFound))) ++
+        (for (rl, rr) <- splits; t <- rr.drop1.splitWith(c).traces yield rl :: t))
 
     /** Abstract version of `s.drop(k)` where `k = index.concretize(s)`. */
     def drop(index: BasicIndex): RegEx = index match
@@ -236,3 +249,127 @@ object AOps extends LazyLogging:
 
   private inline def parseInt(s: String, base: Int): Int =
     if s.isEmpty then 0 else Integer.parseInt(s, base)
+
+type Trace = List[RegEx]
+
+extension (trace: Trace)
+  def find(s: String, fromLeft: Int, untilRight: Int): Set[Int] =
+    require(fromLeft >= 0 && untilRight >= 0)
+    var continue = true
+    var i = fromLeft
+    val indices = mutable.Set.empty[Int]
+    while continue && i < trace.length - untilRight do
+      val r = trace(i)
+      if r.isSingleton then
+        if r.contains(s) then
+          indices += i
+          continue = false
+        else
+          i += 1
+      else
+        if r.contains(s) then
+          indices += 1
+        i += 1
+    if continue then
+      indices += -1
+    indices.toSet
+
+  def takeIndexOf(s: String, fromLeft: Int, untilRight: Int): List[Trace] =
+    val indices = trace.find(s, fromLeft, untilRight)
+    indices.excl(-1).toList.sorted.map(trace.take)
+
+  def dropIndexOf(s: String, fromLeft: Int, untilRight: Int): List[Trace] =
+    val indices = trace.find(s, fromLeft, untilRight)
+    indices.excl(-1).toList.sorted.map(trace.drop)
+
+  def count(s: String): Interval =
+    var must = 0
+    var may = 0
+    for r <- trace do
+      if r.isSingleton then
+        if r.contains(s) then
+          must += 1
+      else if r.contains(s) then
+        may += 1
+    Interval(must, must + may)
+
+  def narrow(i: Int, f: RegEx => RegEx): Option[Trace] =
+    require(i >= 0)
+    for r <- trace.lift(i); r1 = f(r); if !r1.isEmpty yield trace.updated(i, r1)
+
+  def narrowRight(i: Int, f: RegEx => RegEx): Option[Trace] =
+    require(i > 0)
+    val k = trace.length - i
+    for r <- trace.lift(k); r1 = f(r); if !r1.isEmpty yield trace.updated(k, r1)
+
+  def narrowEach(fromLeft: Int, untilRight: Int, f: RegEx => RegEx): Option[Trace] =
+    require(fromLeft >= 0 && untilRight >= 1)
+    val mid = trace.slice(fromLeft, trace.length - untilRight).map(f)
+    if mid.exists(_.isEmpty) then None
+    else Some(trace.take(fromLeft) ++ mid ++ trace.takeRight(untilRight))
+
+final class AList(val traces: List[List[RegEx]]):
+  def isEmpty: Boolean = traces.isEmpty
+
+  def length: Interval =
+    val lengths = traces.map(_.length)
+    Interval(lengths.min, lengths.max)
+
+  def get(i: Int): RegEx =
+    require(i >= 0)
+    union(traces.flatMap(_.lift(i)))
+
+  def getRight(i: Int): RegEx =
+    require(i > 0)
+    union(traces.flatMap(t => t.lift(t.length - i)))
+
+  def getEach(fromLeft: Int, untilRight: Int): RegEx =
+    require(fromLeft >= 0 && untilRight >= 0)
+    val rs = traces.map(t => t.slice(fromLeft, t.length - untilRight)).filter(_.nonEmpty).flatten
+    union(rs.toSet.toList)
+
+  def getAny: RegEx = getEach(0, 0)
+
+  def drop(n: Int): AList =
+    require(n >= 0)
+    AList(traces.map(_.drop(n)).filter(_.nonEmpty))
+
+  def dropRight(n: Int): AList =
+    require(n >= 1)
+    AList(traces.map(_.dropRight(n)).filter(_.nonEmpty))
+
+  def takeIndexOf(s: String, fromLeft: Int, untilRight: Int): AList =
+    AList(traces.flatMap(_.takeIndexOf(s, fromLeft, untilRight)))
+
+  def dropIndexOf(s: String, fromLeft: Int, untilRight: Int): AList =
+    AList(traces.flatMap(_.dropIndexOf(s, fromLeft, untilRight)))
+
+  def append(r: RegEx): AList = AList(traces.map(_ :+ r))
+
+  def indexOf(s: String, fromLeft: Int = 0, untilRight: Int = 0): Set[Int] =
+    require(fromLeft >= 0 && untilRight >= 0)
+    traces.map(_.find(s, fromLeft, untilRight)).reduce(_ | _)
+
+  def rightIndexOf(s: String, fromLeft: Int = 0, untilRight: Int = 0): Set[Int] =
+    require(fromLeft >= 0 && untilRight >= 0)
+    traces.map(t => t.find(s, fromLeft, untilRight).map { case -1 => -1; case i => t.length - i }).reduce(_ | _)
+
+  def count(s: String): Interval = traces.map(_.count(s)).reduce(_ | _)
+
+  def narrow(i: Int, f: RegEx => RegEx): AList =
+    require(i >= 0)
+    AList(traces.flatMap(_.narrow(i, f)))
+
+  def narrowRight(i: Int, f: RegEx => RegEx): AList =
+    require(i > 0)
+    AList(traces.flatMap(_.narrowRight(i, f)))
+
+  def narrowEach(fromLeft: Int, untilRight: Int, f: RegEx => RegEx): AList =
+    require(fromLeft >= 0 && untilRight >= 1)
+    AList(traces.flatMap(_.narrowEach(fromLeft, untilRight, f)))
+
+  def unsplit(c: Char): RegEx =
+    union(traces.map(trace => trace.reduce(_ ++ fromChar(c) ++ _)).distinct)
+
+  override def toString: String =
+    traces.map(_.mkString(", ")).mkString("\n")

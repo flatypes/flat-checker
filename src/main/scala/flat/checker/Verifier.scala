@@ -5,7 +5,7 @@ import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
 import flat.checker.Printer.*
 import flat.checker.ast.*
-import flat.regex.{CharSet, RegEx}
+import flat.regex.{AList, CharSet, RegEx}
 import flat.util.allRight
 import flat.{Config, Issuer, Ops}
 
@@ -45,6 +45,8 @@ class PrfCtx private(val premises: List[Expr])(using prover: Verifier#Prover) ex
     premises.collectFirst:
       case TypeTest(suffix@Substr(e1, ei, Length(e2)), LangType(r)) if e1 == str && e2 == str => (ei, r)
       case StrIn(suffix@Substr(e1, ei, Length(e2)), r) if e1 == str && e2 == str => (ei, r)
+
+  def getList(lst: Expr): Option[AList] = premises.collectFirst { case ListHasType(e, l) if e == lst => l }
 
   /** Creates a new proof context with given conditions added. */
   def ++(conds: List[Expr]): PrfCtx = PrfCtx(conds.map(simpl).flatMap(conjuncts) ++ premises)
@@ -111,11 +113,29 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       val lines = ListBuffer.empty[String]
       while start + 118 < left.length do
         val s = left.substring(start, start + 118)
-        val width = s.lastIndexOf('∧') + 2
+        val width = break(s)
         lines += s.take(width)
         start += width
       lines += left.substring(start)
-      lines.map("\n  " + _).mkString + "\n  " + right
+      if right.length >= 118 then
+        start = 0
+        while start + 118 < right.length do
+          val s = right.substring(start, start + 118)
+          val width = break(s)
+          lines += s.take(width)
+          start += width
+        lines += right.substring(start)
+      else lines += right
+      lines.map("\n  " + _).mkString
+
+  private def break(s: String, width: Int = 118): Int =
+    if s.contains("∧") then s.lastIndexOf('∧') + 2
+    else if s.contains(" else") then s.lastIndexOf(" else") + 1
+    else if s.contains("=>") then s.lastIndexOf("=>") + 3
+    else if s.contains("||") then s.lastIndexOf("||") + 3
+    else if s.contains("&&") then s.lastIndexOf("&&") + 3
+    else if s.contains(" ") then s.lastIndexOf(' ') + 1
+    else width
 
   final class Prover(using val varCtx: VarCtx):
     private val cachedHypotheses = ListBuffer.empty[Expr]
@@ -218,6 +238,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       // Check if there is any destructible hypothesis.
       val hs = getCtx.premises.filter:
         case _: Or => true
+        case _: Forall => false // do not destruct forall
         case b => b.collectFirst { case _: Ite => () }.isDefined
       if hs.isEmpty then
         if narrow() then
@@ -268,6 +289,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       newTypes.foreach(assume)
       newTypes.exists:
         case TypeTest(_, LangType(RegEx.RENone)) => true
+        case ListHasType(_, l: AList) if l.isEmpty => true
         case _ => false
 
     private def synthAndProve(conclusion: Expr): Either[String, Unit] = conclusion match
@@ -282,6 +304,8 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
             logger.debug("PROVED by type checking")
             Right(())
           case Left(actual) =>
+            logger.debug("FAILED: actual type: {}", ppType(actual))
+            throw RuntimeException()
             Left("actual type: " + ppType(actual))
       case Const(false) => proveWithLemmas(conclusion, getCtx.premises)
       case _ =>
@@ -368,12 +392,12 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
           ss += syn.InferTest(t)
         case Length(es) =>
           ss += syn.InferLength(es)
-        case ListLen(Split(es, Const(t: String))) if t.length == 1 =>
-          ss += syn.InferSplitLength(es, t.head)
         case Find(es, Const(t: String)) =>
           ss += syn.InferFind(es, t)
         case StrToInt(es, Const(n: Int)) =>
           ss += syn.InferToNumber(es, n)
         case StrToSet(es) =>
           ss += syn.InferToSet(es)
+        case op: ListOp if op.lst.sort == ListSort(StrSort) =>
+          ss += syn.InferStrList(op)
       ss.toList

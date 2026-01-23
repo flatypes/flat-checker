@@ -48,18 +48,9 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
       val t = encodeRE(r)
       tm.mkTerm(Kind.REGEXP_STAR, t)
 
-  private val ctx = mutable.Map.empty[Expr, cvc5.Term]
+  private val ctx = mutable.Map.empty[String | Expr, cvc5.Term]
 
-  def getCtx: Map[Expr, cvc5.Term] = ctx.toMap
-
-//  private def encodeVar(name: String): cvc5.Term =
-//    ctx.get(name) match
-//      case Some(t) => t
-//      case None =>
-//        val s = encodeSort(varCtx.getSort(name))
-//        val t = tm.mkConst(s, name)
-//        ctx(name) = t
-//        t
+  def getCtx: Map[Expr, cvc5.Term] = ctx.collect { case (e: Expr, t) => e -> t }.toMap
 
   private def encodeAtomicExpr(expr: Expr): cvc5.Term =
     ctx.get(expr) match
@@ -69,14 +60,11 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
         ctx(expr) = t
         t
 
-  private def encodeVar(name: String): cvc5.Term =
-    encodeAtomicExpr(Var(name).withSort(varCtx.getSort(name)))
-
   def encodeExpr(expr: Expr): cvc5.Term = expr match
     case Const(n: Int) => tm.mkInteger(n)
     case Const(b: Boolean) => tm.mkBoolean(b)
     case Const(s: String) => tm.mkString(s)
-    case Var(x) => encodeVar(x)
+    case Var(x) => ctx.getOrElse(x, encodeAtomicExpr(Var(x).withSort(varCtx.getSort(x))))
     case TupleExpr(es) =>
       val ts = es.map(encodeExpr)
       tm.mkTuple(ts.toArray)
@@ -100,6 +88,15 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
       val t1 = encodeExpr(e1)
       val t2 = encodeExpr(e2)
       tm.mkTerm(Kind.ITE, t, t1, t2)
+    case Forall(xs, e) =>
+      val binders = for x <- xs yield
+        val binder = tm.mkVar(encodeSort(x.sort), x.name)
+        ctx(x.name) = binder
+        binder
+      val body = encodeExpr(e)
+      for x <- xs do
+        ctx.remove(x.name)
+      tm.mkTerm(Kind.FORALL, tm.mkTerm(Kind.VARIABLE_LIST, binders.toArray), body)
     case Cmp(op, e1, e2) =>
       val kind = op match
         case CmpOp.EQ => Kind.EQUAL
@@ -188,28 +185,38 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
       val elems = es.map(encodeExpr)
       val singletons = elems.map(tm.mkTerm(Kind.SEQ_UNIT, _))
       singletons.reduce(tm.mkTerm(Kind.SEQ_CONCAT, _, _))
-
     case ListLen(e) =>
       val seq = encodeExpr(e)
       tm.mkTerm(Kind.SEQ_LENGTH, seq)
-
-    case ListLookup(e, ei) =>
+    case ListGet(e, ei) =>
       val seq = encodeExpr(e)
       val idx = encodeExpr(ei)
       tm.mkTerm(Kind.SEQ_NTH, seq, idx)
-
     case ListSlice(e, ei, ej) =>
       val seq = encodeExpr(e)
       val start = encodeExpr(ei)
       val end = encodeExpr(ej)
       val len = tm.mkTerm(Kind.SUB, end, start)
       tm.mkTerm(Kind.SEQ_EXTRACT, seq, start, len)
-
     case ListAppend(e, ex) =>
       val seq = encodeExpr(e)
       val elem = encodeExpr(ex)
-      val singleton = tm.mkTerm(Kind.SEQ_UNIT, elem)
-      tm.mkTerm(Kind.SEQ_CONCAT, seq, singleton)
+      val elemSeq = tm.mkTerm(Kind.SEQ_UNIT, elem)
+      tm.mkTerm(Kind.SEQ_CONCAT, seq, elemSeq)
+    case ListContains(e, ex) =>
+      val seq = encodeExpr(e)
+      val elem = encodeExpr(ex)
+      val elemSeq = tm.mkTerm(Kind.SEQ_UNIT, elem)
+      tm.mkTerm(Kind.SEQ_CONTAINS, seq, elemSeq)
+    case ListIndexOf(e, ex, ei, ej) =>
+      val seq = encodeExpr(e)
+      val elem = encodeExpr(ex)
+      val elemSeq = tm.mkTerm(Kind.SEQ_UNIT, elem)
+      val start = encodeExpr(ei)
+      val seq1 =
+        if ej == ListLen(e) then seq
+        else tm.mkTerm(Kind.SEQ_EXTRACT, seq, tm.mkInteger(0), encodeExpr(ej))
+      tm.mkTerm(Kind.SEQ_INDEXOF, seq1, elemSeq, start)
 
     // Set operations
     case SetExpr(elems) =>

@@ -161,4 +161,69 @@ def parse_ipv6_address(ip_str: IPv6Address) -> int:
     msg = "At most %d colons permitted in %r" % (_max_parts - 1, ip_str)
     raise AddressValueError(msg)
 
-  return 0
+  # Disregarding the endpoints, find '::' with nothing in between.
+  # This indicates that a run of zeroes has been skipped.
+  skip_index = -1
+  for i in range(1, len(parts) - 1):
+    inv(1 <= i < len(parts))
+    inv(skip_index == -1 or 1 <= skip_index < i)
+    inv(skip_index == parts.index('', 1, len(parts) - 1) if skip_index != -1 else '' not in parts[1:i])
+    if not parts[i]:
+      if skip_index != -1:
+        hint(parts[1:len(parts) - 1].count('') <= 1)
+        hint(parts[skip_index] == '')
+        # Can't have more than one '::'
+        msg = "At most one '::' permitted in %r" % ip_str
+        raise AddressValueError(msg)
+      skip_index = i
+
+  # parts_hi is the number of parts to copy from above/before the '::'
+  # parts_lo is the number of parts to copy from below/after the '::'
+  if skip_index != -1:
+    # If we found a '::', then check if it also covers the endpoints.
+    parts_hi = skip_index
+    parts_lo = len(parts) - skip_index - 1
+    if not parts[0]:
+      parts_hi -= 1
+      if parts_hi != 0:
+        msg = "Leading ':' only permitted as part of '::' in %r"
+        raise AddressValueError(msg % ip_str)  # ^: requires ^::
+    if not parts[len(parts) - 1]:
+      parts_lo -= 1
+      if parts_lo != 0:
+        msg = "Trailing ':' only permitted as part of '::' in %r"
+        raise AddressValueError(msg % ip_str)  # :$ requires ::$
+    parts_skipped = 8 - (parts_hi + parts_lo)
+    if parts_skipped < 1:
+      msg = "Expected at most %d other parts with '::' in %r"
+      raise AddressValueError(msg % (8 - 1, ip_str))
+  else:
+    # Otherwise, allocate the entire address to parts_hi.  The
+    # endpoints could still be empty, but _parse_hextet() will check
+    # for that.
+    if len(parts) != 8:
+      msg = "Exactly %d parts expected without '::' in %r"
+      raise AddressValueError(msg % (8, ip_str))
+    if not parts[0]:
+      msg = "Leading ':' only permitted as part of '::' in %r"
+      raise AddressValueError(msg % ip_str)  # ^: requires ^::
+    if not parts[len(parts) - 1]:
+      msg = "Trailing ':' only permitted as part of '::' in %r"
+      raise AddressValueError(msg % ip_str)  # :$ requires ::$
+    parts_hi = len(parts)
+    parts_lo = 0
+    parts_skipped = 0
+
+  try:
+    # Now, parse the hextets into a 128-bit integer.
+    ip_int = 0
+    for i in range(parts_hi):
+      ip_int <<= 16
+      ip_int |= _parse_hextet(parts[i])
+    ip_int <<= 16 * parts_skipped
+    for i in range(-parts_lo, 0):
+      ip_int <<= 16
+      ip_int |= _parse_hextet(parts[len(parts) + i])
+    return ip_int
+  except ValueError as exc:
+    raise AddressValueError("%s in %r" % (exc, ip_str)) from None

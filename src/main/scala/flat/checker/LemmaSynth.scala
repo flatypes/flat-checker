@@ -147,12 +147,6 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
   /** Tests if the first index of `c1` is always ''less than'' the first occurrence of `c2`. */
   private def findLT(re: RegEx, c1: Char, c2: Char): Boolean = !re.findPrefix(c1).alphabet.contains(c2)
 
-  final case class InferSplitLength(str: Expr, sep: Char) extends Sketch:
-    def apply(using ctx: PrfCtx): List[Expr] =
-      val inferer = new Inferer
-      val len = inferer.inferSplitLength(str, sep)
-      if len == Interval(lb = 0) then Nil else List(inInterval(ListLen(Split(str, Const(sep.toString))), len))
-
   final case class InferToNumber(str: Expr, base: Int) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
       val inferer = new Inferer
@@ -167,3 +161,18 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
       val chars = r.alphabet
       val elems = chars.toSet.toList.sorted.map(c => Const(c.toString))
       List(EQ(StrToSet(str), SetExpr(elems)))
+
+  final case class InferStrList(expr: Expr) extends Sketch:
+    def apply(using ctx: PrfCtx): List[Expr] =
+      val inferer = new Inferer
+      inferer.inferStrList(expr) match
+        case r: RegEx => if r.isSmall then List(mkOr(r.words.map(EQ(expr, _)))) else Nil
+        case interval: Interval => List(inInterval(expr, interval))
+        case inferer.PossibleIndices(left, right, notFound, lst) =>
+          var ors1 = left.map(EQ(expr, _))
+          var ors2 = right.map(i => EQ(expr, SUB(ListLen(lst), i)))
+          if notFound then
+            ors1 = EQ(expr, -1) :: ors1
+            ors2 = EQ(expr, -1) :: ors2
+          List(mkOr(ors1), mkOr(ors2))
+        case _ => Nil

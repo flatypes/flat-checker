@@ -14,7 +14,7 @@ object ast:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitTypeAlias(this, ctx)
 
   final case class FunctionDef(ident: Ident, args: Seq[Arg], body: Seq[LocalStmt],
-                               returns: Option[Expr]) extends TopStmt:
+                               returns: Option[Expr]) extends TopStmt, LocalStmt:
     def accept[C, T](visitor: NodeVisitor[C, T], ctx: C): T = visitor.visitFunctionDef(this, ctx)
 
   final case class Arg(ident: Ident, annotation: Expr) extends Node:

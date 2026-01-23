@@ -23,8 +23,8 @@ final class SMTSolver(using varCtx: VarCtx, extractMode: Boolean) extends LazyLo
     slv.assertFormula(t.notTerm)
     val result = slv.checkSat()
     slv.pop()
-    if result.isUnknown then
-      throw RuntimeException("timed out")
+//    if result.isUnknown then
+//      throw RuntimeException("timed out")
     result.isUnsat
 
   def solve(conclusion: Expr): Either[String, Unit] =

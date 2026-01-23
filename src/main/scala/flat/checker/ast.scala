@@ -1,6 +1,6 @@
 package flat.checker
 
-import flat.regex.RegEx
+import flat.regex.{AList, RegEx}
 import flat.util.renderSubscript
 import flat.{Location, Locational, Ops}
 import org.apache.commons.text.StringEscapeUtils.escapeJava
@@ -170,6 +170,16 @@ object ast:
 
     protected def children: List[Stmt] = Nil
 
+  final case class Hint(cond: Expr) extends Stmt:
+    def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitHint(this)
+
+    protected def children: List[Stmt] = Nil
+
+  final case class Lemma(name: String, body: Forall) extends Stmt:
+    def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitLemma(this)
+
+    protected def children: List[Stmt] = Nil
+
   final case class ShowType(value: Expr) extends Stmt:
     def accept[C, T](visitor: StmtVisitor[C, T])(using ctx: C): T = visitor.visitShowType(this)
 
@@ -207,6 +217,10 @@ object ast:
     def visitAssert(node: Assert)(using ctx: C): T
 
     def visitAssume(node: Assume)(using ctx: C): T
+
+    def visitHint(node: Hint)(using ctx: C): T
+
+    def visitLemma(node: Lemma)(using ctx: C): T
 
     def visitShowType(node: ShowType)(using ctx: C): T
 
@@ -402,6 +416,21 @@ object ast:
     def sort: Sort = thenValue.sort
 
     override def toString: String = s"(if $cond then $thenValue else $elseValue)"
+
+  def mkImplies(premise: Expr, conclusion: Expr): Expr = Ite(premise, conclusion, true)
+
+  final case class Forall(binders: List[Var], body: Expr) extends Expr:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitForall(this)
+
+    protected def children: List[Expr] = List(body)
+
+    protected def update(newChildren: List[Expr]): Expr = newChildren match
+      case List(eb) => copy(body = eb)
+      case _ => assert(false)
+
+    def sort: Sort = BoolSort
+
+    override def toString: String = s"(forall $binders. $body)"
 
   export flat.Ops.CmpOp
 
@@ -707,6 +736,17 @@ object ast:
 
     def sort: Sort = SetSort(StrSort)
 
+  final case class StrFormat(fmt: Expr, arg: Expr) extends Expr:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitStrFormat(this)
+
+    protected def children: List[Expr] = List(fmt, arg)
+
+    protected def update(newChildren: List[Expr]): Expr = newChildren match
+      case List(e, ex) => copy(fmt = e, arg = ex)
+      case _ => assert(false)
+
+    def sort: Sort = StrSort
+
   final case class StrIn(str: Expr, re: RegEx) extends Expr:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitStrIn(this)
 
@@ -731,7 +771,10 @@ object ast:
       if elems.isEmpty then ListSort(NoType)
       else ListSort(elems.head.sort)
 
-  final case class ListLen(lst: Expr) extends Expr:
+  sealed trait ListOp extends Expr:
+    val lst: Expr
+
+  final case class ListLen(lst: Expr) extends ListOp:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListLen(this)
 
     protected def children: List[Expr] = List(lst)
@@ -742,8 +785,8 @@ object ast:
 
     def sort: Sort = IntSort
 
-  final case class ListLookup(lst: Expr, idx: Expr) extends Expr:
-    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListLookup(this)
+  final case class ListGet(lst: Expr, idx: Expr) extends ListOp:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListGet(this)
 
     protected def children: List[Expr] = List(lst, idx)
 
@@ -755,11 +798,11 @@ object ast:
       case ListSort(s) => s
       case _ => assert(false)
 
-  def mkListHead(lst: Expr): Expr = ListLookup(lst, 0)
+  def mkListHead(lst: Expr): Expr = ListGet(lst, 0)
 
-  def mkListLast(lst: Expr): Expr = ListLookup(lst, SUB(ListLen(lst), 1))
+  def mkListLast(lst: Expr): Expr = ListGet(lst, SUB(ListLen(lst), 1))
 
-  final case class ListSlice(lst: Expr, startIdx: Expr, endIdx: Expr) extends Expr:
+  final case class ListSlice(lst: Expr, startIdx: Expr, endIdx: Expr) extends ListOp:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListSlice(this)
 
     protected def children: List[Expr] = List(lst, startIdx, endIdx)
@@ -774,7 +817,7 @@ object ast:
 
   def mkListFront(lst: Expr): Expr = ListSlice(lst, 0, SUB(ListLen(lst), 1))
 
-  final case class ListAppend(lst: Expr, elem: Expr) extends Expr:
+  final case class ListAppend(lst: Expr, elem: Expr) extends ListOp:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListAppend(this)
 
     protected def children: List[Expr] = List(lst, elem)
@@ -785,7 +828,7 @@ object ast:
 
     def sort: Sort = lst.sort
 
-  final case class ListMap(lst: Expr, fun: Expr) extends Expr:
+  final case class ListMap(lst: Expr, fun: Expr) extends ListOp:
     def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListMap(this)
 
     protected def children: List[Expr] = List(lst, fun)
@@ -797,6 +840,50 @@ object ast:
     def sort: Sort = fun.sort match
       case FunSort(_, s) => ListSort(s)
       case _ => assert(false)
+
+  final case class ListContains(lst: Expr, elem: Expr) extends ListOp:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListContains(this)
+
+    protected def children: List[Expr] = List(lst, elem)
+
+    protected def update(newChildren: List[Expr]): Expr = newChildren match
+      case List(e, ei) => copy(lst = e, elem = ei)
+      case _ => assert(false)
+
+    def sort: Sort = BoolSort
+
+  final case class ListIndexOf(lst: Expr, elem: Expr, from: Expr, until: Expr) extends ListOp:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListIndexOf(this)
+
+    protected def children: List[Expr] = List(lst, elem, from, until)
+
+    protected def update(newChildren: List[Expr]): Expr = newChildren match
+      case List(e, ex, ei, ej) => copy(lst = e, elem = ex, from = ei, until = ej)
+      case _ => assert(false)
+
+    def sort: Sort = IntSort
+
+  final case class ListCount(lst: Expr, elem: Expr) extends ListOp:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListCount(this)
+
+    protected def children: List[Expr] = List(lst, elem)
+
+    protected def update(newChildren: List[Expr]): Expr = newChildren match
+      case List(e, ex) => copy(lst = e, elem = ex)
+      case _ => assert(false)
+
+    def sort: Sort = IntSort
+
+  final case class ListHasType(lst: Expr, typ: AList) extends Expr:
+    def accept[C, T](visitor: ExprVisitor[C, T])(using ctx: C): T = visitor.visitListHasType(this)
+
+    protected def children: List[Expr] = List(lst)
+
+    protected def update(newChildren: List[Expr]): Expr = newChildren match
+      case List(e) => copy(lst = e)
+      case _ => assert(false)
+
+    def sort: Sort = BoolSort
 
   // Set
 
@@ -911,6 +998,8 @@ object ast:
 
     def visitIte(node: Ite)(using ctx: C): T
 
+    def visitForall(node: Forall)(using ctx: C): T
+
     def visitCmp(node: Cmp)(using ctx: C): T
 
     def visitNegate(node: Negate)(using ctx: C): T
@@ -951,19 +1040,29 @@ object ast:
 
     def visitStrToSet(node: StrToSet)(using ctx: C): T
 
+    def visitStrFormat(node: StrFormat)(using ctx: C): T
+
     def visitStrIn(node: StrIn)(using ctx: C): T
 
     def visitListExpr(node: ListExpr)(using ctx: C): T
 
     def visitListLen(node: ListLen)(using ctx: C): T
 
-    def visitListLookup(node: ListLookup)(using ctx: C): T
+    def visitListGet(node: ListGet)(using ctx: C): T
 
     def visitListSlice(node: ListSlice)(using ctx: C): T
 
     def visitListAppend(node: ListAppend)(using ctx: C): T
 
     def visitListMap(node: ListMap)(using ctx: C): T
+
+    def visitListContains(node: ListContains)(using ctx: C): T
+
+    def visitListIndexOf(node: ListIndexOf)(using ctx: C): T
+
+    def visitListCount(node: ListCount)(using ctx: C): T
+
+    def visitListHasType(node: ListHasType)(using ctx: C): T
 
     def visitSetExpr(node: SetExpr)(using ctx: C): T
 

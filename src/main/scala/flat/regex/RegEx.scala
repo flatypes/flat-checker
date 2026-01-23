@@ -79,12 +79,24 @@ enum RegEx:
     case REStar(_) => true
 
   def minusNull: RegEx = this match
+    case RENull => RENone
+    case REConcat(RENull, r) => r.minusNull
+    case REConcat(r, RENull) => r.minusNull
     case REConcat(r1, r2) => r1.minusNull ++ r2.minusNull
     case REUnion(RENull, r) => r
     case REUnion(r, RENull) => r
     case REUnion(r1, r2) => r1.minusNull | r2.minusNull
     case REStar(r) => r.+
     case _ => this
+
+  /** Tests if this language is a singleton. */
+  def isSingleton: Boolean = this match
+    case RENone => false
+    case RENull => true
+    case RELit(cs) => cs.isSingleton
+    case REConcat(r1, r2) => r1.isSingleton && r2.isSingleton
+    case REUnion(_, _) => false
+    case REStar(_) => false
 
   /** Returns the ''first set'': all possible leading characters. */
   def first: CharSet = this match
@@ -149,6 +161,14 @@ enum RegEx:
 
   /** Tests if this RE is semantically equivalent to `that`. */
   infix def equiv(that: RegEx): Boolean = this.subsetOf(that) && that.subsetOf(this)
+
+  def toCNF: List[RegEx] = this match
+    case REConcat(r1, r2) => r1.toCNF ++ r2.toCNF
+    case r => List(r)
+
+  def toDNF: List[RegEx] = this match
+    case REUnion(r1, r2) => r1.toDNF ++ r2.toDNF
+    case r => List(r)
 
   def toJavaRegex: String = this match
     case RENone => "[]"

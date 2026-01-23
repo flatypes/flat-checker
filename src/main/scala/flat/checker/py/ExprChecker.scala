@@ -10,15 +10,17 @@ import scala.collection.mutable.ListBuffer
 type LCtx = Map[String, String]
 
 class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, vm: VarManager):
-  def inferType(expr: Expr, ctx: LCtx): (ast.Type, ast.Expr) = expr.accept(InferMode, ctx)
+  def inferType(expr: Expr, ctx: LCtx, ignorePre: Boolean = false): (ast.Type, ast.Expr) =
+    expr.accept(InferMode(using ignorePre), ctx)
 
-  def checkType(expr: Expr, expected: ast.Type, ctx: LCtx): ast.Expr = expr.accept(CheckMode, (expected, ctx))
+  def checkType(expr: Expr, expected: ast.Type, ctx: LCtx, ignorePre: Boolean = false): ast.Expr =
+    expr.accept(CheckMode(using ignorePre), (expected, ctx))
 
   private val annotChecker = new AnnotChecker
 
   import annotChecker.*
 
-  private object InferMode extends NodeVisitor[LCtx, (ast.Type, ast.Expr)]:
+  private class InferMode(using ignorePre: Boolean) extends NodeVisitor[LCtx, (ast.Type, ast.Expr)]:
     override def visitConstant(node: Constant, ctx: LCtx): (ast.Type, ast.Expr) =
       node.value match
         case v: Int => (ast.IntSort, ast.Const(v).copyLocation(node))
@@ -75,7 +77,7 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
       selectMember(t.base, member) match
         case Some(m) =>
           val es = checkArgs(nodeLoc, args, m.required, m.optional, ctx)
-          if m.preCond.isDefined then
+          if !ignorePre && m.preCond.isDefined then
             out += ast.Assert(m.applyPre(e +: es).fillLocation(nodeLoc))
           val value = m.sideEffect match
             case Some(f) =>
@@ -99,13 +101,17 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
           node.args match
             case Seq(obj, annot) if f == "isinstance" =>
               val t = checkAnnot(annot, gCtx)
-              val e = checkType(obj, t.base, ctx)
+              val e = obj.accept(CheckMode(), (t.base, ctx))
               (ast.BoolSort, ast.TypeTest(e, t).copyLocation(node))
+            case Seq(e1, e2) if f == "implies" =>
+              val premise = e1.accept(CheckMode(), (ast.BoolSort, ctx))
+              val conclusion = e2.accept(CheckMode(), (ast.BoolSort, ctx))
+              (ast.BoolSort, ast.mkImplies(premise, conclusion).copyLocation(node))
             case Seq(fun, arr) if f == "map" =>
-              val (tf, ef) = inferType(fun, ctx)
+              val (tf, ef) = fun.accept(InferMode(), ctx)
               tf match
                 case ast.FunType(List(t1), t2) =>
-                  val ea = checkType(arr, ast.ListType(t1), ctx)
+                  val ea = arr.accept(CheckMode(), (ast.ListType(t1), ctx))
                   val e = ast.ListMap(ea, ef).copyLocation(node)
                   (ast.ListType(t2), e)
                 case other =>
@@ -120,7 +126,7 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
           intModuleTable.get(f) match
             case Some(m) =>
               val es = checkArgs(node.loc, node.args, m.required, m.optional, ctx)
-              if m.preCond.isDefined then
+              if !ignorePre && m.preCond.isDefined then
                 out += ast.Assert(m.applyPre(es).fillLocation(node.loc))
               (m.returns, m.apply(ast.NoExpr +: es).setLocation(node.loc))
             case None =>
@@ -132,7 +138,7 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
           val (te, e) = expr.accept(this, ctx)
           te match
             case ast.FunType(ts, t) =>
-              val es = for (arg, tArg) <- node.args zip ts yield arg.accept(CheckMode, (tArg, ctx))
+              val es = for (arg, tArg) <- node.args zip ts yield arg.accept(CheckMode(), (tArg, ctx))
               (t, ast.Apply(e, es.toList).copyLocation(node))
             case _ =>
               issuer.report(TypeMismatch("Callable", te.show, expr.loc))
@@ -148,15 +154,15 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
              |expected: ${if optional.nonEmpty then "as most " else ""}${required.length + optional.length}"
              |actual:   ${args.length}"
              |""".stripMargin, nodeLoc))
-      for (arg, s) <- args zip (required ++ optional.map(_._1)) yield arg.accept(CheckMode, (s, ctx))
+      for (arg, s) <- args zip (required ++ optional.map(_._1)) yield arg.accept(CheckMode(), (s, ctx))
 
     override def visitIfExp(node: IfExp, ctx: LCtx): (ast.Type, ast.Expr) =
-      val e = node.test.accept(CheckMode, (ast.BoolSort, ctx))
+      val e = node.test.accept(CheckMode(), (ast.BoolSort, ctx))
       val (t1, e1) = node.body.accept(this, ctx)
-      val e2 = node.orElse.accept(CheckMode, (t1, ctx))
+      val e2 = node.orElse.accept(CheckMode(), (t1, ctx))
       (t1, ast.Ite(e, e1, e2).copyLocation(node))
 
-  private object CheckMode extends NodeVisitor[(ast.Type, LCtx), ast.Expr]:
+  private class CheckMode(using ignorePre: Boolean) extends NodeVisitor[(ast.Type, LCtx), ast.Expr]:
     override def visitIfExp(node: IfExp, ctx: (ast.Type, LCtx)): ast.Expr =
       val e = node.test.accept(this, (ast.BoolSort, ctx._2))
       val e1 = node.body.accept(this, ctx)
@@ -165,7 +171,7 @@ class ExprChecker(out: ListBuffer[ast.Stmt])(using issuer: Issuer, gCtx: GCtx, v
 
     override def visitDefault(node: Node, arg: (ast.Type, LCtx)): ast.Expr =
       val (expected, ctx) = arg
-      val (actual, e) = node.accept(InferMode, ctx)
+      val (actual, e) = node.accept(InferMode(), ctx)
       if !(actual.base subsortOf expected.base) then
         issuer.report(TypeMismatch(expected.show, actual.show, node.loc))
       if expected.constraint.isDefined then

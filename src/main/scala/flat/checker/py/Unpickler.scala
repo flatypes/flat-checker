@@ -44,6 +44,27 @@ class Unpickler(path: os.Path):
     val endOffset = m("end_col_offset").int
     Location(doc, Position(startLine - 1, startOffset), Position(endLine - 1, endOffset))
 
+  private def functionDef: Parser[Option[FunctionDef]] = m =>
+    val loc = m |> location
+    val f = m("name").str
+    val fOffset = m("name_col_offset").int
+    val ident = Ident(f).setLocation(
+      Location(doc, Position(loc.start.row, fOffset), Position(loc.start.row, fOffset + f.length)))
+    val args = m("args") |> arguments
+    var body = m("body") |> list(localStmt)
+    if body.nonEmpty then
+      body.head match
+        case ExprStmt(Constant(_: String)) => body = body.tail // remove docstring
+        case _ =>
+    val decorators = m("decorator_list").arr
+    if decorators.nonEmpty then
+      issuer.report(Unsupported("decorator", decorators.head |> location))
+    val returns = m("returns").opt.map(expr)
+    val typeParams = m("type_params").arr
+    if typeParams.nonEmpty then
+      issuer.report(Unsupported("type param", typeParams.head |> location))
+    Some(FunctionDef(ident, args, body, returns).setLocation(loc))
+
   private def topStmt: Parser[Option[TopStmt]] = json =>
     val m = json.obj
     val loc = m |> location
@@ -53,25 +74,7 @@ class Unpickler(path: os.Path):
         val ident = Ident(name.id).copyLocation(name)
         val value = m("value") |> expr
         Some(TypeAlias(ident, value).setLocation(loc))
-      case "FunctionDef" =>
-        val f = m("name").str
-        val fOffset = m("name_col_offset").int
-        val ident = Ident(f).setLocation(
-          Location(doc, Position(loc.start.row, fOffset), Position(loc.start.row, fOffset + f.length)))
-        val args = m("args") |> arguments
-        var body = m("body") |> list(localStmt)
-        if body.nonEmpty then
-          body.head match
-            case ExprStmt(Constant(_: String)) => body = body.tail // remove docstring
-            case _ =>
-        val decorators = m("decorator_list").arr
-        if decorators.nonEmpty then
-          issuer.report(Unsupported("decorator", decorators.head |> location))
-        val returns = m("returns").opt.map(expr)
-        val typeParams = m("type_params").arr
-        if typeParams.nonEmpty then
-          issuer.report(Unsupported("type param", typeParams.head |> location))
-        Some(FunctionDef(ident, args, body, returns).setLocation(loc))
+      case "FunctionDef" => m |> functionDef
       case "Import" | "ImportFrom" | "ClassDef" =>
         None
       case other =>
@@ -182,6 +185,10 @@ class Unpickler(path: os.Path):
         if finalBody.nonEmpty then
           issuer.report(Unsupported("finally block in try-statement", finalBody.head.loc))
         Block(body.toList).setLocation(loc)
+      case "FunctionDef" =>
+        m |> functionDef match
+          case Some(f) => f
+          case None => Pass()
       case other =>
         issuer.report(Unsupported(other, loc))
         Pass()

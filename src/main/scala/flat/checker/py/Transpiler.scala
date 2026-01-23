@@ -16,6 +16,7 @@ final case class VarInfo(typ: ast.Type, ident: Ident)
 
 final class VarManager:
   private val data = mutable.Map.empty[String, VarInfo]
+  private val binders = mutable.Stack.empty[(String, VarInfo)]
   private var nextTmp = 0
 
   def declare(typ: ast.Type, ident: Ident): String =
@@ -29,7 +30,18 @@ final class VarManager:
     data(x) = VarInfo(typ, Ident(x))
     x
 
-  def getType(id: String): ast.Type = data(id).typ
+  def withBinder[T](vars: List[VarInfo])(f: => T): T =
+    for v <- vars do
+      binders.push(v.ident.name -> v)
+    val result = f
+    for _ <- vars do
+      binders.pop()
+    result
+
+  def getType(id: String): ast.Type =
+    binders.find(_._1 == id) match
+      case Some((_, VarInfo(t, _))) => t
+      case None => data(id).typ
 
   def getTypes: Map[String, ast.Type] = Map.from(for (x, VarInfo(t, _)) <- data yield x -> t)
 
