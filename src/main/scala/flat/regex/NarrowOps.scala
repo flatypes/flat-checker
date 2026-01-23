@@ -82,7 +82,9 @@ object NarrowOps extends LazyLogging:
 
     /** Narrows by the constraint that `s != t`. */
     def narrowByNotEq(t: String): RegEx = t.length match
-      case 0 => if re.nullable then re.minusNull else re
+      case 0 => narrowByLength(Interval(lb = 1))
+      case _ if !re.contains(t) => re
+      case _ if re.isSmall => union((re.words - t).map(fromString).toList)
       case n =>
         val r1 = narrowByLength(Interval(0, n - 1)) | narrowByLength(Interval(lb = n + 1))
         val r2 = narrowByLength(Interval.at(n)).exclude(t)

@@ -214,6 +214,37 @@ object AOps extends LazyLogging:
       case REUnion(r1, r2) => r1.length | r2.length
       case REStar(r) => Interval(lb = 0)
 
+    /** Tests if this regular language is *small*: free of Kleene stars and big CS. */
+    def isSmall: Boolean = re.size match
+      case n: BigInt if n < 50 => true
+      case _ => false
+
+    def size: BigInt | Inf.type = re match
+      case RENone => 0
+      case RENull => 1
+      case RELit(cs) => cs.size
+      case REConcat(r1, r2) =>
+        (r1.size, r2.size) match
+          case (n1: BigInt, n2: BigInt) => n1 * n2
+          case _ => Inf
+      case REUnion(r1, r2) =>
+        (r1.size, r2.size) match
+          case (n1: BigInt, n2: BigInt) => n1 + n2
+          case _ => Inf
+      case REStar(_) => Inf
+
+    def words: Set[String] = re match
+      case RENone => Set.empty
+      case RENull => Set("")
+      case RELit(cs) => cs.toSet.map(_.toString)
+      case REConcat(r1, r2) =>
+        for
+          w1 <- r1.words
+          w2 <- r2.words
+        yield w1 + w2
+      case REUnion(r1, r2) => r1.words | r2.words
+      case REStar(_) => Set.empty
+
     def toNumber(base: Int = 10): Interval =
       require(2 <= base && base <= 36)
       val lb = parseInt(re.minNumber(base), base)

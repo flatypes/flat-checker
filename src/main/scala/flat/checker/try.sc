@@ -87,7 +87,7 @@ solver.assume(And(LE(1, i), LT(i, SUB(ListLen(ps), 1))))
 // skip = -1 or 1 <= skip < i
 solver.assume(Or(EQ(skip, -1), And(LE(1, skip), LT(skip, i))))
 // skip = 1 + ps[1:i].indexOf("")
-solver.assume(EQ(skip, ADD(1, ListIndexOf(ListSlice(ps, 1, i), "", 0))))
+solver.assume(EQ(skip, ADD(1, ListIndexOf(ListSlice(ps, 1, i), "", 0, 0))))
 // ps[i] = ""
 solver.assume(EQ(ListGet(ps, i), ""))
 // hint: ps[skip] = ""
@@ -104,3 +104,6 @@ solver.assume(
       EQ(ListGet(ps, k2), "")),
     EQ(k1, k2))))
 assert(solver.proves(false))
+
+val rABC = REParser.parse("a?b?c?")
+rABC.narrowByLength(Interval.at(3))
