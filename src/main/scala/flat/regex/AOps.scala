@@ -29,6 +29,12 @@ object AOps extends LazyLogging:
       else !take1.nullable && re.first.isSingleton && re.first.contains(t.head) &&
         re.derivative(t.head).forallPrefix(t.tail)
 
+    def startsWith(t: String): Option[Boolean] =
+      if t.isEmpty then Some(true)
+      else if re.derivative(t).isEmpty then Some(false)
+      else if forallPrefix(t) then Some(true)
+      else None
+
     /** Splits this regex at ''any'' occurrence of the char `c`.
      * Returns a list of splits: each is prefix-suffix pair `(rl, rr)` where `rr` starts with `c`. */
     def split(c: Char): List[(RegEx, RegEx)] = re match
@@ -85,6 +91,19 @@ object AOps extends LazyLogging:
       case 0 => true
       case 1 => forallContains(t.head)
       case _ => forallContains(t.head) && splitSuffix(t.head).forallPrefix(t)
+
+    def containsInfix(t: String): Option[Boolean] = t.length match
+      case 0 => Some(true)
+      case 1 =>
+        val c = t.head
+        if forallContains(c) then Some(true)
+        else if !re.alphabet.contains(c) then Some(false)
+        else None
+      case _ =>
+        val r1 = re.splitSuffix(t.head)
+        if r1.derivative(t).isEmpty then Some(false)
+        else if re.forallContains(t.head) && r1.forallPrefix(t) then Some(true)
+        else None
 
     /** Abstract version of `s.drop(1)`. */
     def drop1: RegEx = re match

@@ -203,6 +203,8 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       val valid = smtSolver.proves(conclusion)
       for mc <- config.metrics do
         mc.timePause("time/verif/smt/prove")
+        if valid then
+          mc.count("smt queries/valid")
       valid
 
     private def canSplit(conclusion: Expr): Boolean = conclusion match

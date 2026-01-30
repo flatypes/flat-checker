@@ -44,6 +44,8 @@ class Narrower(using config: Config) extends LazyLogging:
               case r: RegEx => ppRE(r)
               case _ => "<AList>"
           }")
+          for mc <- config.metrics do
+            mc.count("narrow/nontrivial")
         if res1.values.exists(_.isEmpty) then res1
         else iterate(rest, res1)
 

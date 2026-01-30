@@ -121,6 +121,11 @@ object CharSet:
   /** ASCII word characters: \w. */
   val asciiWord: CharSet = from('A' to 'Z') | from('a' to 'z') | from('0' to '9') | apply('_')
 
+  val asciiPunctuation: CharSet = apply(
+    ' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<',
+    '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~'
+  )
+
   /** Creates a CS with the given `chars`. */
   def apply(chars: Char*): CharSet = new CharSet(Set(chars *), true)
 

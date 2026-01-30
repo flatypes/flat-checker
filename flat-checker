@@ -1,2 +1,5 @@
 #!/bin/bash
-exec java -jar target/flat-checker.jar "$@"
+start_time=$(date +%s%N)
+java -jar target/flat-checker.jar "$@"
+end_time=$(date +%s%N)
+echo "$(((end_time - start_time) / 1000000)) ms"

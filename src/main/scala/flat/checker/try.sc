@@ -53,6 +53,8 @@ val ipv6 = REParser.tryParse(
   Map("H16" -> h16, "LS32" -> ls32, "IPv4Address" -> ipv4)
 ).toOption.get
 
+ipv6.toJavaRegex.length
+
 val parts = ipv6.splitWith(':')
 parts.length
 val partsMid = parts.drop(1).dropRight(1)
