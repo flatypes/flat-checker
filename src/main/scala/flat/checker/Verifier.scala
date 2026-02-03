@@ -5,7 +5,7 @@ import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
 import flat.checker.Printer.*
 import flat.checker.ast.*
-import flat.regex.{CharSet, RegEx}
+import flat.regex.{AList, CharSet, RegEx}
 import flat.util.allRight
 import flat.{Config, Issuer, Ops}
 
@@ -22,6 +22,8 @@ final class VarCtx private(vars: Map[String, Sort]):
 
 object VarCtx:
   def from(funDef: FunDef): VarCtx = VarCtx(funDef.lCtx.view.mapValues(_.base).toMap)
+
+  def from(vars: (String, Sort)*): VarCtx = VarCtx(vars.toMap)
 
 /** Proof Context. Recently added premises first. */
 class PrfCtx private(val premises: List[Expr])(using prover: Verifier#Prover) extends LazyLogging:
@@ -43,6 +45,8 @@ class PrfCtx private(val premises: List[Expr])(using prover: Verifier#Prover) ex
     premises.collectFirst:
       case TypeTest(suffix@Substr(e1, ei, Length(e2)), LangType(r)) if e1 == str && e2 == str => (ei, r)
       case StrIn(suffix@Substr(e1, ei, Length(e2)), r) if e1 == str && e2 == str => (ei, r)
+
+  def getList(lst: Expr): Option[AList] = premises.collectFirst { case ListHasType(e, l) if e == lst => l }
 
   /** Creates a new proof context with given conditions added. */
   def ++(conds: List[Expr]): PrfCtx = PrfCtx(conds.map(simpl).flatMap(conjuncts) ++ premises)
@@ -109,15 +113,33 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       val lines = ListBuffer.empty[String]
       while start + 118 < left.length do
         val s = left.substring(start, start + 118)
-        val width = s.lastIndexOf('∧') + 2
+        val width = break(s)
         lines += s.take(width)
         start += width
       lines += left.substring(start)
-      lines.map("\n  " + _).mkString + "\n  " + right
+      if right.length >= 118 then
+        start = 0
+        while start + 118 < right.length do
+          val s = right.substring(start, start + 118)
+          val width = break(s)
+          lines += s.take(width)
+          start += width
+        lines += right.substring(start)
+      else lines += right
+      lines.map("\n  " + _).mkString
+
+  private def break(s: String, width: Int = 118): Int =
+    if s.contains("∧") then s.lastIndexOf('∧') + 2
+    else if s.contains(" else") then s.lastIndexOf(" else") + 1
+    else if s.contains("=>") then s.lastIndexOf("=>") + 3
+    else if s.contains("||") then s.lastIndexOf("||") + 3
+    else if s.contains("&&") then s.lastIndexOf("&&") + 3
+    else if s.contains(" ") then s.lastIndexOf(' ') + 1
+    else width
 
   final class Prover(using val varCtx: VarCtx):
     private val cachedHypotheses = ListBuffer.empty[Expr]
-    private val smtSolver = new SMTSolver
+    private val smtSolver = new SMTSolver(using extractMode = config.extractMode)
 
     /** Adds the given `hypothesis`. */
     def assume(hypothesis: Expr): Unit =
@@ -181,6 +203,8 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       val valid = smtSolver.proves(conclusion)
       for mc <- config.metrics do
         mc.timePause("time/verif/smt/prove")
+        if valid then
+          mc.count("smt queries/valid")
       valid
 
     private def canSplit(conclusion: Expr): Boolean = conclusion match
@@ -216,6 +240,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       // Check if there is any destructible hypothesis.
       val hs = getCtx.premises.filter:
         case _: Or => true
+        case _: Forall => false // do not destruct forall
         case b => b.collectFirst { case _: Ite => () }.isDefined
       if hs.isEmpty then
         if narrow() then
@@ -266,6 +291,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       newTypes.foreach(assume)
       newTypes.exists:
         case TypeTest(_, LangType(RegEx.RENone)) => true
+        case ListHasType(_, l: AList) if l.isEmpty => true
         case _ => false
 
     private def synthAndProve(conclusion: Expr): Either[String, Unit] = conclusion match
@@ -280,6 +306,8 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
             logger.debug("PROVED by type checking")
             Right(())
           case Left(actual) =>
+            logger.debug("FAILED: actual type: {}", ppType(actual))
+            throw RuntimeException()
             Left("actual type: " + ppType(actual))
       case Const(false) => proveWithLemmas(conclusion, getCtx.premises)
       case _ =>
@@ -302,6 +330,13 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
               case (t, Right(_)) => t
             }))
           case _ => throw UnsupportedOperationException()
+      case ListType(LangType(r2)) =>
+        expr match
+          case Split(str, Const(t: String)) if t.length == 1 =>
+            val inferer = new Inferer(using ctx = getCtx)()
+            val r1 = inferer.inferSplitLang(str, t.head)
+            if r1.subsetOf(r2) then Right(()) else Left(ListType(LangType(r1)))
+          case _ => throw UnsupportedOperationException(s"checkType $expr : $typ")
       case _ =>
         throw UnsupportedOperationException(s"checkType $expr : $typ")
 
@@ -312,6 +347,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       for mc <- config.metrics do
         mc.timeStart("time/verif/type")
       val sketches = seeds.flatMap(collectSketches).distinct
+      logger.trace("Sketches: {}", sketches.map(_.toString).mkString(", "))
       val lemmas = syn.synth(sketches)(using getCtx)
       for mc <- config.metrics do
         mc.timePause("time/verif/type")
@@ -345,6 +381,8 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
             case NE => CharSet.not(c)
           ss += syn.InferLang(ec, target = Some(t))
           ss += syn.InferIndexCharAt(es, ei, cs)
+        case MapContains(_, ec@CharAt(_, _)) =>
+          ss += syn.InferLang(ec)
         case Cmp(EQ | NE, es, Const(t: String)) =>
           ss += syn.InferLang(es, target = Some(t))
         case Cmp(EQ | NE, es1, es2) if es1.sort == StrSort && es2.sort == StrSort =>
@@ -358,4 +396,10 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
           ss += syn.InferLength(es)
         case Find(es, Const(t: String)) =>
           ss += syn.InferFind(es, t)
+        case StrToInt(es, Const(n: Int)) =>
+          ss += syn.InferToNumber(es, n)
+        case StrToSet(es) =>
+          ss += syn.InferToSet(es)
+        case op: ListOp if op.lst.sort == ListSort(StrSort) =>
+          ss += syn.InferStrList(op)
       ss.toList

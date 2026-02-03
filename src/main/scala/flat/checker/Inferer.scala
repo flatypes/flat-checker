@@ -7,8 +7,10 @@ import flat.checker.ExprOps.*
 import flat.checker.Printer.ppExpr
 import flat.checker.ast.*
 import flat.checker.ast.ArithOp.*
+import flat.checker.ast.BitwiseOp.AND
 import flat.regex.*
 import flat.regex.AOps.*
+import flat.regex.RegEx.RENull
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -21,6 +23,8 @@ enum BoolSet:
   case False
   /** The full set {true, false}. */
   case All
+
+case object AnyDomain
 
 /** Type Inference. */
 class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
@@ -55,7 +59,17 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
           case (Some(r1), r2) => // select the more precise one; if neither is a subset of another, prefer r1
             if r2.subsetOf(r1) then r2 else r1
           case (None, r) => r
-      case _ => throw IllegalArgumentException(str.toString)
+      case StrFormat(Const(fmt: String), arg) =>
+        val es = arg match
+          case TupleExpr(es) => es
+          case e => List(e)
+        format(fmt, es)
+
+      case _: ListGet =>
+        inferStrList(str) match
+          case r: RegEx => r
+          case _ => RegEx.all
+      case _ => RegEx.all
 
   /** Infer the type of `Substr(str, start, end)`.
    * Return two solutions: one using the suffix lang (if specified), and the other using the ordinary method. */
@@ -98,7 +112,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         // Require: startIndex < endIndex
         assert(isValid(LT(startIndex.concretize(str), endIndex.concretize(str))))
         r.drop(i).take(j)
-      case (IndexShifted(i, k), j) if k < 0 =>
+      case (IndexShifted(i: BasicIndex, k), j) if k < 0 =>
         // Require: -k ≤ i ∧ i ≤ j ≤ length s
         assert(isValid(mkAnd(
           LE(-k, i.concretize(str)),
@@ -106,17 +120,17 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
           LE(j.concretize(str), Length(str)))))
         // s[i + (-k) : j] = (reverse (reverse s[:i])[:(-k)]) ++ s[i:j]
         r.take(i).reverse.take(-k).reverse ++ substr(r, i, j, endIdx = endIdx)
-      case (IndexShifted(i, k), j) if k > 0 =>
+      case (IndexShifted(i: BasicIndex, k), j) if k > 0 =>
         // s[i + k : j] = s[i:j][k:]
         substr(r, i, j, endIdx = endIdx).drop(k)
-      case (i, IndexShifted(j, k)) if k < 0 =>
+      case (i, IndexShifted(j: BasicIndex, k)) if k < 0 =>
         // Require: i ≤ j - (-k) ∧ j ≤ length s
         assert(isValid(And(
           LE(i.concretize(str), SUB(j.concretize(str), -k)),
           LE(j.concretize(str), Length(str)))))
         // s[i : j - k] = reverse (reverse s[i:j])[k:]
         substr(r, i, j, startIdx = startIdx).reverse.drop(-k).reverse
-      case (i, IndexShifted(j, k)) if k > 0 =>
+      case (i, IndexShifted(j: BasicIndex, k)) if k > 0 =>
         // Require: i ≤ j
         assert(isValid(LE(i.concretize(str), j.concretize(str))))
         // s[i : j + k] = s[i:j] ++ s[j:][:k]
@@ -139,6 +153,39 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         logger.debug(s"infer substr of $r from $startIndex until $endIndex: $r1")
         r1
 
+  private def format(fmt: String, args: List[Expr]): RegEx =
+    val parts = ListBuffer.empty[RegEx]
+    var i = 0
+    var j = 0
+    var k = 0
+    while j < fmt.length do
+      if fmt.startsWith("%d", j) || fmt.startsWith("%x", j) || fmt.startsWith("%X", j) then
+        parts += RegEx.fromString(fmt.substring(i, j))
+        val csLetter =
+          if fmt.startsWith("%d", j) then CharSet.empty
+          else if fmt.startsWith("%x", j) then CharSet.from('a' to 'f')
+          else CharSet.from('A' to 'F')
+        val rDigit = RegEx.fromCharSet(CharSet.asciiDigit | csLetter)
+        args(k) match
+          case Bitwise(AND, _, Const(mask: Int)) if mask > 0 =>
+            val n = if fmt.startsWith("%d", j) then mask.toString.length else mask.toHexString.length
+            parts += rDigit.loop(Interval(1, n))
+          case _ =>
+            parts += RegEx.fromChar('-').? ++ rDigit.+
+        j += 2
+        i = j
+        k += 1
+      else if fmt.startsWith("%s", j) || fmt.startsWith("%r", j) then
+        parts += RegEx.fromString(fmt.substring(i, j))
+        parts += RegEx.all
+        j += 2
+        i = j
+        k += 1
+      else
+        j += 1
+    parts += RegEx.fromString(fmt.substring(i))
+    RegEx.concat(parts.toList)
+
   /** Infer the result of a given string `test`. */
   def inferTest(test: StrTest): BoolSet = test match
     case PrefixOf(Const(t: String), es) => prefixOf(t, es)
@@ -147,6 +194,12 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     case SuffixOf(_, _) => BoolSet.All
     case InfixOf(Const(t: String), es) => infixOf(t, es)
     case InfixOf(_, _) => BoolSet.All
+    case StrIs(es, _, p) =>
+      val r = inferLang(es)
+      val chars = r.alphabet.toSet
+      if chars.forall(p) then BoolSet.True
+      else if chars.forall(!p(_)) then BoolSet.False
+      else BoolSet.All
 
   private def prefixOf(t: String, str: Expr): BoolSet =
     if t.isEmpty then
@@ -202,3 +255,70 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         (bs, results.distinct.toList)
 
   private inline def isValid(cond: Expr)(using ctx: PrfCtx): Boolean = ctx.isValid(cond)
+
+  def inferSplitLang(str: Expr, c: Char): RegEx =
+    val r = inferLang(str)
+    r.splitWith(c).getAny
+
+  final case class PossibleIndices(left: List[Int], right: List[Int], notFound: Boolean, lst: Expr)
+
+  def inferStrList(expr: Expr): AList | RegEx | Interval | PossibleIndices | AnyDomain.type =
+    ctx.getList(expr) match
+      case Some(l) => l
+      case None => expr match
+        case Split(e, Const(t: String)) if t.length == 1 =>
+          val str = inferLang(e)
+          val c = t.head
+          str.splitWith(c)
+        case ListLen(e) =>
+          inferStrList(e) match
+            case list: AList => list.length
+            case _ => AnyDomain
+        case ListGet(e, ei) =>
+          inferStrList(e) match
+            case list: AList =>
+              indexInferer.infer(ei, e, isStr = false) match
+                case IndexL(i) => list.get(i)
+                case IndexR(i) => list.getRight(i)
+                case IndexInterval(IndexL(i), IndexR(j)) => list.getEach(i, j + 1)
+                case IndexInterval(_, IndexShifted(ListIndexAt(t, i, j), -1)) =>
+                  list.takeIndexOf(t, i, j).getAny
+                case IndexInterval(IndexShifted(ListIndexAt(t, i, j), n), _) =>
+                  list.dropIndexOf(t, i, j).drop(n).getAny
+                case index =>
+                  logger.trace(s"infer list get ${ppExpr(ei)} = $index: fallback to any element")
+                  list.getAny
+            case _ => AnyDomain
+        case ListSlice(e, ei, ej) =>
+          inferStrList(e) match
+            case list: AList =>
+              (indexInferer.infer(ei, e, isStr = false), indexInferer.infer(ej, e, isStr = false)) match
+                case (IndexL(i), IndexR(j)) => list.drop(i).dropRight(j)
+                case _ =>
+                  logger.trace("unsupported index: {} of list {}", ppExpr(ei), ppExpr(e))
+                  AnyDomain
+            case _ => AnyDomain
+        case ListAppend(e, ex) =>
+          inferStrList(e) match
+            case list: AList =>
+              val elem = inferLang(ex)
+              list.append(elem)
+            case _ => AnyDomain
+        case ListIndexOf(e, Const(t: String), ei, ej) =>
+          inferStrList(e) match
+            case list: AList =>
+              (indexInferer.infer(ei, e, isStr = false), indexInferer.infer(ej, e, isStr = false)) match
+                case (IndexL(i), IndexR(j)) =>
+                  val left = list.indexOf(t, i, j)
+                  val right = list.rightIndexOf(t, i, j)
+                  val notFound = left.contains(-1) || right.contains(-1)
+                  PossibleIndices(left.excl(-1).toList.sorted, right.excl(-1).toList.sorted, notFound, e)
+                case _ =>
+                  logger.trace("unsupported index: {} of list {}", ppExpr(ei), ppExpr(e))
+                  AnyDomain
+            case _ => AnyDomain
+        case ListCount(e, Const(t: String)) =>
+          inferStrList(e) match
+            case list: AList => list.count(t)
+            case _ => AnyDomain
+        case _ => AnyDomain

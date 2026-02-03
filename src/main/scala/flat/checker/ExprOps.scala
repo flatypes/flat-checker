@@ -3,6 +3,8 @@ package flat.checker
 import flat.checker.ast.*
 import flat.checker.ast.ArithOp.*
 
+import scala.collection.mutable.ListBuffer
+
 object ExprOps:
   extension (expr: Expr)
     /** Simplifies this condition. */
@@ -33,13 +35,17 @@ object ExprOps:
     // Arithmetic
 
     /** Returns the negation `-expr`. */
-    private def negation: Expr = expr match
+    def negation: Expr = expr match
       case Const(n: Int) => Const(-n)
       case Negate(e) => e
       case _ => Negate(expr)
 
     /** Returns all summands. */
-    def summands: List[Expr] = expr match
+    def summands: List[Expr] = getSummands match
+      case Nil => List(Const(0))
+      case es => es
+
+    private def getSummands: List[Expr] = expr match
       case Const(0) => Nil
       case Arith(ADD, e1, e2) => e1.summands ++ e2.summands
       case Arith(SUB, e1, e2) => e1.summands ++ e2.summands.map(_.negation)
@@ -54,3 +60,26 @@ object ExprOps:
         case Const(n: Int) => sum += n
         case e => if e == base then baseCount += 1 else unexpected = true
       if !unexpected && baseCount == 1 && sum >= 0 then Some(sum) else None
+
+  def mkSum(summands: List[Expr]): Expr =
+    val pos = ListBuffer.empty[Expr]
+    val neg = ListBuffer.empty[Expr]
+    var k = 0
+    summands.foreach:
+      case Const(n: Int) => k += n
+      case Negate(e) => neg += e
+      case e => pos += e
+    val common = pos.toSet & neg.toSet
+    for e <- common do
+      pos -= e
+      neg -= e
+    if pos.nonEmpty then
+      val e = pos.reduce(ADD(_, _))
+      val e1 = neg.foldLeft(e)(SUB(_, _))
+      if k == 0 then e1 else if k > 0 then ADD(e1, k) else SUB(e1, -k)
+    else if neg.nonEmpty then
+      val e: Expr = Negate(neg.head)
+      val e1 = neg.tail.foldLeft(e)(SUB(_, _))
+      if k == 0 then e1 else if k > 0 then ADD(e1, k) else SUB(e1, -k)
+    else
+      Const(k)

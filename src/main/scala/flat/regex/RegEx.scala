@@ -70,7 +70,7 @@ enum RegEx:
     case REStar(_) => false
 
   /** Tests if the empty string is a member. */
-  def nullable: Boolean = this match
+  lazy val nullable: Boolean = this match
     case RENone => false
     case RENull => true
     case RELit(_) => false
@@ -79,12 +79,24 @@ enum RegEx:
     case REStar(_) => true
 
   def minusNull: RegEx = this match
+    case RENull => RENone
+    case REConcat(RENull, r) => r.minusNull
+    case REConcat(r, RENull) => r.minusNull
     case REConcat(r1, r2) => r1.minusNull ++ r2.minusNull
     case REUnion(RENull, r) => r
     case REUnion(r, RENull) => r
     case REUnion(r1, r2) => r1.minusNull | r2.minusNull
     case REStar(r) => r.+
     case _ => this
+
+  /** Tests if this language is a singleton. */
+  def isSingleton: Boolean = this match
+    case RENone => false
+    case RENull => true
+    case RELit(cs) => cs.isSingleton
+    case REConcat(r1, r2) => r1.isSingleton && r2.isSingleton
+    case REUnion(_, _) => false
+    case REStar(_) => false
 
   /** Returns the ''first set'': all possible leading characters. */
   def first: CharSet = this match
@@ -109,7 +121,7 @@ enum RegEx:
     case REConcat(r1, r2) => r2.reverse ++ r1.reverse
     case REUnion(r1, r2) => r1.reverse | r2.reverse
     case REStar(r) => r.reverse.*
-    case _ => this
+    case r => r
 
   /** Returns the Brzozowski derivative at the character `c`. */
   def derivative(c: Char): RegEx = this match
@@ -123,7 +135,11 @@ enum RegEx:
     case REStar(r) => r.derivative(c) ++ this
 
   /** Returns the Brzozowski derivative at the string `t`. */
-  def derivative(t: String): RegEx = if t.isEmpty then this else derivative(t.head).derivative(t.tail)
+  def derivative(t: String): RegEx =
+    var r = this
+    for c <- t do
+      r = r.derivative(c)
+    r
 
   /** Returns the Brzozowski derivative at any char. */
   def derivativeAny: RegEx = this match
@@ -137,13 +153,30 @@ enum RegEx:
     case REStar(r) => r.derivativeAny ++ this
 
   /** Tests if the given string `s` is a member. */
-  def contains(s: String): Boolean = derivative(s).nullable
+  def contains(s: String): Boolean =
+    if s.isEmpty then nullable else derivative(s).nullable
 
   /** Tests if this RE is subset of `that`. */
   infix def subsetOf(that: RegEx): Boolean = RESub.check(this, that)
 
   /** Tests if this RE is semantically equivalent to `that`. */
   infix def equiv(that: RegEx): Boolean = this.subsetOf(that) && that.subsetOf(this)
+
+  def toCNF: List[RegEx] = this match
+    case REConcat(r1, r2) => r1.toCNF ++ r2.toCNF
+    case r => List(r)
+
+  def toDNF: List[RegEx] = this match
+    case REUnion(r1, r2) => r1.toDNF ++ r2.toDNF
+    case r => List(r)
+
+  def toJavaRegex: String = this match
+    case RENone => "[]"
+    case RENull => ""
+    case RELit(cs) => cs.toJavaRegex
+    case REConcat(r1, r2) => r1.toJavaRegex + r2.toJavaRegex
+    case REUnion(r1, r2) => "(" + r1.toJavaRegex + "|" + r2.toJavaRegex + ")"
+    case REStar(r) => "(" + r.toJavaRegex + ")*"
 
   override def toString: String = this match
     case RENone => "∅"

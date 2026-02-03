@@ -44,6 +44,27 @@ class Unpickler(path: os.Path):
     val endOffset = m("end_col_offset").int
     Location(doc, Position(startLine - 1, startOffset), Position(endLine - 1, endOffset))
 
+  private def functionDef: Parser[Option[FunctionDef]] = m =>
+    val loc = m |> location
+    val f = m("name").str
+    val fOffset = m("name_col_offset").int
+    val ident = Ident(f).setLocation(
+      Location(doc, Position(loc.start.row, fOffset), Position(loc.start.row, fOffset + f.length)))
+    val args = m("args") |> arguments
+    var body = m("body") |> list(localStmt)
+    if body.nonEmpty then
+      body.head match
+        case ExprStmt(Constant(_: String)) => body = body.tail // remove docstring
+        case _ =>
+    val decorators = m("decorator_list").arr
+    if decorators.nonEmpty then
+      issuer.report(Unsupported("decorator", decorators.head |> location))
+    val returns = m("returns").opt.map(expr)
+    val typeParams = m("type_params").arr
+    if typeParams.nonEmpty then
+      issuer.report(Unsupported("type param", typeParams.head |> location))
+    Some(FunctionDef(ident, args, body, returns).setLocation(loc))
+
   private def topStmt: Parser[Option[TopStmt]] = json =>
     val m = json.obj
     val loc = m |> location
@@ -53,22 +74,8 @@ class Unpickler(path: os.Path):
         val ident = Ident(name.id).copyLocation(name)
         val value = m("value") |> expr
         Some(TypeAlias(ident, value).setLocation(loc))
-      case "FunctionDef" =>
-        val f = m("name").str
-        val fOffset = m("name_col_offset").int
-        val ident = Ident(f).setLocation(
-          Location(doc, Position(loc.start.row, fOffset), Position(loc.start.row, fOffset + f.length)))
-        val args = m("args") |> arguments
-        val body = m("body") |> list(localStmt)
-        val decorators = m("decorator_list").arr
-        if decorators.nonEmpty then
-          issuer.report(Unsupported("decorator", decorators.head |> location))
-        val returns = m("returns").opt.map(expr)
-        val typeParams = m("type_params").arr
-        if typeParams.nonEmpty then
-          issuer.report(Unsupported("type param", typeParams.head |> location))
-        Some(FunctionDef(ident, args, body, returns).setLocation(loc))
-      case "Import" | "ImportFrom" =>
+      case "FunctionDef" => m |> functionDef
+      case "Import" | "ImportFrom" | "ClassDef" =>
         None
       case other =>
         issuer.report(Unsupported(other, loc))
@@ -127,7 +134,7 @@ class Unpickler(path: os.Path):
         val value = m("value") |> expr
         Assign(target, mkInfix(attr, target, value)).setLocation(loc)
       case "Raise" => // regarded as `assert False`
-        Assert(Constant(false).setLocation(loc)).setLocation(loc)
+        Raise().setLocation(loc)
       case "Assert" =>
         val test = m("test") |> expr
         Assert(test).setLocation(loc)
@@ -145,6 +152,22 @@ class Unpickler(path: os.Path):
         if orElse.nonEmpty then
           issuer.report(Unsupported("else block in while-statement", orElse.head.loc))
         While(test, body).setLocation(loc)
+      case "For" =>
+        val target = m("target") |> expr
+        val iter = m("iter") |> expr
+        val body = m("body") |> list(localStmt)
+        val orElse = m("orelse") |> list(localStmt)
+        if orElse.nonEmpty then
+          issuer.report(Unsupported("else block in for-statement", orElse.head.loc))
+        (target, iter) match
+          case (name: Name, call@Call(Name("range"), rangeArgs)) =>
+            val start = if rangeArgs.length >= 2 then rangeArgs.head else Constant(0).setLocation(call.loc)
+            val end = if rangeArgs.length == 1 then rangeArgs.head else rangeArgs(1)
+            val step = if rangeArgs.length == 3 then rangeArgs(2) else Constant(1).setLocation(call.loc)
+            For(name, start, end, step, body).setLocation(loc)
+          case _ =>
+            issuer.report(Unsupported("for-statement, expected: for i in range(..., ...)", loc))
+            Pass().setLocation(loc)
       case "Break" =>
         Break().setLocation(loc)
       case "Return" =>
@@ -153,6 +176,19 @@ class Unpickler(path: os.Path):
       case "Expr" =>
         val value = m("value") |> expr
         ExprStmt(value).setLocation(loc)
+      case "Try" =>
+        val body = m("body") |> list(localStmt)
+        val orElse = m("orelse") |> list(localStmt)
+        val finalBody = m("finalbody") |> list(localStmt)
+        if orElse.nonEmpty then
+          issuer.report(Unsupported("else block in try-statement", orElse.head.loc))
+        if finalBody.nonEmpty then
+          issuer.report(Unsupported("finally block in try-statement", finalBody.head.loc))
+        Block(body.toList).setLocation(loc)
+      case "FunctionDef" =>
+        m |> functionDef match
+          case Some(f) => f
+          case None => Pass()
       case other =>
         issuer.report(Unsupported(other, loc))
         Pass()
@@ -175,6 +211,10 @@ class Unpickler(path: os.Path):
       case "Tuple" =>
         val values = m("elts") |> list(expr)
         TupleExpr(values).setLocation(loc)
+      case "Dict" =>
+        val keys = m("keys") |> list(expr)
+        val values = m("values") |> list(expr)
+        DictExpr(keys, values).setLocation(loc)
       case "Name" =>
         val id = m("id").str
         Name(id).setLocation(loc)
@@ -236,6 +276,9 @@ class Unpickler(path: os.Path):
             Slice(lower, upper).setLocation(loc1)
           else m("slice") |> expr
         Subscript(value, slice).setLocation(loc)
+      case other =>
+        issuer.report(Unsupported(other, loc))
+        Name(other)
 
   private def binOp: Parser[String] = json =>
     json.obj("_constr").str match
@@ -264,16 +307,12 @@ class Unpickler(path: os.Path):
 
   private def mkCmp(cmpConstr: String, left: Expr, right: Expr): Expr =
     cmpConstr match
-      case "Eq" => mkInfix("__eq__", left, right)
-      case "NotEq" => mkInfix("__ne__", left, right)
+      case "Eq" | "Is" => mkInfix("__eq__", left, right)
+      case "NotEq" | "IsNot" => mkInfix("__ne__", left, right)
       case "Lt" => mkInfix("__lt__", left, right)
       case "LtE" => mkInfix("__le__", left, right)
       case "Gt" => mkInfix("__gt__", left, right)
       case "GtE" => mkInfix("__ge__", left, right)
-      case "Is" | "IsNot" =>
-        val err = mkInfix("__is__", left, right)
-        issuer.report(Unsupported("is", err.loc))
-        err
       case "In" => mkInfix("__contains__", right, left)
       case "NotIn" =>
         val e = mkInfix("__contains__", right, left)

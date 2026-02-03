@@ -37,6 +37,14 @@ object util:
       val endTime = mxBean.getCurrentThreadCpuTime
       (endTime - startTime) / 1.0e6
 
+  object Stopwatch:
+    def time[R](block: => R): (R, Double) =
+      val sw = new Stopwatch
+      sw.start()
+      val result = block
+      val elapsed = sw.stop()
+      (result, elapsed)
+
   enum Aggregator:
     case AllCount
     case AllTime

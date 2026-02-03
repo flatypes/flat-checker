@@ -30,30 +30,8 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
           t <- target
           if !r.contains(t)
         yield NE(str, t)
-      val l2 = if r.isSmall then mkOr(r.words.map(EQ(str, _))) else TypeTest(str, LangType(r))
-      l1.toList :+ l2
-
-  extension (re: RegEx)
-    /** Tests if this regular language is *small*: free of Kleene stars and big CS. */
-    private def isSmall: Boolean = re match
-      case RENone => true
-      case RENull => true
-      case RELit(cs) => cs.size <= 20
-      case REConcat(r1, r2) => r1.isSmall && r2.isSmall
-      case REUnion(r1, r2) => r1.isSmall && r2.isSmall
-      case REStar(_) => false
-
-    private def words: Set[String] = re match
-      case RENone => Set.empty
-      case RENull => Set("")
-      case RELit(cs) => cs.toSet.map(_.toString)
-      case REConcat(r1, r2) =>
-        for
-          w1 <- r1.words
-          w2 <- r2.words
-        yield w1 + w2
-      case REUnion(r1, r2) => r1.words | r2.words
-      case REStar(_) => Set.empty
+      val l2 = if r.isSmall then List(mkOr(r.words.map(EQ(str, _)))) else Nil // TypeTest(str, LangType(r))
+      l1.toList ++ l2
 
   final case class InferTest(test: StrTest) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
@@ -136,3 +114,33 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
 
   /** Tests if the first index of `c1` is always ''less than'' the first occurrence of `c2`. */
   private def findLT(re: RegEx, c1: Char, c2: Char): Boolean = !re.findPrefix(c1).alphabet.contains(c2)
+
+  final case class InferToNumber(str: Expr, base: Int) extends Sketch:
+    def apply(using ctx: PrfCtx): List[Expr] =
+      val inferer = new Inferer
+      val r = inferer.inferLang(str)
+      val interval = r.toNumber(base)
+      List(inInterval(StrToInt(str, base), interval))
+
+  final case class InferToSet(str: Expr) extends Sketch:
+    def apply(using ctx: PrfCtx): List[Expr] =
+      val inferer = new Inferer
+      val r = inferer.inferLang(str)
+      val chars = r.alphabet
+      val elems = chars.toSet.toList.sorted.map(c => Const(c.toString))
+      List(EQ(StrToSet(str), SetExpr(elems)))
+
+  final case class InferStrList(expr: Expr) extends Sketch:
+    def apply(using ctx: PrfCtx): List[Expr] =
+      val inferer = new Inferer
+      inferer.inferStrList(expr) match
+        case r: RegEx => if r.isSmall then List(mkOr(r.words.map(EQ(expr, _)))) else Nil
+        case interval: Interval => List(inInterval(expr, interval))
+        case inferer.PossibleIndices(left, right, notFound, lst) =>
+          var ors1 = left.map(EQ(expr, _))
+          var ors2 = right.map(i => EQ(expr, SUB(ListLen(lst), i)))
+          if notFound then
+            ors1 = EQ(expr, -1) :: ors1
+            ors2 = EQ(expr, -1) :: ors2
+          List(mkOr(ors1), mkOr(ors2))
+        case _ => Nil

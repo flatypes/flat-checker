@@ -46,6 +46,12 @@ final case class VCAssert(cond: Expr)(using loc: Location) extends VCGoal:
   def diagnostic(msg: String): Diagnostic =
     Diagnostic(loc, "Assertion may fail", msg)
 
+final case class VCHint(cond: Expr)(using loc: Location) extends VCGoal:
+  def subst(m: Map[String, Expr]): VC = copy(cond = cond.subst(m))
+
+  def diagnostic(msg: String): Diagnostic =
+    Diagnostic(loc, "Hint may be wrong", msg)
+
 final case class VCInvPre(cond: Expr)(using loc: Location) extends VCGoal:
   def subst(m: Map[String, Expr]): VC = copy(cond = cond.subst(m))
 
@@ -109,6 +115,8 @@ object VCGenerator:
       mkVCGroup(checkSides(e), vcType, post.subst(Map(x -> e)))
     case Assert(b) =>
       mkVCGroup(checkSides(b), VCAssert(b)(using b.loc), post)
+    case Hint(b) =>
+      mkVCGroup(checkSides(b), VCHint(b)(using b.loc), VCImp(b, post))
     case ShowType(e) =>
       mkVCGroup(checkSides(e), VCInfer(e)(using e.loc), post)
     case IfStmt(b, s1, s2) =>

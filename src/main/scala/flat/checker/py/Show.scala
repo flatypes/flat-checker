@@ -10,6 +10,6 @@ extension (typ: Type)
     case BoolSort => "bool"
     case StrSort => "str"
     case TupleSort(ss) => s"tuple[${ss.map(_.show).mkString(", ")}]"
-    case ArraySort(s) => s"list[${s.show}]"
+    case ListSort(s) => s"list[${s.show}]"
     case FunSort(ss, s) => s"Callable[[${ss.map(_.show).mkString(", ")}], ${s.show}]"
     case _ => typ.base.show
