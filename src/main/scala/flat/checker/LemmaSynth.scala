@@ -29,11 +29,11 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
         for
           t <- target
           if !r.contains(t)
-        yield NE(str, t)
-      val l2 = if r.isSmall then List(mkOr(r.words.map(EQ(str, _)))) else Nil // TypeTest(str, LangType(r))
+        yield NE(str, Const(t))
+      val l2 = if r.isSmall then List(mkOr(r.words.map(w => EQ(str, Const(w))))) else Nil // str in r
       l1.toList ++ l2
 
-  final case class InferTest(test: StrTest) extends Sketch:
+  final case class InferTest(test: Expr) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
       val inferer = new Inferer
       inferer.inferTest(test) match
@@ -43,9 +43,9 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
 
   final case class InferLength(str: Expr) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
-      val e = Length(str)
+      val e = StringLength(str)
       ctx.lookupSuffixLang(str) match
-        case Some((eb, r)) if ctx.isValid(And(GE(eb, 0), LT(eb, e))) =>
+        case Some((eb, r)) if ctx.isValid(And(GE(eb, Const(0)), LT(eb, e))) =>
           val r1 = r.narrowByLength(Interval(lb = 1))
           List(inInterval(SUB(e, eb), r1.length))
         case _ =>
@@ -54,22 +54,22 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
           if len == Interval(lb = 0) then Nil else List(inInterval(e, len))
 
   private def inInterval(expr: Expr, interval: Interval): Expr = interval match
-    case Interval(n: Int, Inf) => GE(expr, n)
-    case Interval(n1: Int, n2: Int) if n1 == n2 => EQ(expr, n1)
-    case Interval(n1: Int, n2: Int) => And(GE(expr, n1), LE(expr, n2))
+    case Interval(n: Int, Inf) => GE(expr, Const(n))
+    case Interval(n1: Int, n2: Int) if n1 == n2 => EQ(expr, Const(n1))
+    case Interval(n1: Int, n2: Int) => And(GE(expr, Const(n1)), LE(expr, Const(n2)))
     case Interval(Inf, _) => assert(false)
 
   final case class InferFind(str: Expr, pat: String) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
-      val idx = Find(str, pat)
+      val idx = StringIndexOf(str, Const(pat))
       val inferer = new Inferer
       val (found, indices) = inferer.inferFind(str, pat)
       found match
         case BoolSet.True => indices.map(inIndex(idx, _, str))
-        case BoolSet.False => List(EQ(idx, -1))
+        case BoolSet.False => List(EQ(idx, Const(-1)))
         case BoolSet.All =>
           indices.filterNot(_ == IndexInterval(IndexL(0), IndexR(1)))
-            .map(i => Or(EQ(idx, -1), inIndex(idx, i, str)))
+            .map(i => Or(EQ(idx, Const(-1)), inIndex(idx, i, str)))
 
   private def inIndex(idx: Expr, index: Index, str: Expr): Expr = index match
     case _: BasicIndex | IndexShifted => EQ(idx, index.concretize(str))
@@ -92,9 +92,9 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
 
   /** |str| - idx in interval */
   private def negInInterval(idx: Expr, str: Expr, interval: Interval): Expr = interval match
-    case Interval(n: Int, Inf) => LE(idx, SUB(Length(str), n))
-    case Interval(n1: Int, n2: Int) if n1 == n2 => EQ(idx, SUB(Length(str), n1))
-    case Interval(n1: Int, n2: Int) => And(GE(idx, SUB(Length(str), n2)), LE(idx, SUB(Length(str), n1)))
+    case Interval(n: Int, Inf) => LE(idx, SUB(StringLength(str), Const(n)))
+    case Interval(n1: Int, n2: Int) if n1 == n2 => EQ(idx, SUB(StringLength(str), Const(n1)))
+    case Interval(n1: Int, n2: Int) => And(GE(idx, SUB(StringLength(str), Const(n2))), LE(idx, SUB(StringLength(str), Const(n1))))
     case Interval(Inf, _) => assert(false)
 
   final case class InferIndexCmpFind(idx: Expr, str: Expr, c: Char) extends Sketch:
@@ -103,12 +103,12 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
       val r = inferer.inferLang(str)
       val ls = ListBuffer.empty[Expr]
       ctx.premises.foreach:
-        case Cmp(_, e1, Find(e2, Const(t: String))) if e1 == idx && e2 == str && t.length == 1 && t.head != c =>
+        case Cmp(_, e1, StringIndexOf(e2, Const(t: String))) if e1 == idx && e2 == str && t.length == 1 && t.head != c =>
           val c1 = t.head
           if findLT(r, c, c1) then
-            ls += LT(Find(str, c.toString), Find(str, c1.toString))
+            ls += LT(StringIndexOf(str, Const(c.toString)), StringIndexOf(str, Const(c1.toString)))
           else if findLT(r, c1, c) then
-            ls += LT(Find(str, c1.toString), Find(str, c.toString))
+            ls += LT(StringIndexOf(str, Const(c1.toString)), StringIndexOf(str, Const(c.toString)))
         case _ =>
       ls.toList
 
@@ -120,7 +120,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
       val inferer = new Inferer
       val r = inferer.inferLang(str)
       val interval = r.toNumber(base)
-      List(inInterval(StrToInt(str, base), interval))
+      List(inInterval(StringToInt(str, Const(base)), interval))
 
   final case class InferToSet(str: Expr) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
@@ -128,19 +128,19 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
       val r = inferer.inferLang(str)
       val chars = r.alphabet
       val elems = chars.toSet.toList.sorted.map(c => Const(c.toString))
-      List(EQ(StrToSet(str), SetExpr(elems)))
+      List(EQ(StringToSet(str), SetOf(elems)))
 
   final case class InferStrList(expr: Expr) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
       val inferer = new Inferer
       inferer.inferStrList(expr) match
-        case r: RegEx => if r.isSmall then List(mkOr(r.words.map(EQ(expr, _)))) else Nil
+        case r: RegEx => if r.isSmall then List(mkOr(r.words.map(w => EQ(expr, Const(w))))) else Nil
         case interval: Interval => List(inInterval(expr, interval))
         case inferer.PossibleIndices(left, right, notFound, lst) =>
-          var ors1 = left.map(EQ(expr, _))
-          var ors2 = right.map(i => EQ(expr, SUB(ListLen(lst), i)))
+          var ors1 = left.map(i => EQ(expr, Const(i)))
+          var ors2 = right.map(i => EQ(expr, SUB(SeqLength(lst), Const(i))))
           if notFound then
-            ors1 = EQ(expr, -1) :: ors1
-            ors2 = EQ(expr, -1) :: ors2
+            ors1 = EQ(expr, Const(-1)) :: ors1
+            ors2 = EQ(expr, Const(-1)) :: ors2
           List(mkOr(ors1), mkOr(ors2))
         case _ => Nil

@@ -3,8 +3,9 @@ package flat.checker
 import flat.Ops.CmpOp.*
 import flat.checker.Analyzer.{collectBreakConds, collectModifiedVars, guessInvariants}
 import flat.checker.ExprOps.conjuncts
-import flat.checker.Printer.ppType
 import flat.checker.ast.*
+import flat.checker.ast.Printer.ppDomain
+import flat.regex.Domain
 import flat.{Diagnostic, Location}
 
 import scala.collection.mutable
@@ -32,13 +33,13 @@ sealed trait VCGoal extends VC:
 
   def diagnostic(msg: String): Diagnostic
 
-final case class VCType(value: Expr, expected: Type)(using loc: Location) extends VCGoal:
+final case class VCType(value: Expr, expected: Domain)(using loc: Location) extends VCGoal:
   def subst(m: Map[String, Expr]): VC = copy(value = value.subst(m))
 
-  def cond: Expr = TypeTest(value, expected)
+  def cond: Expr = RefinedBy(value, expected)
 
   def diagnostic(msg: String): Diagnostic =
-    Diagnostic(loc, "Type may mismatch", s"expected: ${ppType(expected)}\n" + msg)
+    Diagnostic(loc, "Type may mismatch", s"expected: ${ppDomain(expected)}\n" + msg)
 
 final case class VCAssert(cond: Expr)(using loc: Location) extends VCGoal:
   def subst(m: Map[String, Expr]): VC = copy(cond = cond.subst(m))
@@ -67,7 +68,7 @@ final case class VCInvPost(cond: Expr)(using loc: Location) extends VCGoal:
 final case class VCIdxInBound(idx: Expr, str: Expr)(using loc: Location) extends VCGoal:
   def subst(m: Map[String, Expr]): VC = copy(idx = idx.subst(m), str = str.subst(m))
 
-  def cond: Expr = And(LE(0, idx), LT(idx, Length(str)))
+  def cond: Expr = And(LE(Const(0), idx), LT(idx, StringLength(str)))
 
   def diagnostic(msg: String): Diagnostic =
     Diagnostic(loc, "Index may be out of bound", msg)
@@ -75,7 +76,7 @@ final case class VCIdxInBound(idx: Expr, str: Expr)(using loc: Location) extends
 final case class VCIdxNonneg(idx: Expr)(using loc: Location) extends VCGoal:
   def subst(m: Map[String, Expr]): VC = copy(idx = idx.subst(m))
 
-  def cond: Expr = GE(idx, 0)
+  def cond: Expr = GE(idx, Const(0))
 
   def diagnostic(msg: String): Diagnostic =
     Diagnostic(loc, "Index may be negative", msg)
@@ -98,21 +99,18 @@ final class Fresh:
 object VCGenerator:
   def generate(funDef: FunDef): VC =
     guessInvariants(funDef.body)
-    val vcPre = wlp(funDef.body, VCTrue)(using funDef.lCtx, new Fresh, VCTrue)
-    funDef.params.foldRight(vcPre):
-      case (VarDef(x, t), vc) => t.constraint match
-        case Some(b) => VCImp(b.subst(Map("_" -> Var(x))), vc)
-        case None => vc
+    val post = mkVCGroup(Nil, funDef.ensures.map(e => VCAssert(e)(using e.loc)) *)
+    val vc = wlp(funDef.body, post)(using funDef.lCtx, new Fresh, VCTrue)
+    VCImp(mkAnd(funDef.requires), vc)
 
-  private def wlp(stmt: Stmt, post: VC)(using ctx: Map[String, Type], fresh: Fresh, vcInv: VC): VC = stmt match
+  private def wlp(stmt: Stmt, post: VC)(using ctx: Map[String, Sort], fresh: Fresh, vcInv: VC): VC = stmt match
     case Skip() => post
     case SeqStmt(s1, s2) => wlp(s1, wlp(s2, post))
     case Assume(b) =>
       mkVCGroup(checkSides(b), VCImp(b, post))
     case Assign(x, e) =>
       val t = ctx(x)
-      val vcType = if t.constraint.isEmpty then VCTrue else VCType(e, t)(using e.loc)
-      mkVCGroup(checkSides(e), vcType, post.subst(Map(x -> e)))
+      mkVCGroup(checkSides(e), post.subst(Map(x -> e)))
     case Assert(b) =>
       mkVCGroup(checkSides(b), VCAssert(b)(using b.loc), post)
     case Hint(b) =>
@@ -127,7 +125,7 @@ object VCGenerator:
       mkVCGroup(vcSides, vcThen, vcElse)
     case loop@While(b, s) =>
       val bis = loop.invariants.toList
-      val m = Map.from(for x <- collectModifiedVars(s) yield x -> Var(fresh(x)))
+      val m = Map.from(for x <- collectModifiedVars(s) yield x -> Var(fresh(x))(ctx(x).base))
       val vcInvSides =
         bis.indices.map(i => VCImp(mkAnd(bis.take(i)), VCGroup(sides = checkSides(bis(i)))).subst(m)).toList
       val vcSides = checkSides(b).map(_.subst(m))
@@ -144,9 +142,9 @@ object VCGenerator:
     expr.traverse:
       case CharAt(es, ei) =>
         goals += VCIdxInBound(ei, es)(using ei.loc)
-      case Substr(es, ei, ej) =>
+      case Substring(es, ei, ej) =>
         if ei != Const(0) then
           goals += VCIdxNonneg(ei)(using ei.loc)
-        if ej != Length(es) then
+        if ej != StringLength(es) then
           goals += VCIdxNonneg(ej)(using ej.loc)
     goals.toList

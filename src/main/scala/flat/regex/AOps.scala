@@ -370,7 +370,7 @@ extension (trace: Trace)
           if !r.isEmpty
         yield trace.updated(i, r)
 
-final class AList(val traces: List[List[RegEx]]):
+final class AList(val traces: List[List[RegEx]]) extends Domain:
   def isEmpty: Boolean = traces.isEmpty
 
   def length: Interval =
@@ -405,6 +405,8 @@ final class AList(val traces: List[List[RegEx]]):
 
   def dropIndexOf(s: String, fromLeft: Int, untilRight: Int): AList =
     AList(traces.flatMap(_.dropIndexOf(s, fromLeft, untilRight)))
+
+  def ++(that: AList): AList = AList(for t1 <- traces; t2 <- that.traces yield t1 ++ t2)
 
   def append(r: RegEx): AList = AList(traces.map(_ :+ r))
 

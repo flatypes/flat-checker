@@ -1,22 +1,23 @@
 package flat.checker.py
 
 import flat.Issuer
-import flat.checker.ast
+import flat.Ops.CmpOp.*
+import flat.checker.ast as ir
 import flat.checker.ast.ArithOp.ADD
-import flat.checker.ast.CmpOp.*
+import flat.checker.py.Type.*
 import flat.checker.py.ast.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 
-class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: VarManager):
-  def checkBody(body: Seq[LocalStmt], ctx: LCtx)(using insideLoop: Boolean): (List[ast.Stmt], LCtx) =
-    val out = ListBuffer.empty[ast.Stmt]
+class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: Type, vm: VarManager):
+  def checkBody(body: Seq[LocalStmt], ctx: LCtx)(using insideLoop: Boolean): (List[ir.Stmt], LCtx) =
+    val out = ListBuffer.empty[ir.Stmt]
     val checker = Checker(out)
     val newCtx = body.foldLeft(ctx) { (c, s) => s.accept(checker, c) }
     (out.toList, newCtx)
 
-  private class Checker(out: ListBuffer[ast.Stmt])(using insideLoop: Boolean) extends NodeVisitor[LCtx, LCtx]:
+  private class Checker(out: ListBuffer[ir.Stmt])(using insideLoop: Boolean) extends NodeVisitor[LCtx, LCtx]:
     private val annotChecker = new AnnotChecker
 
     import annotChecker.*
@@ -24,15 +25,15 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
     private val exprChecker = ExprChecker(out)
     import exprChecker.*
 
-    private def checkAssign(left: Expr, right: ast.Expr, typ: ast.Type, ctx: LCtx): LCtx =
+    private def checkAssign(left: Expr, right: ir.Expr, typ: Type, ctx: LCtx): LCtx =
       left match
         case name@Name(x) =>
           ctx.get(x) match
             case Some(id) => // assignment
-              out += ast.Assign(id, right)
+              out += ir.Assign(id, right)
             case None => // declaration
               val id = declare(name.asIdent, typ, ctx)
-              out += ast.Assign(id, right)
+              out += ir.Assign(id, right)
               return ctx + (x -> id)
         case _ =>
           ???
@@ -45,20 +46,20 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
         case TupleExpr(values) =>
           val (t, e) = inferType(node.value, ctx)
           t.base match
-            case ast.StrSort =>
-              val id = vm.declare(ast.StrSort)
-              out += ast.Assign(id, e)
-              out += ast.Assert(ast.Cmp(EQ,
-                ast.Length(ast.Var(id).withSort(ast.StrSort)),
-                ast.Const(values.length)).fillLocation(node.loc))
+            case StringType =>
+              val id = vm.declare(StringType)
+              out += ir.Assign(id, e)
+              out += ir.Assert(ir.Cmp(EQ,
+                ir.StringLength(ir.Var(id)(ir.StringSort)),
+                ir.Const(values.length)).fillLocation(node.loc))
               var newCtx = ctx
               for i <- values.indices do
                 newCtx = checkAssign(values(i),
-                  ast.CharAt(ast.Var(id).withSort(ast.StrSort), ast.Const(i)).fillLocation(values(i).loc),
+                  ir.CharAt(ir.Var(id)(ir.StringSort), ir.Const(i)).fillLocation(values(i).loc),
                   // NOTE: to skip checking the binder has type char
-                  ast.StrSort, newCtx)
+                  StringType, newCtx)
               return newCtx
-            case ast.TupleSort(_) if node.value.isInstanceOf[TupleExpr] =>
+            case TupleType(_) if node.value.isInstanceOf[TupleExpr] =>
               val tupleValues = node.value.asInstanceOf[TupleExpr].values
               if tupleValues.length != values.length then
                 issuer.report(TypeError("sizes of tuple on both sides do not match", node.loc))
@@ -73,11 +74,11 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
           ctx.get(x) match
             case Some(id) => // assignment
               val e = checkType(node.value, vm.getType(id), ctx)
-              out += ast.Assign(id, e)
+              out += ir.Assign(id, e)
             case None => // declaration
               val (t, e) = inferType(node.value, ctx)
               val id = declare(name.asIdent, t, ctx)
-              out += ast.Assign(id, e)
+              out += ir.Assign(id, e)
               return ctx + (x -> id)
         case Attribute(_, _) =>
           issuer.report(Unsupported("attribute", node.target.loc))
@@ -90,7 +91,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
                     case Some(id) =>
                       val call = Call(Attribute(name, "__setitem__"), Seq(expr, node.value))
                       val (_, e) = inferType(call, ctx)
-                      ast.Assign(id, e)
+                      ir.Assign(id, e)
                     case None =>
                       issuer.report(Undefined(name.asIdent))
                 case _ =>
@@ -108,45 +109,45 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
           val id = declare(node.ident, t, ctx)
           for value <- node.init do
             val e = checkType(value, vm.getType(id), ctx)
-            out += ast.Assign(id, e)
+            out += ir.Assign(id, e)
           ctx + (node.ident.name -> id)
         case Some(_) =>
           issuer.report(Redefined(node.ident))
           ctx
 
-    private def declare(ident: Ident, typ: ast.Type, ctx: LCtx): String = vm.declare(typ, ident)
+    private def declare(ident: Ident, typ: Type, ctx: LCtx): String = vm.declare(typ, ident)
 
     override def visitAssert(node: Assert, ctx: LCtx): LCtx =
-      val e = checkType(node.test, ast.BoolSort, ctx)
-      out += ast.Assert(e)
+      val e = checkType(node.test, BoolType, ctx)
+      out += ir.Assert(e)
       ctx
 
     override def visitRaise(node: Raise, ctx: LCtx): LCtx =
-      out += ast.Assert(ast.Const(false).fillLocation(node.loc))
-      out += ast.Return()
+      out += ir.Assert(ir.Const(false).fillLocation(node.loc))
+      out += ir.Return()
       ctx
 
     override def visitPass(node: Pass, ctx: LCtx): LCtx =
       ctx
 
     override def visitIf(node: If, ctx: LCtx): LCtx =
-      val e = checkType(node.test, ast.BoolSort, ctx)
+      val e = checkType(node.test, BoolType, ctx)
       val (b1, ctx1) = checkBody(node.body, ctx)
       val (b2, ctx2) = checkBody(node.orElse, ctx1)
-      out += ast.IfStmt(e, ast.mkStmtList(b1), ast.mkStmtList(b2))
+      out += ir.IfStmt(e, ir.mkStmtList(b1), ir.mkStmtList(b2))
       ctx2
 
     override def visitWhile(node: While, ctx: LCtx): LCtx =
-      val e = checkType(node.test, ast.BoolSort, ctx)
+      val e = checkType(node.test, BoolType, ctx)
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, newCtx) = checkBody(realBody, ctx)(using insideLoop = true)
-      if b.last.isInstanceOf[ast.Break] then // this while loop is just an if-statement
-        out += ast.IfStmt(e, ast.mkStmtList(b.dropRight(1)), ast.Skip())
+      if b.last.isInstanceOf[ir.Break] then // this while loop is just an if-statement
+        out += ir.IfStmt(e, ir.mkStmtList(b.dropRight(1)), ir.Skip())
         if invNodes.nonEmpty then
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else
-        val loop = ast.While(e, ast.mkStmtList(b))
-        val inv = for expr <- invNodes yield checkType(expr, ast.BoolSort, ctx, ignorePre = true)
+        val loop = ir.While(e, ir.mkStmtList(b))
+        val inv = for expr <- invNodes yield checkType(expr, BoolType, ctx, ignorePre = true)
         loop.invariants ++= inv
         out += loop
       newCtx
@@ -161,91 +162,69 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: ast.Type, vm: Va
     override def visitFor(node: For, ctx: LCtx): LCtx =
       val bodyCtx = ctx.get(node.target.id) match
         case Some(id) => // assignment
-          if vm.getType(id) != ast.IntSort then
+          if vm.getType(id) != IntType then
             issuer.report(TypeMismatch("int", vm.getType(id).show, node.target.loc))
           ctx
         case None => // declaration
-          val id = declare(node.target.asIdent, ast.IntSort, ctx)
+          val id = declare(node.target.asIdent, IntType, ctx)
           ctx + (node.target.id -> id)
-      val i = ast.Var(node.target.id).withSort(ast.IntSort)
+      val i = ir.Var(node.target.id)(ir.IntSort)
       // i = start
-      out += ast.Assign(i.name, checkType(node.start, ast.IntSort, ctx))
+      out += ir.Assign(i.name, checkType(node.start, IntType, ctx))
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, newCtx) = checkBody(realBody, bodyCtx)(using insideLoop = true)
-      val inv = for expr <- invNodes yield checkType(expr, ast.BoolSort, bodyCtx, ignorePre = true)
+      val inv = for expr <- invNodes yield checkType(expr, BoolType, bodyCtx, ignorePre = true)
       // while i < end:
       //   ...
       //   i = i + step
-      val loop = ast.While(ast.Cmp(LT, i, checkType(node.end, ast.IntSort, ctx)).setLocation(node.end.loc),
-        ast.mkStmtList(b :+ ast.Assign(i.name,
-          ADD(i, checkType(node.step, ast.IntSort, ctx)).setLocation(node.step.loc))))
+      val loop = ir.While(ir.Cmp(LT, i, checkType(node.end, IntType, ctx)).setLocation(node.end.loc),
+        ir.mkStmtList(b :+ ir.Assign(i.name,
+          ADD(i, checkType(node.step, IntType, ctx)).setLocation(node.step.loc))))
       loop.invariants ++= inv
       out += loop
       newCtx
 
     override def visitBreak(node: Break, ctx: LCtx): LCtx =
       if insideLoop then
-        out += ast.Break()
+        out += ir.Break()
       else
         issuer.report(SyntaxError("'break' outside loop", node.loc))
       ctx
 
     override def visitReturn(node: Return, ctx: LCtx): LCtx =
-      if returnType == ast.UnitSort then
+      if returnType == UnitType then
         if node.value.isDefined then
           issuer.report(TypeError("return value in function with no return type", node.loc))
-        ast.mkUnit
+        ir.mkUnit
       else
         val e = node.value match
           case Some(expr) =>
             val e = checkType(expr, returnType, ctx)
-            out += ast.Assign("return", e)
+            out += ir.Assign("return", e)
           case None =>
             issuer.report(TypeError("missing return value", node.loc))
-      out += ast.Return()
+      out += ir.Return()
       ctx
 
     override def visitExprStmt(node: ExprStmt, ctx: LCtx): LCtx =
       node.expr match
         case Call(Name("show_type"), Seq(arg)) =>
-          val e = checkType(arg, ast.StrSort, ctx)
-          out += ast.ShowType(e)
+          val e = checkType(arg, StringType, ctx)
+          out += ir.ShowType(e)
           ctx
         case Call(Name("assume"), Seq(arg)) =>
-          val e = checkType(arg, ast.BoolSort, ctx, ignorePre = true)
-          out += ast.Assume(e)
+          val e = checkType(arg, BoolType, ctx, ignorePre = true)
+          out += ir.Assume(e)
           ctx
         case Call(Name("hint"), Seq(arg)) =>
-          val e = checkType(arg, ast.BoolSort, ctx, ignorePre = true)
-          out += ast.Hint(e)
+          val e = checkType(arg, BoolType, ctx, ignorePre = true)
+          out += ir.Hint(e)
           ctx
         case _ =>
           val (t, e) = inferType(node.expr, ctx)
           val freshId = vm.declare(t)
-          out += ast.Assign(freshId, e)
+          out += ir.Assign(freshId, e)
           ctx
-
-    override def visitFunctionDef(node: FunctionDef, ctx: LCtx): LCtx =
-      if node.ident.name.startsWith("lemma") then
-        val argNames = node.args.map(_.ident.name)
-        for
-          i <- argNames.indices
-          x = argNames(i)
-          if argNames.take(i - 1).contains(x)
-        do issuer.report(Redefined(node.args(i).ident))
-        val argTypes = for arg <- node.args yield checkAnnot(arg.annotation, gCtx)
-        val binders = List.from(for (Arg(a, _), t) <- node.args zip argTypes yield VarInfo(t, a))
-        val lCtx = ctx ++ Map.from(for x <- argNames yield x -> x)
-        vm.withBinder(binders):
-          node.body match
-            case Seq(Return(Some(e))) =>
-              val vars = List.from(for (x, t) <- argNames zip argTypes yield ast.Var(x).withSort(t.base))
-              val body = checkType(e, ast.BoolSort, lCtx, ignorePre = true)
-              val lemma = ast.Forall(vars, body).copyLocation(node.ident)
-              out += ast.Lemma(node.ident.name, lemma)
-      else
-        issuer.report(Unsupported("nested function definition", node.loc))
-      ctx
 
     override def visitBlock(node: Block, ctx: LCtx): LCtx =
       val (ss, newCtx) = checkBody(node.body, ctx)

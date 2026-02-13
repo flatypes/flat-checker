@@ -11,7 +11,7 @@ class Checker(using config: Config) extends LazyLogging:
 
   /** Type-checks a `module` in the core language. */
   def check(module: Module): Unit =
-    for f <- module.body do check(f)
+    for f <- module.body do check(f.asInstanceOf[FunDef])
 
   def check(funDef: FunDef): Unit =
     val vc = VCGenerator.generate(funDef)

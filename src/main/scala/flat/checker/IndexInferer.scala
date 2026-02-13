@@ -27,10 +27,10 @@ extension (index: Index)
       case IndexInterval(lb, ub) => IndexInterval(lb.shift(offset), ub.shift(offset))
 
   def concretize(str: Expr): Expr = index match
-    case IndexL(k) => k
-    case IndexR(k) => SUB(Length(str), k)
-    case IndexAt(t) => Find(str, t)
-    case IndexShifted(b, k) => ADD(b.concretize(str), k)
+    case IndexL(k) => Const(k)
+    case IndexR(k) => SUB(StringLength(str), Const(k))
+    case IndexAt(t) => StringIndexOf(str, Const(t))
+    case IndexShifted(b, k) => ADD(b.concretize(str), Const(k))
     case _: IndexInterval => throw IllegalArgumentException(index.toString)
 
 /** Index Inference. */
@@ -38,12 +38,12 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
   /** Infer an abstract index for a given `idx` of either a string or list. */
   def infer(idx: Expr, lstLike: Expr, isStr: Boolean = true, preferIndexL: Boolean = true): Index = idx match
     case Const(n: Int) if n >= 0 => IndexL(n)
-    case Length(e) if e == lstLike => IndexR(0)
-    case ListLen(e) if e == lstLike => IndexR(0)
-    case Arith(SUB, Length(e), Const(n: Int)) if e == lstLike && n > 0 => IndexR(n)
-    case Arith(SUB, ListLen(e), Const(n: Int)) if e == lstLike && n > 0 => IndexR(n)
-    case Find(e, Const(t: String)) if e == lstLike => IndexAt(t)
-    case Arith(op, Find(e, Const(t: String)), Const(k: Int)) if e == lstLike =>
+    case StringLength(e) if e == lstLike => IndexR(0)
+    case SeqLength(e) if e == lstLike => IndexR(0)
+    case Arith(SUB, StringLength(e), Const(n: Int)) if e == lstLike && n > 0 => IndexR(n)
+    case Arith(SUB, SeqLength(e), Const(n: Int)) if e == lstLike && n > 0 => IndexR(n)
+    case StringIndexOf(e, Const(t: String)) if e == lstLike => IndexAt(t)
+    case Arith(op, StringIndexOf(e, Const(t: String)), Const(k: Int)) if e == lstLike =>
       IndexShifted(IndexAt(t), if op == ADD then k else -k)
     case _ =>
       val vars = idx.summands.collect:
@@ -60,10 +60,10 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     val solver = LPSolver(constraints)
     // High priority: IndexAt (with potential shift)
     val finds = constraints.flatMap(c => List(c.left, c.right)).collect:
-      case f@Find(e, Const(t: String)) if e == lstLike => (f, IndexAt(t))
-      case f@ListIndexOf(e, Const(t: String), Const(i: Int), ListLen(e1))
+      case f@StringIndexOf(e, Const(t: String)) if e == lstLike => (f, IndexAt(t))
+      case f@SeqIndexOf(e, Const(t: String), Const(i: Int), SeqLength(e1))
         if e == lstLike && e1 == e && i >= 0 => (f, ListIndexAt(t, i, 0))
-      case f@ListIndexOf(e, Const(t: String), Const(i: Int), Arith(SUB, ListLen(e1), Const(j: Int)))
+      case f@SeqIndexOf(e, Const(t: String), Const(i: Int), Arith(SUB, SeqLength(e1), Const(j: Int)))
         if e == lstLike && e1 == e && i >= 0 && j >= 0 => (f, ListIndexAt(t, i, j))
     val lbAs = ListBuffer.empty[Index]
     val ubAs = ListBuffer.empty[Index]
@@ -90,7 +90,7 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     val isConstLeft = minL.isDefined && minL == maxL
     val (lbL, ubL) = (minL.map(IndexL(_)), maxL.map(IndexL(_)))
     // Equal priority: IndexR
-    val len = if isStr then Length(lstLike) else ListLen(lstLike)
+    val len = if isStr then StringLength(lstLike) else SeqLength(lstLike)
     val (minR1, maxR1) = solver.solve(SUB(len, idx))
     val minR = minR1 match
       case Some(n) if n >= 0 => Some(n)

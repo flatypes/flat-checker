@@ -2,9 +2,9 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.Ops.CmpOp.*
-import flat.checker.Printer.ppExpr
 import flat.checker.ast.*
 import flat.checker.ast.ArithOp.*
+import flat.checker.ast.Printer.*
 
 object Analyzer extends LazyLogging:
   /** An execution ''trace'' is a list of statements. */
@@ -81,11 +81,11 @@ object Analyzer extends LazyLogging:
             val finalValues = collectTraces(List(s)).map(computeValue(x, _))
             (finalValues.reduce(_ | _), op) match
               case (Rel(k), LT | LE) if k > 0 =>
-                val inv = And(LE(e0, Var(x)), op(Var(x), mkAdd(e, k)))
+                val inv = And(LE(e0, Var(x)(IntSort)), op(Var(x)(IntSort), mkAdd(e, k)))
                 logger.debug("Guessed invariant: {}", ppExpr(inv))
                 loop.invariants += inv.setLocation(loop.cond.loc)
               case (Rel(k), GT | GE) if k < 0 =>
-                val inv = And(op.reverse(mkAdd(e, k), Var(x)), LE(Var(x), e0))
+                val inv = And(op.reverse(mkAdd(e, k), Var(x)(IntSort)), LE(Var(x)(IntSort), e0))
                 logger.debug("Guessed invariant: {}", ppExpr(inv))
                 loop.invariants += inv.setLocation(loop.cond.loc)
               case _ =>

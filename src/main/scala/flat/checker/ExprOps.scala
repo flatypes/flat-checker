@@ -76,10 +76,10 @@ object ExprOps:
     if pos.nonEmpty then
       val e = pos.reduce(ADD(_, _))
       val e1 = neg.foldLeft(e)(SUB(_, _))
-      if k == 0 then e1 else if k > 0 then ADD(e1, k) else SUB(e1, -k)
+      if k == 0 then e1 else if k > 0 then ADD(e1, Const(k)) else SUB(e1, Const(-k))
     else if neg.nonEmpty then
       val e: Expr = Negate(neg.head)
       val e1 = neg.tail.foldLeft(e)(SUB(_, _))
-      if k == 0 then e1 else if k > 0 then ADD(e1, k) else SUB(e1, -k)
+      if k == 0 then e1 else if k > 0 then ADD(e1, Const(k)) else SUB(e1, Const(-k))
     else
       Const(k)

@@ -9,7 +9,7 @@ package flat.regex
  *   - `REUnion(r1, r2)`: union of `r1` and `r2`.
  *   - `REStar(r)`: Kleene star of `r`, i.e., repeat `r` zero or multiple times.
  */
-enum RegEx:
+enum RegEx extends Domain:
   case RENone
   case RENull
   case RELit(chars: CharSet)

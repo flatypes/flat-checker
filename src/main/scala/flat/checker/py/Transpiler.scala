@@ -1,30 +1,30 @@
 package flat.checker.py
 
 import flat.Issuer
-import flat.checker.ast
-import flat.checker.ast.VarDef
+import flat.checker.ast as ir
+import flat.checker.py.Type.{FunType, UnitType}
 import flat.checker.py.ast.*
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-final case class TypeInfo(expansion: ast.Type, ident: Ident)
+final case class TypeInfo(expansion: Type, ident: Ident)
 
-final case class FunInfo(funType: ast.FunType, ident: Ident)
+final case class FunInfo(funType: Type.FunType, ident: Ident)
 
-final case class VarInfo(typ: ast.Type, ident: Ident)
+final case class VarInfo(typ: Type, ident: Ident)
 
 final class VarManager:
   private val data = mutable.Map.empty[String, VarInfo]
   private val binders = mutable.Stack.empty[(String, VarInfo)]
   private var nextTmp = 0
 
-  def declare(typ: ast.Type, ident: Ident): String =
+  def declare(typ: Type, ident: Ident): String =
     assert(!data.contains(ident.name), "Variable already declared: " + ident.name)
     data(ident.name) = VarInfo(typ, ident)
     ident.name
 
-  def declare(typ: ast.Type): String =
+  def declare(typ: Type): String =
     nextTmp += 1
     val x = s"tmp-$nextTmp"
     data(x) = VarInfo(typ, Ident(x))
@@ -38,12 +38,12 @@ final class VarManager:
       binders.pop()
     result
 
-  def getType(id: String): ast.Type =
+  def getType(id: String): Type =
     binders.find(_._1 == id) match
       case Some((_, VarInfo(t, _))) => t
       case None => data(id).typ
 
-  def getTypes: Map[String, ast.Type] = Map.from(for (x, VarInfo(t, _)) <- data yield x -> t)
+  def getTypes: Map[String, Type] = Map.from(for (x, VarInfo(t, _)) <- data yield x -> t)
 
 type GCtx = Map[String, FunInfo | TypeInfo]
 
@@ -54,15 +54,15 @@ final class Transpiler:
 
   import annotChecker.checkAnnot
 
-  def transpile(tree: List[TopStmt]): ast.Module =
+  def transpile(tree: List[TopStmt]): ir.Module =
     val initCtx: GCtx = Map.empty
     val finalCtx = tree.foldLeft(initCtx) { (c, s) => s.accept(FirstPass, c) }
-    val out = ListBuffer.empty[ast.FunDef]
+    val out = ListBuffer.empty[ir.FunDef]
     val secondPass = SecondPass(out)
     for s <- tree do s.accept(secondPass, finalCtx)
     issuer.ensureNoError()
     // TODO: check all expressions have location
-    ast.Module(out.toList)
+    ir.Module(out.toList)
 
   private object FirstPass extends NodeVisitor[GCtx, GCtx]:
     override def visitTypeAlias(node: TypeAlias, ctx: GCtx): GCtx =
@@ -87,26 +87,43 @@ final class Transpiler:
           do issuer.report(Redefined(node.args(i).ident))
           val argTypes = for arg <- node.args yield checkAnnot(arg.annotation, ctx)
           val returnType = node.returns match
-            case Some(Constant(null)) | None => ast.UnitSort
+            case Some(Constant(null)) | None => UnitType
             case Some(annot) => checkAnnot(annot, ctx)
-          ctx + (f -> FunInfo(ast.FunType(argTypes.toList, returnType), node.ident))
+          ctx + (f -> FunInfo(FunType(argTypes.toList, returnType), node.ident))
         case Some(conflict) =>
           issuer.report(Redefined(node.ident))
           ctx
 
-  private class SecondPass(out: ListBuffer[ast.FunDef]) extends NodeVisitor[GCtx, Unit]:
+  private class SecondPass(out: ListBuffer[ir.FunDef]) extends NodeVisitor[GCtx, Unit]:
     override def visitTypeAlias(node: TypeAlias, ctx: GCtx): Unit = () // do nothing
 
     override def visitFunctionDef(node: FunctionDef, ctx: GCtx): Unit =
       val name = node.ident.name
       val vm = new VarManager
       val info = ctx(name).asInstanceOf[FunInfo]
-      val params = List.from(for (Arg(a, _), t) <- node.args zip info.funType.args yield ast.VarDef(a.name, t))
-      val returnType = info.funType.returns
-      val returns = VarDef("return", returnType)
 
-      val checker = BodyChecker(using gCtx = ctx, returnType = returnType, vm = vm)()
+      val params = ListBuffer.empty[ir.Decl]
+      val requires = ListBuffer.empty[ir.Expr]
+      for (arg, t) <- node.args zip info.funType.args do
+        val (base, refinement) = t.split
+        val decl = ir.Decl(arg.ident.name, base.toSort)
+        params += decl
+        for d <- refinement do
+          requires += ir.RefinedBy(ir.Var(decl.name)(decl.sort), d)
+
+      val ensures = ListBuffer.empty[ir.Expr]
+      val (returnBase, returnRefinement) = info.funType.ret.split
+      for d <- returnRefinement do
+        ensures += ir.RefinedBy(ir.Var("return")(returnBase.toSort), d).fillLocation(node.returns.get.loc)
+
+      val checker = BodyChecker(using gCtx = ctx, returnType = info.funType.ret, vm = vm)()
       val lCtx = Map.from(for (Arg(a, _), t) <- node.args zip info.funType.args yield a.name -> vm.declare(t, a))
       val (ss, _) = checker.checkBody(node.body, lCtx)(using insideLoop = false)
-      val locals = List.from(for x -> t <- vm.getTypes.removedAll(node.args.map(_.ident.name)) yield VarDef(x, t))
-      out += ast.FunDef(name, params, returns, locals, ast.mkStmtList(ss))
+
+      val locals = ListBuffer.empty[ir.Decl]
+      for x -> t <- vm.getTypes.removedAll(node.args.map(_.ident.name)) do
+        val decl = ir.Decl(x, t.toSort)
+        locals += decl
+        assert(t.split._2.isEmpty, "Local variables cannot have refinement types: " + x)
+      out += ir.FunDef(name, params.toList, returnBase.toSort, requires.toList, ensures.toList,
+        locals.toList, ir.mkStmtList(ss))

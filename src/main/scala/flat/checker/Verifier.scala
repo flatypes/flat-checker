@@ -3,9 +3,9 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Ops.CmpOp.*
 import flat.checker.ExprOps.*
-import flat.checker.Printer.*
 import flat.checker.ast.*
-import flat.regex.{AList, CharSet, RegEx}
+import flat.checker.ast.Printer.*
+import flat.regex.{simpl as _, *}
 import flat.util.allRight
 import flat.{Config, Issuer, Ops}
 
@@ -18,7 +18,7 @@ final class VarCtx private(vars: Map[String, Sort]):
     val x = if i >= 0 then name.substring(0, i) else name
     vars(x)
 
-  def strVars: Set[String] = vars.filter(_._2.base == StrSort).keySet
+  def strVars: Set[String] = vars.filter(_._2.base == StringSort).keySet
 
 object VarCtx:
   def from(funDef: FunDef): VarCtx = VarCtx(funDef.lCtx.view.mapValues(_.base).toMap)
@@ -32,21 +32,19 @@ class PrfCtx private(val premises: List[Expr])(using prover: Verifier#Prover) ex
   /** Returns the RE of the given `str`. */
   def getLang(str: Expr): RegEx =
     val result = premises.collectFirst:
-      case TypeTest(e, LangType(r)) if e == str => r
-      case StrIn(e, r) if e == str => r
+      case RefinedBy(e, r: RegEx) if e == str => r
     result.getOrElse:
       str match
-        case Var(x) if prover.varCtx.getSort(x) == StrSort => RegEx.all
+        case Var(x) if prover.varCtx.getSort(x) == StringSort => RegEx.all
         case _ => throw IllegalArgumentException(s"regex not found: $str")
 
   /** If there is a premise that tells the RE of some suffix of `str`, i.e., `str[i:]` has type `r`,
    * then returns this base index `i` and the RE `r`. */
   def lookupSuffixLang(str: Expr): Option[(Expr, RegEx)] =
     premises.collectFirst:
-      case TypeTest(suffix@Substr(e1, ei, Length(e2)), LangType(r)) if e1 == str && e2 == str => (ei, r)
-      case StrIn(suffix@Substr(e1, ei, Length(e2)), r) if e1 == str && e2 == str => (ei, r)
+      case RefinedBy(suffix@Substring(e1, ei, StringLength(e2)), r: RegEx) if e1 == str && e2 == str => (ei, r)
 
-  def getList(lst: Expr): Option[AList] = premises.collectFirst { case ListHasType(e, l) if e == lst => l }
+  def getList(lst: Expr): Option[AList] = premises.collectFirst { case RefinedBy(e, l: AList) if e == lst => l }
 
   /** Creates a new proof context with given conditions added. */
   def ++(conds: List[Expr]): PrfCtx = PrfCtx(conds.map(simpl).flatMap(conjuncts) ++ premises)
@@ -290,12 +288,12 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
         mc.timePause("time/verif/narrow")
       newTypes.foreach(assume)
       newTypes.exists:
-        case TypeTest(_, LangType(RegEx.RENone)) => true
-        case ListHasType(_, l: AList) if l.isEmpty => true
+        case RefinedBy(_, RegEx.RENone) => true
+        case RefinedBy(_, l: AList) if l.isEmpty => true
         case _ => false
 
     private def synthAndProve(conclusion: Expr): Either[String, Unit] = conclusion match
-      case TypeTest(e, t) =>
+      case RefinedBy(e, t) =>
         for mc <- config.metrics do
           mc.timeStart("time/verif/type")
         val result = checkType(e, t)
@@ -306,36 +304,35 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
             logger.debug("PROVED by type checking")
             Right(())
           case Left(actual) =>
-            logger.debug("FAILED: actual type: {}", ppType(actual))
-            throw RuntimeException()
-            Left("actual type: " + ppType(actual))
+            logger.debug("FAILED: actual type: {}", ppDomain(actual))
+            Left("actual type: " + ppDomain(actual))
       case Const(false) => proveWithLemmas(conclusion, getCtx.premises)
       case _ =>
         proveWithLemmas(conclusion, List(conclusion))
           .orElse(proveWithLemmas(conclusion, getCtx.premises))
 
-    private def checkType(expr: Expr, typ: Type): Either[Type, Unit] = typ match
-      case LangType(r2) =>
+    private def checkType(expr: Expr, typ: Domain): Either[Domain, Unit] = typ match
+      case r2: RegEx =>
         val inferer = new Inferer(using ctx = getCtx)()
         val r1 = inferer.inferLang(expr)
-        if r1.subsetOf(r2) then Right(()) else Left(LangType(r1))
-      case TupleType(ts) =>
+        if r1.subsetOf(r2) then Right(()) else Left(r1)
+      case ProductDomain(ts) =>
         expr match
-          case TupleExpr(es) =>
+          case TupleOf(es) =>
             assert(es.length == ts.length)
             val results = for (e, t) <- es zip ts yield (t, checkType(e, t))
             if results.forall(_._2.isRight) then Right(())
-            else Left(TupleType(results.map {
+            else Left(ProductDomain(results.map {
               case (_, Left(t)) => t
               case (t, Right(_)) => t
             }))
           case _ => throw UnsupportedOperationException()
-      case ListType(LangType(r2)) =>
+      case SeqDomain(r2: RegEx) =>
         expr match
-          case Split(str, Const(t: String)) if t.length == 1 =>
+          case StringSplit(str, Const(t: String)) if t.length == 1 =>
             val inferer = new Inferer(using ctx = getCtx)()
             val r1 = inferer.inferSplitLang(str, t.head)
-            if r1.subsetOf(r2) then Right(()) else Left(ListType(LangType(r1)))
+            if r1.subsetOf(r2) then Right(()) else Left(SeqDomain(r1))
           case _ => throw UnsupportedOperationException(s"checkType $expr : $typ")
       case _ =>
         throw UnsupportedOperationException(s"checkType $expr : $typ")
@@ -385,21 +382,21 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
           ss += syn.InferLang(ec)
         case Cmp(EQ | NE, es, Const(t: String)) =>
           ss += syn.InferLang(es, target = Some(t))
-        case Cmp(EQ | NE, es1, es2) if es1.sort == StrSort && es2.sort == StrSort =>
+        case Cmp(EQ | NE, es1, es2) if es1.sort == StringSort && es2.sort == StringSort =>
           ss += syn.InferLang(es1)
           ss += syn.InferLang(es2)
-        case Cmp(_, ei@Var(_), Find(es, Const(t: String))) if t.length == 1 =>
+        case Cmp(_, ei@Var(_), StringIndexOf(es, Const(t: String))) if t.length == 1 =>
           ss += syn.InferIndexCmpFind(ei, es, t.head)
-        case t: StrTest =>
+        case t: (StringStartsWith | StringEndsWith | StringContains | StrIs) =>
           ss += syn.InferTest(t)
-        case Length(es) =>
+        case StringLength(es) =>
           ss += syn.InferLength(es)
-        case Find(es, Const(t: String)) =>
+        case StringIndexOf(es, Const(t: String)) =>
           ss += syn.InferFind(es, t)
-        case StrToInt(es, Const(n: Int)) =>
+        case StringToInt(es, Const(n: Int)) =>
           ss += syn.InferToNumber(es, n)
-        case StrToSet(es) =>
+        case StringToSet(es) =>
           ss += syn.InferToSet(es)
-        case op: ListOp if op.lst.sort == ListSort(StrSort) =>
+        case op: ListOp if op.seq.sort == SeqSort(StringSort) =>
           ss += syn.InferStrList(op)
       ss.toList

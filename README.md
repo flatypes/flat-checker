@@ -76,3 +76,5 @@ and rebuild the project via `sbt assembly`.
 
 To just extract the SMT queries as SMT-LIB files without performing type checking, type `./flat-checker extract -h` to
 see the usage.
+
+¬

@@ -7,20 +7,20 @@ import org.scalatest.funspec.AnyFunSpec
 
 class LPSolverTest extends AnyFunSpec:
   describe("Linear system 1"):
-    val i = Var("i")
-    val s = Var("s")
+    val i = Var("i")(IntSort)
+    val s = Var("s")(StringSort)
     val solver = LPSolver(List(
-      LT(i, SUB(Length(s), 1)),
-      GE(i, 0),
-      LE(i, SUB(Length(s), 1)),
-      GE(Length(s), 0)
+      LT(i, SUB(StringLength(s), Const(1))),
+      GE(i, Const(0)),
+      LE(i, SUB(StringLength(s), Const(1))),
+      GE(StringLength(s), Const(0))
     ))
 
     it("solve |s|"):
-      assert(solver.solve(Length(s)) == (Some(2), None)) // |s| >= 2
+      assert(solver.solve(StringLength(s)) == (Some(2), None)) // |s| >= 2
 
     it("solve i"):
       assert(solver.solve(i) == (Some(0), None)) // i >= 0
 
     it("solve |s| - i"):
-      assert(solver.solve(SUB(Length(s), i)) == (Some(2), None)) // i <= |s| - 2
+      assert(solver.solve(SUB(StringLength(s), i)) == (Some(2), None)) // i <= |s| - 2

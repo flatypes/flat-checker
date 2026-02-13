@@ -15,7 +15,7 @@ class Extractor(using config: ExtractConfig) extends LazyLogging:
   def extract(module: Module, path: os.Path): Unit =
     val relPath = (path / "..").relativeTo(config.input)
     val outDir = config.output / relPath / path.baseName
-    module.body.foreach(extract(_, outDir))
+    module.body.foreach(s => extract(s.asInstanceOf[FunDef], outDir))
 
   private def extract(funDef: FunDef, outDir: os.Path): Unit =
     val lines = ListBuffer.empty[String]
