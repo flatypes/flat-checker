@@ -13,11 +13,9 @@ object Analyzer extends LazyLogging:
   /** Collects traces from executing the given `stmts`. */
   private def collectTraces(stmts: List[Stmt]): List[Trace] = stmts match
     case Nil => List(Nil)
-    case Skip() :: ss => collectTraces(ss)
-    case SeqStmt(s1, s2) :: ss => collectTraces(s1 :: s2 :: ss)
-    case IfStmt(b, s1, s2) :: ss =>
-      collectTraces(s1 :: ss).map(Assume(b) :: _) ++ collectTraces(s2 :: ss).map(Assume(Not(b)) :: _)
-    case s@(Break() | Return()) :: _ => List(s)
+    case IfStmt(b, thenBody, elseBody) :: ss =>
+      collectTraces(thenBody ++ ss).map(Assume(b) :: _) ++ collectTraces(elseBody ++ ss).map(Assume(Not(b)) :: _)
+    case s@(Break() | Continue() | Return()) :: _ => List(s)
     case s :: ss => collectTraces(ss).map(s :: _)
 
   /** Symbolic Value */
@@ -44,18 +42,18 @@ object Analyzer extends LazyLogging:
             value += (if op == ADD then k else -k)
           case _ =>
             value = if e.collectVars.contains(x) then Unknown else Abs(e)
-      case While(_, s) if collectModifiedVars(s).contains(name) =>
+      case While(_, body) if collectModifiedVars(body).contains(name) =>
         value = Unknown
       case _ =>
     value
 
   /** Collects all variables that are modified (as lhs of `Assign`) inside the given `stmt`. */
-  def collectModifiedVars(stmt: Stmt): Set[String] = stmt match
-    case SeqStmt(s1, s2) => collectModifiedVars(s1) | collectModifiedVars(s2)
-    case Assign(x, _) => Set(x)
-    case IfStmt(_, s1, s2) => collectModifiedVars(s1) | collectModifiedVars(s2)
-    case While(_, s) => collectModifiedVars(s)
-    case _ => Set.empty
+  def collectModifiedVars(body: List[Stmt]): Set[String] = body match
+    case Nil => Set.empty
+    case Assign(x, _) :: rest => Set(x) | collectModifiedVars(rest)
+    case IfStmt(_, s1, s2) :: rest => collectModifiedVars(s1) | collectModifiedVars(s2) | collectModifiedVars(rest)
+    case While(_, body) :: rest => collectModifiedVars(body) | collectModifiedVars(rest)
+    case _ :: rest => collectModifiedVars(rest)
 
   /** Guesses naive loop invariants where user invariants are not provided.
    *
@@ -67,35 +65,36 @@ object Analyzer extends LazyLogging:
    *
    * @param body the body of the program to analyze
    */
-  def guessInvariants(body: Stmt): Unit =
-    body.traverse:
-      case loop@While(Cmp(op, Var(x), e), s) if loop.invariants.isEmpty && op != EQ && op != NE &&
-        (e.collectVars & collectModifiedVars(s)).isEmpty =>
-        val initValues = for
-          trace <- collectTraces(List(body))
-          k = trace.indexOf(loop)
-          if k >= 0
-        yield computeValue(x, trace.take(k))
-        initValues.reduce(_ | _) match
-          case Abs(e0) =>
-            val finalValues = collectTraces(List(s)).map(computeValue(x, _))
-            (finalValues.reduce(_ | _), op) match
-              case (Rel(k), LT | LE) if k > 0 =>
-                val inv = And(LE(e0, Var(x)(IntSort)), op(Var(x)(IntSort), mkAdd(e, k)))
-                logger.debug("Guessed invariant: {}", ppExpr(inv))
-                loop.invariants += inv.setLocation(loop.cond.loc)
-              case (Rel(k), GT | GE) if k < 0 =>
-                val inv = And(op.reverse(mkAdd(e, k), Var(x)(IntSort)), LE(Var(x)(IntSort), e0))
-                logger.debug("Guessed invariant: {}", ppExpr(inv))
-                loop.invariants += inv.setLocation(loop.cond.loc)
-              case _ =>
-          case _ =>
-      case _ =>
+  def guessInvariants(body: List[Stmt]): Unit =
+    for stmt <- body do
+      stmt.traverse:
+        case loop@While(Cmp(op, Var(x), e), s) if loop.invariants.isEmpty && op != EQ && op != NE &&
+          (e.collectVars & collectModifiedVars(s)).isEmpty =>
+          val initValues = for
+            trace <- collectTraces(s)
+            k = trace.indexOf(loop)
+            if k >= 0
+          yield computeValue(x, trace.take(k))
+          initValues.reduce(_ | _) match
+            case Abs(e0) =>
+              val finalValues = collectTraces(s).map(computeValue(x, _))
+              (finalValues.reduce(_ | _), op) match
+                case (Rel(k), LT | LE) if k > 0 =>
+                  val inv = And(LE(e0, Var(x)(IntSort)), op(Var(x)(IntSort), mkAdd(e, k)))
+                  logger.debug("Guessed invariant: {}", ppExpr(inv))
+                  loop.invariants += inv.setLocation(loop.cond.loc)
+                case (Rel(k), GT | GE) if k < 0 =>
+                  val inv = And(op.reverse(mkAdd(e, k), Var(x)(IntSort)), LE(Var(x)(IntSort), e0))
+                  logger.debug("Guessed invariant: {}", ppExpr(inv))
+                  loop.invariants += inv.setLocation(loop.cond.loc)
+                case _ =>
+            case _ =>
+        case _ =>
 
   /** Collects the `break`-conditions in the given loop `body`. */
-  def collectBreakConds(body: Stmt): List[Expr] =
+  def collectBreakConds(body: List[Stmt]): List[Expr] =
     for
-      trace <- collectTraces(List(body))
+      trace <- collectTraces(body)
       k = trace.indexOf(Break())
       if k >= 0
     yield collectExitCond(trace.take(k))

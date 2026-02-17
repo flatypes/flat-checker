@@ -134,7 +134,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: Type, vm: VarMan
       val e = checkType(node.test, BoolType, ctx)
       val (b1, ctx1) = checkBody(node.body, ctx)
       val (b2, ctx2) = checkBody(node.orElse, ctx1)
-      out += ir.IfStmt(e, ir.mkStmtList(b1), ir.mkStmtList(b2))
+      out += ir.IfStmt(e, b1, b2)
       ctx2
 
     override def visitWhile(node: While, ctx: LCtx): LCtx =
@@ -142,11 +142,11 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: Type, vm: VarMan
       val (invNodes, realBody) = extractInv(node.body, Nil)
       val (b, newCtx) = checkBody(realBody, ctx)(using insideLoop = true)
       if b.last.isInstanceOf[ir.Break] then // this while loop is just an if-statement
-        out += ir.IfStmt(e, ir.mkStmtList(b.dropRight(1)), ir.Skip())
+        out += ir.IfStmt(e, b.dropRight(1), Nil)
         if invNodes.nonEmpty then
           issuer.report(TypeError("No loop invariant expected here", invNodes.head.loc))
       else
-        val loop = ir.While(e, ir.mkStmtList(b))
+        val loop = ir.While(e, b)
         val inv = for expr <- invNodes yield checkType(expr, BoolType, ctx, ignorePre = true)
         loop.invariants ++= inv
         out += loop
@@ -177,9 +177,10 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: Type, vm: VarMan
       // while i < end:
       //   ...
       //   i = i + step
-      val loop = ir.While(ir.Cmp(LT, i, checkType(node.end, IntType, ctx)).setLocation(node.end.loc),
-        ir.mkStmtList(b :+ ir.Assign(i.name,
-          ADD(i, checkType(node.step, IntType, ctx)).setLocation(node.step.loc))))
+      val loop = ir.While(
+        ir.Cmp(LT, i, checkType(node.end, IntType, ctx)).setLocation(node.end.loc),
+        b :+ ir.Assign(i.name,
+          ADD(i, checkType(node.step, IntType, ctx)).setLocation(node.step.loc)))
       loop.invariants ++= inv
       out += loop
       newCtx

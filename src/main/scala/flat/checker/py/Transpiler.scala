@@ -126,4 +126,4 @@ final class Transpiler:
         locals += decl
         assert(t.split._2.isEmpty, "Local variables cannot have refinement types: " + x)
       out += ir.FunDef(name, params.toList, returnBase.toSort, requires.toList, ensures.toList,
-        locals.toList, ir.mkStmtList(ss))
+        locals.toList, ss)

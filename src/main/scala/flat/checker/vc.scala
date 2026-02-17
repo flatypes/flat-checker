@@ -103,9 +103,10 @@ object VCGenerator:
     val vc = wlp(funDef.body, post)(using funDef.lCtx, new Fresh, VCTrue)
     VCImp(mkAnd(funDef.requires), vc)
 
+  private def wlp(stmts: List[Stmt], post: VC)(using ctx: Map[String, Sort], fresh: Fresh, vcInv: VC): VC =
+    stmts.foldRight(post)(wlp)
+
   private def wlp(stmt: Stmt, post: VC)(using ctx: Map[String, Sort], fresh: Fresh, vcInv: VC): VC = stmt match
-    case Skip() => post
-    case SeqStmt(s1, s2) => wlp(s1, wlp(s2, post))
     case Assume(b) =>
       mkVCGroup(checkSides(b), VCImp(b, post))
     case Assign(x, e) =>
@@ -136,6 +137,7 @@ object VCGenerator:
       VCGroup(vcInvSides ++ vcSides, vcInvPres :+ vcEnter :+ vcExit)
     case Return() => VCTrue
     case Break() => vcInv // NOTE: the loop invariant must hold immediately before the break statement
+    case Continue() => vcInv
 
   private def checkSides(expr: Expr): List[VC] =
     val goals = ListBuffer.empty[VCGoal]

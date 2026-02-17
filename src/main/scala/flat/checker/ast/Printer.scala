@@ -14,7 +14,7 @@ object Printer:
       val pre = requires.map(e => formatLine(s"requires ${ppExpr(e)}", 1)).mkString
       val post = ensures.map(e => formatLine(s"ensures ${ppExpr(e)}", 1)).mkString
       val local = locals.map(d => formatLine(s"var ${ppDecl(d)}", 1)).mkString
-      sig + pre + post + "begin\n" + local + ppStmt(body, 1) + "end\n"
+      sig + pre + post + "begin\n" + local + ppStmtBody(body, 1) + "end\n"
 
   private def formatLine(s: String, level: Int): String = "  " * level + s + "\n"
 
@@ -25,24 +25,26 @@ object Printer:
     s"${decl.name}: ${ppSort(decl.sort)}"
 
   def ppStmt(stmt: Stmt, level: Int = 0): String = stmt match
-    case Skip() => ""
-    case SeqStmt(s1, s2) => ppStmt(s1, level) + ppStmt(s2, level)
     case Assign(x, e) => formatLine(s"$x := ${ppExpr(e)}", level)
     case Assert(e) => formatLine(s"assert ${ppExpr(e)}", level)
     case Assume(e) => formatLine(s"assume ${ppExpr(e)}", level)
     case Hint(e) => formatLine(s"hint ${ppExpr(e)}", level)
     case ShowType(e) => formatLine(s"show-type ${ppExpr(e)}", level)
     case IfStmt(e, thenBody, elseBody) =>
-      formatLine(s"if ${ppExpr(e)} then", level) + ppStmt(thenBody, level + 1) + ppElse(elseBody, level)
+      formatLine(s"if ${ppExpr(e)} then", level) + ppStmtBody(thenBody, level + 1) + ppElse(elseBody, level)
     case While(e, body) =>
-      formatLine(s"while ${ppExpr(e)} do", level) + ppStmt(body, level + 1)
+      formatLine(s"while ${ppExpr(e)} do", level) + ppStmtBody(body, level + 1)
     case Break() => formatLine("break", level)
+    case Continue() => formatLine("continue", level)
     case Return() => formatLine("return", level)
 
-  private def ppElse(body: Stmt, level: Int): String = body match
-    case IfStmt(e, thenBody, elseBody) =>
-      formatLine(s"else if ${ppExpr(e)} then", level) + ppStmt(thenBody, level + 1) + ppElse(elseBody, level)
-    case _ => formatLine("else", level) + ppStmt(body, level + 1)
+  def ppStmtBody(body: List[Stmt], level: Int = 0): String =
+    body.map(ppStmt(_, level)).mkString
+
+  private def ppElse(body: List[Stmt], level: Int): String = body match
+    case List(IfStmt(e, thenBody, elseBody)) =>
+      formatLine(s"else if ${ppExpr(e)} then", level) + ppStmtBody(thenBody, level + 1) + ppElse(elseBody, level)
+    case _ => formatLine("else", level) + ppStmtBody(body, level + 1)
 
   def ppExpr(expr: Expr): String = renderExpr(expr)._1
 
@@ -69,7 +71,6 @@ object Printer:
           y + flat.util.renderSubscript(ver.toInt)
         else x
       (s, Highest)
-    case Local(decl) => (decl.name, Highest)
     case Global(decl) => (decl.name, Highest)
     case Lambda(params, e) => (s"λ ${ppParamGroup(params)}, ${ppExpr(e)}", Lowest)
     case Apply(e, es) => renderApply(renderExpr(e), ppExprSeq(es))

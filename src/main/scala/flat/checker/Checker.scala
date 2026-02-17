@@ -14,6 +14,5 @@ class Checker(using config: Config) extends LazyLogging:
     for f <- module.body do check(f.asInstanceOf[FunDef])
 
   def check(funDef: FunDef): Unit =
-    val vc = VCGenerator.generate(funDef)
-    val verifier = new Verifier(using config, issuer)
-    verifier.verify(vc)(using VarCtx.from(funDef))
+    val executor = Executor(funDef)(using config, issuer)
+    executor.exec()

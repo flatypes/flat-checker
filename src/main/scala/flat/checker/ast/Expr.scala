@@ -23,12 +23,6 @@ final case class Const(value: Int | Boolean | Char | String) extends Expr:
     case _: Char => CharSort
     case _: String => StringSort
 
-final case class Local(decl: Decl) extends Expr:
-  val sort: Sort = decl.sort
-
-final case class LocalWithVersion(decl: Decl, version: Int) extends Expr:
-  val sort: Sort = decl.sort
-
 final case class Var(name: String)(val sort: Sort) extends Expr
 
 final case class Global(decl: Decl) extends Expr:

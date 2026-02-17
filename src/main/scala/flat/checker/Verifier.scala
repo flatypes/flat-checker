@@ -12,7 +12,7 @@ import flat.{Config, Issuer, Ops}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-final class VarCtx private(vars: Map[String, Sort]):
+final class VarCtx(vars: Map[String, Sort]):
   def getSort(name: String): Sort =
     val i = name.indexOf('@')
     val x = if i >= 0 then name.substring(0, i) else name
@@ -100,7 +100,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
         case Right(_) => true
         case Left(msg) => issuer.report(goal.diagnostic(msg)); false
 
-  private def ppGoal(hypotheses: List[Expr], conclusion: Expr): String =
+  def ppGoal(hypotheses: List[Expr], conclusion: Expr): String =
     val left = if hypotheses.isEmpty then "⊤" else hypotheses.map(ppExpr).mkString(" ∧ ")
     val right = " ⇒ " + ppExpr(conclusion)
     if left.length + right.length <= 65 then left + right // inline
@@ -167,7 +167,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
 
     private val ctxStack = mutable.Stack.empty[PrfCtx]
 
-    private def locally[T](f: => T): T =
+    def locally[T](f: => T): T =
       ctxStack.push(getCtx)
       smtSolver.push()
       val result = f
