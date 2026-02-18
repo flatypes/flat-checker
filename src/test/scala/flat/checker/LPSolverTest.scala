@@ -2,17 +2,16 @@ package flat.checker
 
 import flat.Ops.CmpOp.*
 import flat.checker.ast.*
-import flat.checker.ast.ArithOp.*
 import org.scalatest.funspec.AnyFunSpec
 
 class LPSolverTest extends AnyFunSpec:
   describe("Linear system 1"):
-    val i = Var("i")(IntSort)
-    val s = Var("s")(StringSort)
+    val i = Var("i")
+    val s = Var("s")
     val solver = LPSolver(List(
-      LT(i, SUB(StringLength(s), Const(1))),
+      LT(i, Sub(StringLength(s), Const(1))),
       GE(i, Const(0)),
-      LE(i, SUB(StringLength(s), Const(1))),
+      LE(i, Sub(StringLength(s), Const(1))),
       GE(StringLength(s), Const(0))
     ))
 
@@ -23,4 +22,4 @@ class LPSolverTest extends AnyFunSpec:
       assert(solver.solve(i) == (Some(0), None)) // i >= 0
 
     it("solve |s| - i"):
-      assert(solver.solve(SUB(StringLength(s), i)) == (Some(2), None)) // i <= |s| - 2
+      assert(solver.solve(Sub(StringLength(s), i)) == (Some(2), None)) // i <= |s| - 2

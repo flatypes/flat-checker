@@ -3,9 +3,8 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
-import flat.checker.ExprOps.summands
 import flat.checker.ast.*
-import flat.checker.ast.ArithOp.*
+import flat.checker.ast.ExprOps.summands
 import flat.regex.*
 
 import scala.collection.mutable
@@ -28,9 +27,9 @@ extension (index: Index)
 
   def concretize(str: Expr): Expr = index match
     case IndexL(k) => Const(k)
-    case IndexR(k) => SUB(StringLength(str), Const(k))
+    case IndexR(k) => Sub(StringLength(str), Const(k))
     case IndexAt(t) => StringIndexOf(str, Const(t))
-    case IndexShifted(b, k) => ADD(b.concretize(str), Const(k))
+    case IndexShifted(b, k) => Add(b.concretize(str), Const(k))
     case _: IndexInterval => throw IllegalArgumentException(index.toString)
 
 /** Index Inference. */
@@ -40,11 +39,11 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     case Const(n: Int) if n >= 0 => IndexL(n)
     case StringLength(e) if e == lstLike => IndexR(0)
     case SeqLength(e) if e == lstLike => IndexR(0)
-    case Arith(SUB, StringLength(e), Const(n: Int)) if e == lstLike && n > 0 => IndexR(n)
-    case Arith(SUB, SeqLength(e), Const(n: Int)) if e == lstLike && n > 0 => IndexR(n)
+    case Sub(StringLength(e), Const(n: Int)) if e == lstLike && n > 0 => IndexR(n)
+    case Sub(SeqLength(e), Const(n: Int)) if e == lstLike && n > 0 => IndexR(n)
     case StringIndexOf(e, Const(t: String)) if e == lstLike => IndexAt(t)
-    case Arith(op, StringIndexOf(e, Const(t: String)), Const(k: Int)) if e == lstLike =>
-      IndexShifted(IndexAt(t), if op == ADD then k else -k)
+    case Add(StringIndexOf(e, Const(t: String)), Const(k: Int)) if e == lstLike => IndexShifted(IndexAt(t), k)
+    case Sub(StringIndexOf(e, Const(t: String)), Const(k: Int)) if e == lstLike => IndexShifted(IndexAt(t), -k)
     case _ =>
       val vars = idx.summands.collect:
         case Var(x) => x
@@ -63,12 +62,12 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       case f@StringIndexOf(e, Const(t: String)) if e == lstLike => (f, IndexAt(t))
       case f@SeqIndexOf(e, Const(t: String), Const(i: Int), SeqLength(e1))
         if e == lstLike && e1 == e && i >= 0 => (f, ListIndexAt(t, i, 0))
-      case f@SeqIndexOf(e, Const(t: String), Const(i: Int), Arith(SUB, SeqLength(e1), Const(j: Int)))
+      case f@SeqIndexOf(e, Const(t: String), Const(i: Int), Sub(SeqLength(e1), Const(j: Int)))
         if e == lstLike && e1 == e && i >= 0 && j >= 0 => (f, ListIndexAt(t, i, j))
     val lbAs = ListBuffer.empty[Index]
     val ubAs = ListBuffer.empty[Index]
     for (f, index) <- finds.distinct do
-      val (minK, maxK) = solver.solve(SUB(idx, f))
+      val (minK, maxK) = solver.solve(Sub(idx, f))
       for k <- minK do lbAs += index.shift(k)
       for k <- maxK do ubAs += index.shift(k)
     val lbA = lbAs.length match
@@ -91,7 +90,7 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     val (lbL, ubL) = (minL.map(IndexL(_)), maxL.map(IndexL(_)))
     // Equal priority: IndexR
     val len = if isStr then StringLength(lstLike) else SeqLength(lstLike)
-    val (minR1, maxR1) = solver.solve(SUB(len, idx))
+    val (minR1, maxR1) = solver.solve(Sub(len, idx))
     val minR = minR1 match
       case Some(n) if n >= 0 => Some(n)
       case _ => None
@@ -138,8 +137,8 @@ class IndexInferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
         throw UnsupportedOperationException(s"solve $x: ambiguous choice of ub")
     IndexInterval(lb, ub)
 
-  private def collectRelevantConstraints(x: String): List[Cmp] =
-    val candidates = ctx.premises.collect { case c@Cmp(op, _, _) if op != NE => c }
+  private def collectRelevantConstraints(x: String): List[RelExpr] =
+    val candidates = ctx.premises.collect { case c@RelExpr(op, _, _) if op != NE => c }
     val selected = mutable.Set.empty[Int]
     val consideredVars = mutable.Set.empty[String]
     var newVars = Set(x)

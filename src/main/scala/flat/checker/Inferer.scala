@@ -3,9 +3,8 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
-import flat.checker.ExprOps.*
 import flat.checker.ast.*
-import flat.checker.ast.ArithOp.*
+import flat.checker.ast.ExprOps.*
 import flat.checker.ast.Printer.ppExpr
 import flat.regex.*
 import flat.regex.AOps.*
@@ -46,7 +45,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
             if cs2.subsetOf(cs1) then cs2 else cs1
           case None => rOrd.first
         if cs.isEmpty then RegEx.RENull else RegEx.fromCharSet(cs)
-      case Substring(es, ei, Arith(ADD, StringIndexOf(Substring(e1, e2, StringLength(e3)), Const(t: String)), e4))
+      case Substring(es, ei, Add(StringIndexOf(Substring(e1, e2, StringLength(e3)), Const(t: String)), e4))
         if e1 == es && e2 == ei && e3 == es && e4 == ei =>
         // Special case: es[ei : (es[ei:].find(t) + ei)] = es[ei : es.find(t, ei)]
         val r = inferLang(es)
@@ -105,7 +104,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       case (IndexR(_), IndexL(_)) => throw UnsupportedOperationException(s"substr from $startIndex until $endIndex")
       case (IndexAt(t), IndexL(j)) =>
         // Require: startIndex + |t| < endIndex
-        assert(isValid(LT(ADD(startIndex.concretize(str), Const(t.length)), endIndex.concretize(str))))
+        assert(isValid(LT(Add(startIndex.concretize(str), Const(t.length)), endIndex.concretize(str))))
         r.take(j).drop(IndexAt(t))
       case (i: BasicIndex, j: BasicIndex) =>
         // Require: startIndex < endIndex
@@ -125,7 +124,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       case (i, IndexShifted(j: BasicIndex, k)) if k < 0 =>
         // Require: i ≤ j - (-k) ∧ j ≤ length s
         assert(isValid(And(
-          LE(i.concretize(str), SUB(j.concretize(str), Const(-k))),
+          LE(i.concretize(str), Sub(j.concretize(str), Const(-k))),
           LE(j.concretize(str), StringLength(str)))))
         // s[i : j - k] = reverse (reverse s[i:j])[k:]
         substr(r, i, j, startIdx = startIdx).reverse.drop(-k).reverse

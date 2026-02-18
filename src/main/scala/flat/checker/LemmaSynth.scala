@@ -4,7 +4,6 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
 import flat.checker.ast.*
-import flat.checker.ast.ArithOp.*
 import flat.regex.*
 import flat.regex.AOps.*
 import flat.regex.NarrowOps.*
@@ -47,7 +46,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
       ctx.lookupSuffixLang(str) match
         case Some((eb, r)) if ctx.isValid(And(GE(eb, Const(0)), LT(eb, e))) =>
           val r1 = r.narrowByLength(Interval(lb = 1))
-          List(inInterval(SUB(e, eb), r1.length))
+          List(inInterval(Sub(e, eb), r1.length))
         case _ =>
           val inferer = new Inferer
           val len = inferer.inferLength(str)
@@ -92,9 +91,9 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
 
   /** |str| - idx in interval */
   private def negInInterval(idx: Expr, str: Expr, interval: Interval): Expr = interval match
-    case Interval(n: Int, Inf) => LE(idx, SUB(StringLength(str), Const(n)))
-    case Interval(n1: Int, n2: Int) if n1 == n2 => EQ(idx, SUB(StringLength(str), Const(n1)))
-    case Interval(n1: Int, n2: Int) => And(GE(idx, SUB(StringLength(str), Const(n2))), LE(idx, SUB(StringLength(str), Const(n1))))
+    case Interval(n: Int, Inf) => LE(idx, Sub(StringLength(str), Const(n)))
+    case Interval(n1: Int, n2: Int) if n1 == n2 => EQ(idx, Sub(StringLength(str), Const(n1)))
+    case Interval(n1: Int, n2: Int) => And(GE(idx, Sub(StringLength(str), Const(n2))), LE(idx, Sub(StringLength(str), Const(n1))))
     case Interval(Inf, _) => assert(false)
 
   final case class InferIndexCmpFind(idx: Expr, str: Expr, c: Char) extends Sketch:
@@ -103,7 +102,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
       val r = inferer.inferLang(str)
       val ls = ListBuffer.empty[Expr]
       ctx.premises.foreach:
-        case Cmp(_, e1, StringIndexOf(e2, Const(t: String))) if e1 == idx && e2 == str && t.length == 1 && t.head != c =>
+        case RelExpr(_, e1, StringIndexOf(e2, Const(t: String))) if e1 == idx && e2 == str && t.length == 1 && t.head != c =>
           val c1 = t.head
           if findLT(r, c, c1) then
             ls += LT(StringIndexOf(str, Const(c.toString)), StringIndexOf(str, Const(c1.toString)))
@@ -138,7 +137,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
         case interval: Interval => List(inInterval(expr, interval))
         case inferer.PossibleIndices(left, right, notFound, lst) =>
           var ors1 = left.map(i => EQ(expr, Const(i)))
-          var ors2 = right.map(i => EQ(expr, SUB(SeqLength(lst), Const(i))))
+          var ors2 = right.map(i => EQ(expr, Sub(SeqLength(lst), Const(i))))
           if notFound then
             ors1 = EQ(expr, Const(-1)) :: ors1
             ors2 = EQ(expr, Const(-1)) :: ors2

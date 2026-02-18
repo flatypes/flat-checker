@@ -109,12 +109,12 @@ final class Transpiler:
         val decl = ir.Decl(arg.ident.name, base.toSort)
         params += decl
         for d <- refinement do
-          requires += ir.RefinedBy(ir.Var(decl.name)(decl.sort), d)
+          requires += ir.RefinedBy(ir.Var(decl.name), d)
 
       val ensures = ListBuffer.empty[ir.Expr]
       val (returnBase, returnRefinement) = info.funType.ret.split
       for d <- returnRefinement do
-        ensures += ir.RefinedBy(ir.Var("return")(returnBase.toSort), d).fillLocation(node.returns.get.loc)
+        ensures += ir.RefinedBy(ir.Var("return"), d).fillLocation(node.returns.get.loc)
 
       val checker = BodyChecker(using gCtx = ctx, returnType = info.funType.ret, vm = vm)()
       val lCtx = Map.from(for (Arg(a, _), t) <- node.args zip info.funType.args yield a.name -> vm.declare(t, a))

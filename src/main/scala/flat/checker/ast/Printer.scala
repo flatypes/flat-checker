@@ -66,8 +66,8 @@ object Printer:
     case Const(s: String) => ("\"" + escapeJava(s) + "\"", Highest)
     case Var(x) =>
       val s =
-        if x.contains('@') then
-          val Array(y, ver) = x.split('@')
+        if x.contains(':') then
+          val Array(y, ver) = x.split(':')
           y + flat.util.renderSubscript(ver.toInt)
         else x
       (s, Highest)
@@ -92,9 +92,10 @@ object Printer:
     case Negate(e) => renderPrefix("-", renderExpr(e))
 
     // infixL operations
-    case Cmp(op, e1, e2) => renderInfixL(op.toString, Relational, renderExpr(e1), renderExpr(e2))
-    case Arith(ArithOp.MUL, e1, e2) => renderInfixL("*", Multiplicative, renderExpr(e1), renderExpr(e2))
-    case Arith(op, e1, e2) => renderInfixL(op.toString, Additive, renderExpr(e1), renderExpr(e2))
+    case RelExpr(op, e1, e2) => renderInfixL(op.toString, Relational, renderExpr(e1), renderExpr(e2))
+    case Add(e1, e2) => renderInfixL("+", Additive, renderExpr(e1), renderExpr(e2))
+    case Sub(e1, e2) => renderInfixL("-", Additive, renderExpr(e1), renderExpr(e2))
+    case Mul(e1, e2) => renderInfixL("*", Multiplicative, renderExpr(e1), renderExpr(e2))
     case BitAnd(e1, e2) => renderInfixL("&", BitwiseAND, renderExpr(e1), renderExpr(e2))
     case BitOr(e1, e2) => renderInfixL("|", BitwiseOR, renderExpr(e1), renderExpr(e2))
     case BitXor(e1, e2) => renderInfixL("^", BitwiseXOR, renderExpr(e1), renderExpr(e2))
@@ -213,6 +214,7 @@ object Printer:
     case ProductDomain(ds) => "(" + ds.map(ppDomain).mkString(", ") + ")"
     case SeqDomain(d) => s"Seq[${ppDomain(d)}]"
     case SetDomain(d) => s"Set[${ppDomain(d)}]"
+    case _ => "<OTHER>"
 
   def ppRE(re: RegEx): String =
     val s = ppREImpl(re)

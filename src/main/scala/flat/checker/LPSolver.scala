@@ -2,8 +2,8 @@ package flat.checker
 
 import flat.Ops
 import flat.Ops.CmpOp.*
-import flat.checker.ExprOps.*
 import flat.checker.ast.*
+import flat.checker.ast.ExprOps.*
 import org.apache.commons.math.optimization.GoalType
 import org.apache.commons.math.optimization.linear.*
 
@@ -12,7 +12,7 @@ import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters.*
 import scala.util.{Success, Try}
 
-class LPSolver(constraints: List[Cmp]):
+class LPSolver(constraints: List[RelExpr]):
   private val variables = ListBuffer.empty[Expr]
 
   private def lookup(expr: Expr): Int = variables.indexOf(expr) match
@@ -24,7 +24,7 @@ class LPSolver(constraints: List[Cmp]):
   private val linearConstraints = ListBuffer.empty[LinearConstraint]
 
   // prepare linear constraints
-  for Cmp(op, e1, e2) <- constraints do
+  for RelExpr(op, e1, e2) <- constraints do
     val m = mutable.Map.empty[Int, Double]
     var const = 0.0
     e1.summands.foreach:

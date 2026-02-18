@@ -1,6 +1,5 @@
 import flat.Ops.CmpOp.*
 import flat.checker.ast.*
-import flat.checker.ast.ArithOp.{ADD, SUB}
 import flat.checker.{SMTSolver, VarCtx}
 import flat.regex.*
 import flat.regex.AOps.*

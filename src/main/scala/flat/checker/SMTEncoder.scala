@@ -10,7 +10,7 @@ import io.github.cvc5.Kind
 
 import scala.collection.mutable
 
-class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging:
+class SMTEncoder(using varCtx: VarCtx, sortingContext: SortingContext, extractMode: Boolean) extends LazyLogging:
   val tm = cvc5.TermManager()
 
   def encodeSort(sort: Sort): cvc5.Sort = sort match
@@ -64,7 +64,7 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
     case Const(n: Int) => tm.mkInteger(n)
     case Const(b: Boolean) => tm.mkBoolean(b)
     case Const(s: String) => tm.mkString(s)
-    case Var(x) => ctx.getOrElse(x, encodeAtomicExpr(Var(x)(varCtx.getSort(x))))
+    case Var(x) => ctx.getOrElse(x, encodeAtomicExpr(Var(x)))
     case TupleOf(es) =>
       val ts = es.map(encodeExpr)
       tm.mkTuple(ts.toArray)
@@ -97,7 +97,7 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
       for x <- xs do
         ctx.remove(x.name)
       tm.mkTerm(Kind.FORALL, tm.mkTerm(Kind.VARIABLE_LIST, binders.toArray), body)
-    case Cmp(op, e1, e2) =>
+    case RelExpr(op, e1, e2) =>
       val kind = op match
         case CmpOp.EQ => Kind.EQUAL
         case CmpOp.NE => Kind.DISTINCT
@@ -113,14 +113,9 @@ class SMTEncoder(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging
     case Negate(e) => // -e = 0 - e
       val t = encodeExpr(e)
       tm.mkTerm(Kind.SUB, tm.mkInteger(0), t)
-    case Arith(op, e1, e2) =>
-      val kind = op match
-        case ArithOp.ADD => Kind.ADD
-        case ArithOp.SUB => Kind.SUB
-        case ArithOp.MUL => Kind.MULT
-      val t1 = encodeExpr(e1)
-      val t2 = encodeExpr(e2)
-      tm.mkTerm(kind, t1, t2)
+    case Add(e1, e2) => tm.mkTerm(Kind.ADD, encodeExpr(e1), encodeExpr(e2))
+    case Sub(e1, e2) => tm.mkTerm(Kind.SUB, encodeExpr(e1), encodeExpr(e2))
+    case Mul(e1, e2) => tm.mkTerm(Kind.MULT, encodeExpr(e1), encodeExpr(e2))
 
     // String operations
     case StringConcat(es1, es2) =>

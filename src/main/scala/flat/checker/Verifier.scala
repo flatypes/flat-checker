@@ -2,8 +2,8 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.Ops.CmpOp.*
-import flat.checker.ExprOps.*
 import flat.checker.ast.*
+import flat.checker.ast.ExprOps.*
 import flat.checker.ast.Printer.*
 import flat.regex.{simpl as _, *}
 import flat.util.allRight
@@ -14,7 +14,7 @@ import scala.collection.mutable.ListBuffer
 
 final class VarCtx(vars: Map[String, Sort]):
   def getSort(name: String): Sort =
-    val i = name.indexOf('@')
+    val i = name.indexOf(':')
     val x = if i >= 0 then name.substring(0, i) else name
     vars(x)
 
@@ -62,44 +62,44 @@ object PrfCtx:
 
 /** Verifier: prove goals or answer type queries. */
 final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
-  def verify(vc: VC)(using varCtx: VarCtx): Unit =
-    count = 0
-    discharge(vc, Nil)
-
-  private var count = 0
-
-  private def discharge(vc: VC, premises: List[Expr])(using varCtx: VarCtx): Boolean = vc match
-    case VCTrue => true
-    case VCImp(b, vc) => discharge(vc, premises :+ b)
-    case VCGroup(sides, mains) =>
-      // Prove all side conditions first: if any fails, immediately give up this group.
-      val result1 = sides.zipWithIndex.forall { (vc, i) => discharge(vc, premises) }
-      if !result1 then
-        return false
-      // Prove all main goals: even if any fails, still try others to collect more error messages.
-      val results = for (vc, i) <- mains.zipWithIndex yield discharge(vc, premises)
-      results.forall(_ == true)
-    case vc@VCInfer(e) =>
-      val prover = new Prover
-      premises.foreach(prover.assume)
-      count += 1
-      logger.info("")
-      logger.info(s"Goal {} (VCInfer): {}", count, ppGoal(prover.getCtx.premises, e))
-      prover.narrow()
-      val inferer = new Inferer(using config, prover.getCtx)
-      val r = inferer.inferLang(e)
-      issuer.report(TypeInferred(ppRE(r), vc.loc))
-      true
-    case goal: VCGoal =>
-      val prover = new Prover
-      premises.foreach(prover.assume)
-      count += 1
-      logger.info("")
-      logger.info(s"Goal {} ({}): {}", count, goal.getClass.getSimpleName, ppGoal(prover.getCtx.premises, goal.cond))
-      prover.prove(goal.cond) match
-        case Right(_) => true
-        case Left(msg) => issuer.report(goal.diagnostic(msg)); false
-
+  //  def verify(vc: VC)(using varCtx: VarCtx): Unit =
+//    count = 0
+//    discharge(vc, Nil)
+//
+//  private var count = 0
+//
+//  private def discharge(vc: VC, premises: List[Expr])(using varCtx: VarCtx): Boolean = vc match
+//    case VCTrue => true
+//    case VCImp(b, vc) => discharge(vc, premises :+ b)
+//    case VCGroup(sides, mains) =>
+//      // Prove all side conditions first: if any fails, immediately give up this group.
+//      val result1 = sides.zipWithIndex.forall { (vc, i) => discharge(vc, premises) }
+//      if !result1 then
+//        return false
+//      // Prove all main goals: even if any fails, still try others to collect more error messages.
+//      val results = for (vc, i) <- mains.zipWithIndex yield discharge(vc, premises)
+//      results.forall(_ == true)
+//    case vc@VCInfer(e) =>
+//      val prover = new Prover
+//      premises.foreach(prover.assume)
+//      count += 1
+//      logger.info("")
+//      logger.info(s"Goal {} (VCInfer): {}", count, ppGoal(prover.getCtx.premises, e))
+//      prover.narrow()
+//      val inferer = new Inferer(using config, prover.getCtx)
+//      val r = inferer.inferLang(e)
+//      issuer.report(TypeInferred(ppRE(r), vc.loc))
+//      true
+//    case goal: VCGoal =>
+//      val prover = new Prover
+//      premises.foreach(prover.assume)
+//      count += 1
+//      logger.info("")
+//      logger.info(s"Goal {} ({}): {}", count, goal.getClass.getSimpleName, ppGoal(prover.getCtx.premises, goal.cond))
+//      prover.prove(goal.cond) match
+//        case Right(_) => true
+//        case Left(msg) => issuer.report(goal.diagnostic(msg)); false
+//
   def ppGoal(hypotheses: List[Expr], conclusion: Expr): String =
     val left = if hypotheses.isEmpty then "⊤" else hypotheses.map(ppExpr).mkString(" ∧ ")
     val right = " ⇒ " + ppExpr(conclusion)
@@ -135,9 +135,18 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
     else if s.contains(" ") then s.lastIndexOf(' ') + 1
     else width
 
-  final class Prover(using val varCtx: VarCtx):
+  final class Prover(using val varCtx: VarCtx, sCtx: SortingContext):
     private val cachedHypotheses = ListBuffer.empty[Expr]
     private val smtSolver = new SMTSolver(using extractMode = config.extractMode)
+
+    def push(): Unit =
+      ctxStack.push(getCtx)
+      smtSolver.push()
+
+    def pop(): Unit =
+      cachedHypotheses.clear()
+      ctx = ctxStack.pop()
+      smtSolver.pop()
 
     /** Adds the given `hypothesis`. */
     def assume(hypothesis: Expr): Unit =
@@ -371,7 +380,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
     private def collectSketches(seed: Expr): List[syn.Sketch] =
       val ss = ListBuffer.empty[syn.Sketch]
       seed.collect:
-        case Cmp(op@(EQ | NE), ec@CharAt(es, ei@Var(_)), Const(t: String)) if t.length == 1 =>
+        case RelExpr(op@(EQ | NE), ec@CharAt(es, ei@Var(_)), Const(t: String)) if t.length == 1 =>
           val c = t.head
           val cs = op match
             case EQ => CharSet(c)
@@ -380,12 +389,12 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
           ss += syn.InferIndexCharAt(es, ei, cs)
         case MapContains(_, ec@CharAt(_, _)) =>
           ss += syn.InferLang(ec)
-        case Cmp(EQ | NE, es, Const(t: String)) =>
+        case RelExpr(EQ | NE, es, Const(t: String)) =>
           ss += syn.InferLang(es, target = Some(t))
-        case Cmp(EQ | NE, es1, es2) if es1.sort == StringSort && es2.sort == StringSort =>
+        case RelExpr(EQ | NE, es1, es2) if es1.sort == StringSort && es2.sort == StringSort =>
           ss += syn.InferLang(es1)
           ss += syn.InferLang(es2)
-        case Cmp(_, ei@Var(_), StringIndexOf(es, Const(t: String))) if t.length == 1 =>
+        case RelExpr(_, ei@Var(_), StringIndexOf(es, Const(t: String))) if t.length == 1 =>
           ss += syn.InferIndexCmpFind(ei, es, t.head)
         case t: (StringStartsWith | StringEndsWith | StringContains | StrIs) =>
           ss += syn.InferTest(t)

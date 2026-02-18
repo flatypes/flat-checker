@@ -23,18 +23,17 @@ final case class MemberInfo(required: Seq[Type], optional: Seq[(Type, Expr)], re
     preCond.get.apply(es)
 
 import flat.Ops.CmpOp.*
-import flat.checker.ast.ArithOp.*
 
 val intMemberTable = Map(
   "__pos__" -> MemberInfo(Seq(), Seq(), IntType, { case Seq(n) => n }),
   "__neg__" -> MemberInfo(Seq(), Seq(), IntType, {
     case Seq(Const(k: Int)) => Const(-k)
-    case Seq(n) => SUB(Const(0), n)
+    case Seq(n) => Sub(Const(0), n)
   }),
   // arithmetic
-  "__add__" -> MemberInfo(Seq(IntType), Seq(), IntType, { case Seq(x, y) => ADD(x, y) }),
-  "__sub__" -> MemberInfo(Seq(IntType), Seq(), IntType, { case Seq(x, y) => SUB(x, y) }),
-  "__mul__" -> MemberInfo(Seq(IntType), Seq(), IntType, { case Seq(x, y) => MUL(x, y) }),
+  "__add__" -> MemberInfo(Seq(IntType), Seq(), IntType, { case Seq(x, y) => Add(x, y) }),
+  "__sub__" -> MemberInfo(Seq(IntType), Seq(), IntType, { case Seq(x, y) => Sub(x, y) }),
+  "__mul__" -> MemberInfo(Seq(IntType), Seq(), IntType, { case Seq(x, y) => Mul(x, y) }),
   // comparison
   "__eq__" -> MemberInfo(Seq(IntType), Seq(), BoolType, { case Seq(x, y) => EQ(x, y) }),
   "__ne__" -> MemberInfo(Seq(IntType), Seq(), BoolType, { case Seq(x, y) => NE(x, y) }),
@@ -82,9 +81,9 @@ val strMemberTable = Map(
   "__getitem_slice__" -> MemberInfo(Seq(IntType), Seq(IntType -> mkUnit), StringType,
     { case Seq(s, i, j) => Substring(s, i, if j == mkUnit then StringLength(s) else j) }),
   "find" -> MemberInfo(Seq(StringType), Seq(IntType -> Const(0)), IntType,
-    { case Seq(s, t, i) => if i == Const(0) then StringIndexOf(s, t) else ADD(StringIndexOf(Substring(s, i, StringLength(s)), t), i) }),
+    { case Seq(s, t, i) => if i == Const(0) then StringIndexOf(s, t) else Add(StringIndexOf(Substring(s, i, StringLength(s)), t), i) }),
   "index" -> MemberInfo(Seq(StringType), Seq(IntType -> Const(0)), IntType,
-    { case Seq(s, t, i) => if i == Const(0) then StringIndexOf(s, t) else ADD(StringIndexOf(Substring(s, i, StringLength(s)), t), i) },
+    { case Seq(s, t, i) => if i == Const(0) then StringIndexOf(s, t) else Add(StringIndexOf(Substring(s, i, StringLength(s)), t), i) },
     preCond = Some({ case Seq(s, t, i) => StringContains(if i == Const(0) then s else Substring(s, i, StringLength(s)), t) })),
   "startswith" -> MemberInfo(Seq(StringType), Seq(), BoolType, { case Seq(s, s1) => StringStartsWith(s, s1) }),
   "endswith" -> MemberInfo(Seq(StringType), Seq(), BoolType, { case Seq(s, s1) => StringEndsWith(s, s1) }),

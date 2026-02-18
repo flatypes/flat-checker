@@ -1,7 +1,6 @@
-package flat.checker
+package flat.checker.ast
 
 import flat.checker.ast.*
-import flat.checker.ast.ArithOp.*
 
 import scala.collection.mutable.ListBuffer
 
@@ -14,7 +13,7 @@ object ExprOps:
       case Not(And(b1, b2)) => Or(Not(b1).simpl, Not(b2).simpl)
       case Not(Or(b1, b2)) => And(Not(b1).simpl, Not(b2).simpl)
       case Not(Not(b)) => b.simpl
-      case Not(Cmp(op, e1, e2)) => Cmp(op.negation, e1, e2)
+      case Not(RelExpr(op, e1, e2)) => RelExpr(op.negation, e1, e2)
       case Ite(b, e1, e2) => Ite(b.simpl, e1, e2)
       case _ => expr
 
@@ -47,8 +46,8 @@ object ExprOps:
 
     private def getSummands: List[Expr] = expr match
       case Const(0) => Nil
-      case Arith(ADD, e1, e2) => e1.summands ++ e2.summands
-      case Arith(SUB, e1, e2) => e1.summands ++ e2.summands.map(_.negation)
+      case Add(e1, e2) => e1.summands ++ e2.summands
+      case Sub(e1, e2) => e1.summands ++ e2.summands.map(_.negation)
       case _ => List(expr)
 
     /** Returns the difference `expr - base` if it is a nonnegative constant. */
@@ -74,12 +73,12 @@ object ExprOps:
       pos -= e
       neg -= e
     if pos.nonEmpty then
-      val e = pos.reduce(ADD(_, _))
-      val e1 = neg.foldLeft(e)(SUB(_, _))
-      if k == 0 then e1 else if k > 0 then ADD(e1, Const(k)) else SUB(e1, Const(-k))
+      val e = pos.reduce(Add(_, _))
+      val e1 = neg.foldLeft(e)(Sub(_, _))
+      if k == 0 then e1 else if k > 0 then Add(e1, Const(k)) else Sub(e1, Const(-k))
     else if neg.nonEmpty then
       val e: Expr = Negate(neg.head)
-      val e1 = neg.tail.foldLeft(e)(SUB(_, _))
-      if k == 0 then e1 else if k > 0 then ADD(e1, Const(k)) else SUB(e1, Const(-k))
+      val e1 = neg.tail.foldLeft(e)(Sub(_, _))
+      if k == 0 then e1 else if k > 0 then Add(e1, Const(k)) else Sub(e1, Const(-k))
     else
       Const(k)

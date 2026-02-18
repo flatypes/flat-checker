@@ -4,7 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.checker.ast.*
 import io.github.cvc5
 
-final class SMTSolver(using varCtx: VarCtx, extractMode: Boolean) extends LazyLogging:
+final class SMTSolver(using varCtx: VarCtx, extractMode: Boolean, sortingContext: SortingContext) extends LazyLogging:
   private val encoder = new SMTEncoder
   private val slv = cvc5.Solver(encoder.tm)
   slv.setOption("tlimit-per", "3000")

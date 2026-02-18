@@ -3,7 +3,6 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Ops.CmpOp.*
 import flat.checker.ast.*
-import flat.checker.ast.ArithOp.*
 import flat.checker.ast.Printer.*
 
 object Analyzer extends LazyLogging:
@@ -38,8 +37,10 @@ object Analyzer extends LazyLogging:
     trace.foreach:
       case Assign(x, e) if x == name =>
         e match
-          case Arith(op, Var(y), Const(k: Int)) if y == x =>
-            value += (if op == ADD then k else -k)
+          case Add(Var(y), Const(k: Int)) if y == x =>
+            value += k
+          case Sub(Var(y), Const(k: Int)) if y == x =>
+            value += -k
           case _ =>
             value = if e.collectVars.contains(x) then Unknown else Abs(e)
       case While(_, body) if collectModifiedVars(body).contains(name) =>
@@ -68,7 +69,7 @@ object Analyzer extends LazyLogging:
   def guessInvariants(body: List[Stmt]): Unit =
     for stmt <- body do
       stmt.traverse:
-        case loop@While(Cmp(op, Var(x), e), s) if loop.invariants.isEmpty && op != EQ && op != NE &&
+        case loop@While(RelExpr(op, Var(x), e), s) if loop.invariants.isEmpty && op != EQ && op != NE &&
           (e.collectVars & collectModifiedVars(s)).isEmpty =>
           val initValues = for
             trace <- collectTraces(s)
@@ -80,11 +81,11 @@ object Analyzer extends LazyLogging:
               val finalValues = collectTraces(s).map(computeValue(x, _))
               (finalValues.reduce(_ | _), op) match
                 case (Rel(k), LT | LE) if k > 0 =>
-                  val inv = And(LE(e0, Var(x)(IntSort)), op(Var(x)(IntSort), mkAdd(e, k)))
+                  val inv = And(LE(e0, Var(x)), op(Var(x), mkAdd(e, k)))
                   logger.debug("Guessed invariant: {}", ppExpr(inv))
                   loop.invariants += inv.setLocation(loop.cond.loc)
                 case (Rel(k), GT | GE) if k < 0 =>
-                  val inv = And(op.reverse(mkAdd(e, k), Var(x)(IntSort)), LE(Var(x)(IntSort), e0))
+                  val inv = And(op.reverse(mkAdd(e, k), Var(x)), LE(Var(x), e0))
                   logger.debug("Guessed invariant: {}", ppExpr(inv))
                   loop.invariants += inv.setLocation(loop.cond.loc)
                 case _ =>

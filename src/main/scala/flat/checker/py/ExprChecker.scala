@@ -52,7 +52,7 @@ class ExprChecker(out: ListBuffer[ir.Stmt])(using issuer: Issuer, gCtx: GCtx, vm
       ctx.get(x) match
         case Some(id) =>
           val t = vm.getType(id)
-          (t, ir.Var(id)(t.toSort).copyLocation(node))
+          (t, ir.Var(id).copyLocation(node))
         case None =>
           gCtx.get(x) match
             case Some(info: FunInfo) =>
@@ -90,7 +90,7 @@ class ExprChecker(out: ListBuffer[ir.Stmt])(using issuer: Issuer, gCtx: GCtx, vm
                   out += ir.Assign(x, f.apply(e +: es).setLocation(nodeLoc))
                 case _ =>
                   issuer.report(Unsupported("in-place update on non-variable", receiver.loc))
-              ir.Var(y)(m.returns.toSort)
+              ir.Var(y)
             case None => m.apply(e +: es).setLocation(nodeLoc)
           (m.returns, value)
         case None =>

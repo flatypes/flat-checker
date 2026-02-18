@@ -30,3 +30,9 @@ final case class SetSort(elemSort: Sort) extends Sort
 final case class MapSort(keySort: Sort, valueSort: Sort) extends Sort
 
 final case class FunSort(argSorts: List[Sort], returnSort: Sort) extends Sort
+
+final class SortingContext(val sorts: Map[String, Sort]):
+  def apply(x: String): Sort = sorts(x.split(':').head)
+
+trait Sorted:
+  def sort(using ctx: SortingContext): Sort

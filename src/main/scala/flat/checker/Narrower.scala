@@ -3,8 +3,8 @@ package flat.checker
 import com.typesafe.scalalogging.LazyLogging
 import flat.Config
 import flat.Ops.CmpOp.*
-import flat.checker.ExprOps.*
 import flat.checker.ast.*
+import flat.checker.ast.ExprOps.*
 import flat.checker.ast.Printer.{ppExpr, ppRE}
 import flat.regex.*
 import flat.regex.NarrowOps.*
@@ -22,7 +22,7 @@ class Narrower(using config: Config) extends LazyLogging:
   /** Performs type narrowing on the given `ctx`. */
   def narrow(ctx: PrfCtx): List[Expr] =
     val res: Map[Expr, Domain] = Map.from(for x <- ctx.varCtx.strVars
-      yield Var(x)(StringSort) -> ctx.getLang(Var(x)(StringSort)))
+      yield Var(s"$x:0") -> ctx.getLang(Var(s"$x:0")))
     val res1 = iterate(ctx.premises, res)(using ctx)
     res1.toList.map:
       case (e, r: RegEx) => RefinedBy(e, r)
@@ -50,14 +50,14 @@ class Narrower(using config: Config) extends LazyLogging:
 
   private def narrowBy(hypothesis: Expr, res: Map[Expr, Domain])(using ctx: PrfCtx): Map[Expr, Domain] =
     hypothesis match
-      case Cmp(op, StringLength(es@Var(_)), Const(n: Int)) =>
+      case RelExpr(op, StringLength(es@Var(_)), Const(n: Int)) =>
         val r = res(es).asInstanceOf[RegEx]
         val r1 = mkIntervals(op, n) match
           case List(interval) => r.narrowByLength(interval)
           case List(interval1, interval2) => r.narrowByLength(interval1) | r.narrowByLength(interval2)
           case _ => assert(false)
         res + (es -> r1)
-      case Cmp(op, StringIndexOf(es@Var(_), Const(t: String)), Const(n: Int)) if t.length == 1 =>
+      case RelExpr(op, StringIndexOf(es@Var(_), Const(t: String)), Const(n: Int)) if t.length == 1 =>
         val c = t.head
         val r = res(es).asInstanceOf[RegEx]
         val intervals = mkIntervals(op, n)
@@ -69,7 +69,7 @@ class Narrower(using config: Config) extends LazyLogging:
           case _ => assert(false)
         val r2 = r1 | (if notFound then r.narrowByNotContain(c) else RENone)
         res + (es -> r2)
-      case Cmp(op@(EQ | NE), CharAt(es@Var(_), ei), Const(t: String)) if t.length == 1 =>
+      case RelExpr(op@(EQ | NE), CharAt(es@Var(_), ei), Const(t: String)) if t.length == 1 =>
         val c = t.head
         val cs = op match
           case EQ => CharSet(c)
@@ -92,7 +92,7 @@ class Narrower(using config: Config) extends LazyLogging:
               case NE => r.narrowByContainNot(c)
           case _ => r
         res + (es -> r1)
-      case Cmp(op@(EQ | NE), es@Var(_), Const(t: String)) =>
+      case RelExpr(op@(EQ | NE), es@Var(_), Const(t: String)) =>
         val r = res(es).asInstanceOf[RegEx]
         val r1 = op match
           case EQ => r.narrowByEq(t)
@@ -126,7 +126,7 @@ class Narrower(using config: Config) extends LazyLogging:
                 list
             res + (e -> list1)
           case None => res
-      case Cmp(op@(EQ | NE), SeqGet(e, ei), Const(t: String)) =>
+      case RelExpr(op@(EQ | NE), SeqGet(e, ei), Const(t: String)) =>
         getList(e, res) match
           case Some(list) =>
             val indexInferer = new IndexInferer

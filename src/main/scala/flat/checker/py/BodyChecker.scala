@@ -3,7 +3,6 @@ package flat.checker.py
 import flat.Issuer
 import flat.Ops.CmpOp.*
 import flat.checker.ast as ir
-import flat.checker.ast.ArithOp.ADD
 import flat.checker.py.Type.*
 import flat.checker.py.ast.*
 
@@ -49,13 +48,13 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: Type, vm: VarMan
             case StringType =>
               val id = vm.declare(StringType)
               out += ir.Assign(id, e)
-              out += ir.Assert(ir.Cmp(EQ,
-                ir.StringLength(ir.Var(id)(ir.StringSort)),
+              out += ir.Assert(ir.RelExpr(EQ,
+                ir.StringLength(ir.Var(id)),
                 ir.Const(values.length)).fillLocation(node.loc))
               var newCtx = ctx
               for i <- values.indices do
                 newCtx = checkAssign(values(i),
-                  ir.CharAt(ir.Var(id)(ir.StringSort), ir.Const(i)).fillLocation(values(i).loc),
+                  ir.CharAt(ir.Var(id), ir.Const(i)).fillLocation(values(i).loc),
                   // NOTE: to skip checking the binder has type char
                   StringType, newCtx)
               return newCtx
@@ -168,7 +167,7 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: Type, vm: VarMan
         case None => // declaration
           val id = declare(node.target.asIdent, IntType, ctx)
           ctx + (node.target.id -> id)
-      val i = ir.Var(node.target.id)(ir.IntSort)
+      val i = ir.Var(node.target.id)
       // i = start
       out += ir.Assign(i.name, checkType(node.start, IntType, ctx))
       val (invNodes, realBody) = extractInv(node.body, Nil)
@@ -178,9 +177,9 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: Type, vm: VarMan
       //   ...
       //   i = i + step
       val loop = ir.While(
-        ir.Cmp(LT, i, checkType(node.end, IntType, ctx)).setLocation(node.end.loc),
+        ir.RelExpr(LT, i, checkType(node.end, IntType, ctx)).setLocation(node.end.loc),
         b :+ ir.Assign(i.name,
-          ADD(i, checkType(node.step, IntType, ctx)).setLocation(node.step.loc)))
+          ir.Add(i, checkType(node.step, IntType, ctx)).setLocation(node.step.loc)))
       loop.invariants ++= inv
       out += loop
       newCtx

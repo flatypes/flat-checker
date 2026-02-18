@@ -16,6 +16,10 @@ final case class FunDef(name: String, params: List[Decl], returnSort: Sort, requ
     val localCtx = Map.from(for param <- locals yield param.name -> param.sort)
     paramCtx ++ returnCtx ++ localCtx
 
+  def programVars: Set[String] = (params ++ locals).map(_.name).toSet + "return"
+
+  def sortingContext: SortingContext = SortingContext(lCtx)
+
 /** Local Statement. */
 sealed trait Stmt:
   protected def children: List[Stmt]
