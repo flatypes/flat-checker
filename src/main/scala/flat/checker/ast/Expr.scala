@@ -3,7 +3,7 @@ package flat.checker.ast
 import flat.regex.Domain
 import flat.{Location, Locational, Ops}
 
-import scala.collection.immutable.Iterable
+import java.util.concurrent.atomic.AtomicInteger
 
 sealed trait Expr extends Locational, Node, Sorted:
   def collectVars: Set[String] = collect { case Var(x) => x }.toSet
@@ -24,6 +24,17 @@ final case class Const(value: Int | Boolean | Char | String) extends Expr:
 final case class Var(name: String) extends Expr:
   override def sort(using ctx: SortingContext): Sort = ctx(name)
 
+private var freshVarCounter = new AtomicInteger
+
+object FreshVar:
+  def create(): Var =
+    val n = freshVarCounter.getAndIncrement()
+    Var(s"$n")
+
+  def unapply(expr: Expr): Option[String] = expr match
+    case Var(x) if x.forall(_.isDigit) => Some(x)
+    case _ => None
+
 final case class Global(decl: Decl) extends Expr:
   override def sort(using ctx: SortingContext): Sort = decl.sort
 
@@ -40,26 +51,40 @@ final case class RefinedBy(value: Expr, domain: Domain) extends Expr:
   override def sort(using ctx: SortingContext): Sort = BoolSort
 
 // Boolean operations
-final case class And(left: Expr, right: Expr) extends Expr:
+final case class And(conjuncts: List[Expr]) extends Expr:
+  require(conjuncts.length >= 2, "And must have at least two conjuncts")
+
   override def sort(using ctx: SortingContext): Sort = BoolSort
 
-def mkAnd(conjuncts: Iterable[Expr]): Expr =
-  if conjuncts.isEmpty then Const(true) else conjuncts.reduce(And.apply)
+object And:
+  def apply(value1: Expr, value2: Expr, values: Expr*): And = And(value1 :: value2 :: values.toList)
+
+def mkAnd(conjuncts: List[Expr]): Expr = conjuncts match
+  case Nil => Const(true)
+  case c :: Nil => c
+  case cs => And(cs)
 
 def mkAnd(conjuncts: Expr*): Expr = mkAnd(conjuncts.toList)
 
-final case class Or(left: Expr, right: Expr) extends Expr:
+final case class Or(disjuncts: List[Expr]) extends Expr:
+  require(disjuncts.length >= 2, "Or must have at least two disjuncts")
+
   override def sort(using ctx: SortingContext): Sort = BoolSort
 
-def mkOr(disjuncts: Iterable[Expr]): Expr =
-  if disjuncts.isEmpty then Const(false) else disjuncts.reduce(Or.apply)
+object Or:
+  def apply(value1: Expr, value2: Expr, values: Expr*): Or = Or(value1 :: value2 :: values.toList)
+
+def mkOr(disjuncts: List[Expr]): Expr = disjuncts match
+  case Nil => Const(false)
+  case d :: Nil => d
+  case ds => Or(ds)
 
 def mkOr(disjuncts: Expr*): Expr = mkOr(disjuncts.toList)
 
-final case class Not(value: Expr) extends Expr:
+final case class Not(cond: Expr) extends Expr:
   override def sort(using ctx: SortingContext): Sort = BoolSort
 
-  override def toString: String = s"(!$value)"
+  override def toString: String = s"(!$cond)"
 
 def mkImplies(premise: Expr, conclusion: Expr): Expr = Ite(premise, conclusion, Const(true))
 
@@ -173,7 +198,7 @@ final case class StringIndexOf(str: Expr, pat: Expr) extends Expr:
 final case class StringSplit(str: Expr, sep: Expr) extends Expr:
   override def sort(using ctx: SortingContext): Sort = SeqSort(StringSort)
 
-final case class StringToInt(str: Expr, base: Expr) extends Expr:
+final case class StringToInt(str: Expr, base: Int) extends Expr:
   override def sort(using ctx: SortingContext): Sort = IntSort
 
 final case class StringFromInt(int: Expr) extends Expr:
@@ -186,6 +211,9 @@ final case class StrFormat(fmt: Expr, arg: Expr) extends Expr:
   override def sort(using ctx: SortingContext): Sort = StringSort
 
 final case class StrIs(str: Expr, kind: String, predicate: Char => Boolean) extends Expr:
+  override def sort(using ctx: SortingContext): Sort = BoolSort
+
+final case class StringForall(str: Expr, predicate: Expr) extends Expr:
   override def sort(using ctx: SortingContext): Sort = BoolSort
 
 // Tuple Operations
@@ -312,5 +340,9 @@ final case class MapPut(map: Expr, key: Expr, value: Expr) extends Expr:
 
 final case class MapRemove(map: Expr, key: Expr) extends Expr:
   override def sort(using ctx: SortingContext): Sort = map.sort
+
+// Placeholder expression for default value in operations
+final case class DefaultExpr(sort: Sort) extends Expr:
+  override def sort(using ctx: SortingContext): Sort = sort
 
 val NoExpr: Expr = TupleOf(Nil)

@@ -8,7 +8,7 @@ import org.apache.commons.text.StringEscapeUtils.escapeJava
  * @param set   the underlying set of characters
  * @param isInc if true, `set` stores the characters that should be included; otherwise excluded
  * */
-final class CharSet private(private val set: Set[Char], private val isInc: Boolean):
+final class CharSet private(private val set: Set[Char], private val isInc: Boolean) extends Domain:
   /** Tests if this CS is empty. */
   def isEmpty: Boolean = set.isEmpty && isInc
 
@@ -134,6 +134,11 @@ object CharSet:
 
   /** Creates a CS with the given characters in the collection `it`. */
   def from(it: IterableOnce[Char]): CharSet = new CharSet(Set.from(it), true)
+
+  def intDigit(base: Int): CharSet =
+    require(2 <= base && base <= 36)
+    if base <= 10 then from('0' until ('0' + base).toChar)
+    else from('0' to '9') | from('A' until ('A' + (base - 10)).toChar) | from('a' until ('a' + (base - 10)).toChar)
 
 object CharExt:
   extension (c: Char)

@@ -125,5 +125,5 @@ final class Transpiler:
         val decl = ir.Decl(x, t.toSort)
         locals += decl
         assert(t.split._2.isEmpty, "Local variables cannot have refinement types: " + x)
-      out += ir.FunDef(name, params.toList, returnBase.toSort, requires.toList, ensures.toList,
-        locals.toList, ss)
+      out += ir.FunDef(name, params.toList, List(ir.Decl("return", returnBase.toSort)),
+        ir.mkAnd(requires.toList), ir.mkAnd(ensures.toList), locals.toList, ss)

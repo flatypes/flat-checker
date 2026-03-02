@@ -8,15 +8,14 @@ sealed trait GlobalStmt
 
 final case class Decl(name: String, sort: Sort)
 
-final case class FunDef(name: String, params: List[Decl], returnSort: Sort, requires: List[Expr], ensures: List[Expr],
+final case class FunDef(name: String, params: List[Decl], returnParams: List[Decl],
+                        requires: Expr, ensures: Expr,
                         locals: List[Decl], body: List[Stmt]) extends GlobalStmt:
-  lazy val lCtx: Map[String, Sort] =
-    val paramCtx = Map.from(for param <- params yield param.name -> param.sort)
-    val returnCtx = Map("return" -> returnSort)
-    val localCtx = Map.from(for param <- locals yield param.name -> param.sort)
-    paramCtx ++ returnCtx ++ localCtx
+  val assignable: Map[String, Sort] = Map.from(for Decl(x, s) <- locals ++ returnParams yield x -> s)
 
-  def programVars: Set[String] = (params ++ locals).map(_.name).toSet + "return"
+  lazy val lCtx: Map[String, Sort] = ???
+
+  def programVars: Set[String] = (params).map(_.name).toSet + "return"
 
   def sortingContext: SortingContext = SortingContext(lCtx)
 
@@ -31,13 +30,13 @@ sealed trait Stmt:
 final case class Assign(id: String, value: Expr) extends Stmt:
   protected def children: List[Stmt] = Nil
 
+final case class Havoc(ids: List[String]) extends Stmt:
+  protected def children: List[Stmt] = Nil
+
 final case class Assert(cond: Expr) extends Stmt:
   protected def children: List[Stmt] = Nil
 
 final case class Assume(cond: Expr) extends Stmt:
-  protected def children: List[Stmt] = Nil
-
-final case class Hint(cond: Expr) extends Stmt:
   protected def children: List[Stmt] = Nil
 
 final case class ShowType(value: Expr) extends Stmt:

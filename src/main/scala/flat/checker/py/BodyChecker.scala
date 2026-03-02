@@ -216,10 +216,6 @@ class BodyChecker(using issuer: Issuer, gCtx: GCtx, returnType: Type, vm: VarMan
           val e = checkType(arg, BoolType, ctx, ignorePre = true)
           out += ir.Assume(e)
           ctx
-        case Call(Name("hint"), Seq(arg)) =>
-          val e = checkType(arg, BoolType, ctx, ignorePre = true)
-          out += ir.Hint(e)
-          ctx
         case _ =>
           val (t, e) = inferType(node.expr, ctx)
           val freshId = vm.declare(t)

@@ -6,29 +6,18 @@ import scala.collection.mutable.ListBuffer
 
 object ExprOps:
   extension (expr: Expr)
-    /** Simplifies this condition. */
-    def simpl: Expr = expr match
-      case And(b1, b2) => And(b1.simpl, b2.simpl)
-      case Or(b1, b2) => Or(b1.simpl, b2.simpl)
-      case Not(And(b1, b2)) => Or(Not(b1).simpl, Not(b2).simpl)
-      case Not(Or(b1, b2)) => And(Not(b1).simpl, Not(b2).simpl)
-      case Not(Not(b)) => b.simpl
-      case Not(RelExpr(op, e1, e2)) => RelExpr(op.negation, e1, e2)
-      case Ite(b, e1, e2) => Ite(b.simpl, e1, e2)
-      case _ => expr
-
     /** Returns all conjuncts. */
-    def conjuncts: List[Expr] =
+    def getConjuncts: List[Expr] =
       expr match
         case Const(true) => Nil
-        case And(e1, e2) => e1.conjuncts ++ e2.conjuncts
+        case And(es) => es.flatMap(_.getConjuncts)
         case _ => List(expr)
 
     /** Returns all disjuncts. */
-    def disjuncts: List[Expr] =
+    def getDisjuncts: List[Expr] =
       expr match
         case Const(false) => Nil
-        case Or(e1, e2) => e1.disjuncts ++ e2.disjuncts
+        case Or(es) => es.flatMap(_.getDisjuncts)
         case _ => List(expr)
 
     // Arithmetic

@@ -9,10 +9,10 @@ object Printer:
     program.body.map(ppGlobalStmt).mkString("\n")
 
   private def ppGlobalStmt(stmt: GlobalStmt): String = stmt match
-    case FunDef(f, params, returnSort, requires, ensures, locals, body) =>
-      val sig = formatLine(s"def $f${ppParamGroup(params)}: ${ppSort(returnSort)}", 0)
-      val pre = requires.map(e => formatLine(s"requires ${ppExpr(e)}", 1)).mkString
-      val post = ensures.map(e => formatLine(s"ensures ${ppExpr(e)}", 1)).mkString
+    case FunDef(f, params, returnParams, requires, ensures, locals, body) =>
+      val sig = formatLine(s"def $f${ppParamGroup(params)} returns ${ppParamGroup(returnParams)}", 0)
+      val pre = formatLine(s"requires ${ppExpr(requires)}", 1)
+      val post = formatLine(s"ensures ${ppExpr(ensures)}", 1)
       val local = locals.map(d => formatLine(s"var ${ppDecl(d)}", 1)).mkString
       sig + pre + post + "begin\n" + local + ppStmtBody(body, 1) + "end\n"
 
@@ -25,10 +25,10 @@ object Printer:
     s"${decl.name}: ${ppSort(decl.sort)}"
 
   def ppStmt(stmt: Stmt, level: Int = 0): String = stmt match
-    case Assign(x, e) => formatLine(s"$x := ${ppExpr(e)}", level)
+    case Assign(x, e) => formatLine(s"$x = ${ppExpr(e)}", level)
+    case Havoc(xs) => formatLine(s"havoc ${xs.mkString(", ")}", level)
     case Assert(e) => formatLine(s"assert ${ppExpr(e)}", level)
     case Assume(e) => formatLine(s"assume ${ppExpr(e)}", level)
-    case Hint(e) => formatLine(s"hint ${ppExpr(e)}", level)
     case ShowType(e) => formatLine(s"show-type ${ppExpr(e)}", level)
     case IfStmt(e, thenBody, elseBody) =>
       formatLine(s"if ${ppExpr(e)} then", level) + ppStmtBody(thenBody, level + 1) + ppElse(elseBody, level)
@@ -46,9 +46,12 @@ object Printer:
       formatLine(s"else if ${ppExpr(e)} then", level) + ppStmtBody(thenBody, level + 1) + ppElse(elseBody, level)
     case _ => formatLine("else", level) + ppStmtBody(body, level + 1)
 
-  def ppExpr(expr: Expr): String = renderExpr(expr)._1
+  type FreshInfo = Map[String, (String, Int)]
 
-  private def ppExprSeq(exprs: List[Expr]): String = exprs.map(ppExpr).mkString(", ")
+  def ppExpr(expr: Expr)(using freshNames: FreshInfo = Map.empty): String = renderExpr(expr)(using freshNames)._1
+
+  private def ppExprSeq(exprs: List[Expr])(using freshNames: FreshInfo): String =
+    exprs.map(ppExpr(_)).mkString(", ")
 
   private object Precedence extends Enumeration:
     type Precedence = Value
@@ -59,18 +62,16 @@ object Printer:
 
   private type Rendered = (String, Precedence)
 
-  private def renderExpr(expr: Expr): Rendered = expr match
+  private def renderExpr(expr: Expr)(using freshNames: FreshInfo): Rendered = expr match
     case Const(n: Int) => (n.toString, Highest)
     case Const(b: Boolean) => (b.toString, Highest)
     case Const(c: Char) => ("'" + escapeJava(c.toString) + "'", Highest)
     case Const(s: String) => ("\"" + escapeJava(s) + "\"", Highest)
-    case Var(x) =>
-      val s =
-        if x.contains(':') then
-          val Array(y, ver) = x.split(':')
-          y + flat.util.renderSubscript(ver.toInt)
-        else x
-      (s, Highest)
+    case FreshVar(i) =>
+      freshNames.get(i) match
+        case Some((x, k)) => (x + flat.util.renderSubscript(k), Highest)
+        case None => (s"?$i", Highest)
+    case Var(x) => (x, Highest)
     case Global(decl) => (decl.name, Highest)
     case Lambda(params, e) => (s"λ ${ppParamGroup(params)}, ${ppExpr(e)}", Lowest)
     case Apply(e, es) => renderApply(renderExpr(e), ppExprSeq(es))
@@ -106,10 +107,12 @@ object Printer:
     case SetMinus(e1, e2) => renderInfixL("-", Additive, renderExpr(e1), renderExpr(e2))
 
     // infixR operations
-    case And(e1, e2) => renderInfixR("∧", LogicalAND, renderExpr(e1), renderExpr(e2))
-    case Or(e1, e2) => renderInfixR("∨", LogicalOR, renderExpr(e1), renderExpr(e2))
     case StringConcat(e1, e2) => renderInfixR("⧺", Additive, renderExpr(e1), renderExpr(e2))
     case SeqConcat(e1, e2) => renderInfixR("⧺", Additive, renderExpr(e1), renderExpr(e2))
+
+    // infix chained operations
+    case And(bs) => renderInfixChained("∧", LogicalAND, bs.map(renderExpr))
+    case Or(bs) => renderInfixChained("∨", LogicalOR, bs.map(renderExpr))
 
     // slice expressions
     case CharAt(e, e1) => renderSlice(renderExpr(e), ppExpr(e1))
@@ -169,6 +172,10 @@ object Printer:
     val (s2, rightLevel) = rightArg
     val right = if rightLevel < level then "(" + s2 + ")" else s2
     (s"$left $op $right", level)
+
+  private def renderInfixChained(op: String, level: Precedence, args: List[Rendered]): Rendered =
+    val ss = args.map { (s, argLevel) => if argLevel < level then "(" + s + ")" else s }
+    (ss.mkString(s" $op "), level)
 
   private def renderSlice(valueArg: Rendered, indices: String*): Rendered =
     val (s, valueLevel) = valueArg

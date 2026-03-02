@@ -184,6 +184,6 @@ class ExprChecker(out: ListBuffer[ir.Stmt])(using issuer: Issuer, gCtx: GCtx, vm
       val (expectedBase, expectedDomain) = expected.split
       if !(actualBase <= expectedBase) then
         issuer.report(TypeMismatch(expectedBase.show, actualBase.show, node.loc))
-      for d <- expectedDomain do
-        out += ir.Assert(ir.RefinedBy(e, d).fillLocation(node.loc))
+      //  for d <- expectedDomain do
+      //    out += ir.Assert(ir.RefinedBy(e, d).fillLocation(node.loc))
       e

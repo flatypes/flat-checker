@@ -34,7 +34,7 @@ object Driver extends LazyLogging:
           mc.timePause("time/check")
           mc.put("succeed", checker.issuer.noError)
           mc.pop()
-        if checker.issuer.noError then
+        if checker.noError then
           logger.info("Type CHECKED")
         else if config.noError then
           done

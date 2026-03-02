@@ -29,7 +29,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
           t <- target
           if !r.contains(t)
         yield NE(str, Const(t))
-      val l2 = if r.isSmall then List(mkOr(r.words.map(w => EQ(str, Const(w))))) else Nil // str in r
+      val l2 = if r.isSmall then List(mkOr(r.words.toList.map(w => EQ(str, Const(w))))) else Nil // str in r
       l1.toList ++ l2
 
   final case class InferTest(test: Expr) extends Sketch:
@@ -119,7 +119,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
       val inferer = new Inferer
       val r = inferer.inferLang(str)
       val interval = r.toNumber(base)
-      List(inInterval(StringToInt(str, Const(base)), interval))
+      List(inInterval(StringToInt(str, base), interval))
 
   final case class InferToSet(str: Expr) extends Sketch:
     def apply(using ctx: PrfCtx): List[Expr] =
@@ -133,7 +133,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
     def apply(using ctx: PrfCtx): List[Expr] =
       val inferer = new Inferer
       inferer.inferStrList(expr) match
-        case r: RegEx => if r.isSmall then List(mkOr(r.words.map(w => EQ(expr, Const(w))))) else Nil
+        case r: RegEx => if r.isSmall then List(mkOr(r.words.toList.map(w => EQ(expr, Const(w))))) else Nil
         case interval: Interval => List(inInterval(expr, interval))
         case inferer.PossibleIndices(left, right, notFound, lst) =>
           var ors1 = left.map(i => EQ(expr, Const(i)))

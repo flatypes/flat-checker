@@ -72,7 +72,7 @@ object Analyzer extends LazyLogging:
         case loop@While(RelExpr(op, Var(x), e), s) if loop.invariants.isEmpty && op != EQ && op != NE &&
           (e.collectVars & collectModifiedVars(s)).isEmpty =>
           val initValues = for
-            trace <- collectTraces(s)
+            trace <- collectTraces(body)
             k = trace.indexOf(loop)
             if k >= 0
           yield computeValue(x, trace.take(k))
@@ -104,9 +104,8 @@ object Analyzer extends LazyLogging:
     mkAnd:
       trace.reverse
         .takeWhile:
-          case Assume(_) | Assert(_) => true
+          case Assert(_) => true
           case _ => false
         .map:
-          case Assume(b) => b
           case Assert(b) => b
           case _ => assert(false)

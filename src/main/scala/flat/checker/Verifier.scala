@@ -4,6 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.Ops.CmpOp.*
 import flat.checker.ast.*
 import flat.checker.ast.ExprOps.*
+import flat.checker.ast.ExprSimplifier.*
 import flat.checker.ast.Printer.*
 import flat.regex.{simpl as _, *}
 import flat.util.allRight
@@ -47,7 +48,7 @@ class PrfCtx private(val premises: List[Expr])(using prover: Verifier#Prover) ex
   def getList(lst: Expr): Option[AList] = premises.collectFirst { case RefinedBy(e, l: AList) if e == lst => l }
 
   /** Creates a new proof context with given conditions added. */
-  def ++(conds: List[Expr]): PrfCtx = PrfCtx(conds.map(simpl).flatMap(conjuncts) ++ premises)
+  def ++(conds: List[Expr]): PrfCtx = PrfCtx(conds.map(simplify).flatMap(getConjuncts) ++ premises)
 
   inline def +(cond: Expr): PrfCtx = ++(List(cond))
 
@@ -58,7 +59,7 @@ object PrfCtx:
   def empty(using prover: Verifier#Prover) = PrfCtx(Nil)
 
   def from(conds: List[Expr])(using rover: Verifier#Prover): PrfCtx =
-    PrfCtx(conds.map(simpl).flatMap(conjuncts))
+    PrfCtx(conds.map(simplify).flatMap(getConjuncts))
 
 /** Verifier: prove goals or answer type queries. */
 final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
@@ -101,7 +102,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
 //        case Left(msg) => issuer.report(goal.diagnostic(msg)); false
 //
   def ppGoal(hypotheses: List[Expr], conclusion: Expr): String =
-    val left = if hypotheses.isEmpty then "⊤" else hypotheses.map(ppExpr).mkString(" ∧ ")
+    val left = if hypotheses.isEmpty then "⊤" else hypotheses.map(ppExpr(_)).mkString(" ∧ ")
     val right = " ⇒ " + ppExpr(conclusion)
     if left.length + right.length <= 65 then left + right // inline
     else if left.length + right.length <= 118 then "\n  " + left + right // one-line
@@ -193,7 +194,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       smtSolver.assume(hCond)
 
     private def decide(or: Or, choice: Int): Unit =
-      val bs = or.disjuncts
+      val bs = or.getDisjuncts
       logger.debug("{} decide: case ({}) {}", "-" * ctxStack.size, choice, ppExpr(bs(choice)))
       val hNew = mkAnd(bs(choice) :: bs.take(choice).map(Not(_)))
       val hs = getCtx.premises.map { h => if h == or then hNew else h }
@@ -219,9 +220,9 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
       case _ => conclusion.collectFirst { case ite: Ite => ite }.isDefined
 
     private def splitAndProve(conclusion: Expr): Either[String, Unit] = conclusion match
-      case and: And => allRight(and.conjuncts, splitAndProve)
+      case And(bs) => allRight(bs, splitAndProve)
       case or: Or =>
-        val bs = or.disjuncts
+        val bs = or.getDisjuncts
         locally:
           for b <- bs.init do assume(Not(b))
           splitAndProve(bs.last)
@@ -281,7 +282,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
           synthAndProve(conclusion)
             .orElse(tryDestructAndProve(conclusion))
         case (Nil, or :: rest) =>
-          allRight(or.disjuncts.indices.toList,
+          allRight(or.getDisjuncts.indices.toList,
             choice => locally { decide(or, choice); destructAndProve(Nil, rest, conclusion) })
         case (b :: rest, _) =>
           allRight(List(true, false),
@@ -359,10 +360,10 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
         mc.timePause("time/verif/type")
       // Try to prove using these lemmas.
       if lemmas.nonEmpty then
-        logger.trace("lemmas: {}", lemmas.map(ppExpr).mkString(", "))
+        logger.trace("lemmas: {}", lemmas.map(ppExpr(_)).mkString(", "))
         for mc <- config.metrics do
           mc.count("lemmas", lemmas.length)
-        if lemmas.exists(_.conjuncts.contains(conclusion)) then
+        if lemmas.exists(_.getConjuncts.contains(conclusion)) then
           logger.debug("PROVED by an exact lemma")
           return Right(())
         locally:
@@ -402,7 +403,7 @@ final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
           ss += syn.InferLength(es)
         case StringIndexOf(es, Const(t: String)) =>
           ss += syn.InferFind(es, t)
-        case StringToInt(es, Const(n: Int)) =>
+        case StringToInt(es, n) =>
           ss += syn.InferToNumber(es, n)
         case StringToSet(es) =>
           ss += syn.InferToSet(es)

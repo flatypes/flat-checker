@@ -2,6 +2,7 @@ package flat.checker
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.ast.{FunDef, Module}
+import flat.checker.verifier.Executor
 import flat.{Config, Issuer, checker}
 
 /** Core Type Checker. */
@@ -14,5 +15,9 @@ class Checker(using config: Config) extends LazyLogging:
     for f <- module.body do check(f.asInstanceOf[FunDef])
 
   def check(funDef: FunDef): Unit =
-    val executor = Executor(funDef)(using config, issuer)
-    executor.exec()
+    val executor = new Executor(using config, issuer)
+    executor.exec(funDef)
+
+  private var errorCount = 0
+
+  def noError: Boolean = errorCount == 0

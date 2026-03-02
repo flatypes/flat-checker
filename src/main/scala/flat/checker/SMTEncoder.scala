@@ -72,14 +72,8 @@ class SMTEncoder(using varCtx: VarCtx, sortingContext: SortingContext, extractMo
       if extractMode then encodeRefinedBy(e, t) else tm.mkConst(tm.getBooleanSort)
 
     // Boolean operations
-    case And(b1, b2) =>
-      val t1 = encodeExpr(b1)
-      val t2 = encodeExpr(b2)
-      tm.mkTerm(Kind.AND, t1, t2)
-    case Or(b1, b2) =>
-      val t1 = encodeExpr(b1)
-      val t2 = encodeExpr(b2)
-      tm.mkTerm(Kind.OR, t1, t2)
+    case And(bs) => tm.mkTerm(Kind.AND, bs.map(encodeExpr).toArray)
+    case Or(bs) => tm.mkTerm(Kind.OR, bs.map(encodeExpr).toArray)
     case Not(b) =>
       val t = encodeExpr(b)
       tm.mkTerm(Kind.NOT, t)
@@ -162,7 +156,7 @@ class SMTEncoder(using varCtx: VarCtx, sortingContext: SortingContext, extractMo
     case CharFromCode(e) =>
       val t = encodeExpr(e)
       tm.mkTerm(Kind.STRING_FROM_CODE, t)
-    case StringToInt(es, Const(10)) =>
+    case StringToInt(es, 10) =>
       val ts = encodeExpr(es)
       // NOTE: only nonnegative values are supported
       tm.mkTerm(Kind.STRING_TO_INT, ts)
