@@ -27,14 +27,13 @@ object Driver extends LazyLogging:
           mc.timePause("time/transpile")
         for mc <- config.metrics do
           mc.timeStart("time/check")
-        val checker = new Checker
-        checker.check(module)
-        checker.issuer.print()
+        val checker = new verifier.Verifier
+        val report = checker.verify(module)
         for mc <- config.metrics do
           mc.timePause("time/check")
-          mc.put("succeed", checker.issuer.noError)
+          mc.put("succeed", report.noError)
           mc.pop()
-        if checker.noError then
+        if report.noError then
           logger.info("Type CHECKED")
         else if config.noError then
           done

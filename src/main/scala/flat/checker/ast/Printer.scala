@@ -11,8 +11,8 @@ object Printer:
   private def ppGlobalStmt(stmt: GlobalStmt): String = stmt match
     case FunDef(f, params, returnParams, requires, ensures, locals, body) =>
       val sig = formatLine(s"def $f${ppParamGroup(params)} returns ${ppParamGroup(returnParams)}", 0)
-      val pre = formatLine(s"requires ${ppExpr(requires)}", 1)
-      val post = formatLine(s"ensures ${ppExpr(ensures)}", 1)
+      val pre = requires.map(e => formatLine(s"requires ${ppExpr(e)}", 1)).mkString
+      val post = ensures.map(e => formatLine(s"ensures ${ppExpr(e)}", 1)).mkString
       val local = locals.map(d => formatLine(s"var ${ppDecl(d)}", 1)).mkString
       sig + pre + post + "begin\n" + local + ppStmtBody(body, 1) + "end\n"
 
@@ -46,11 +46,9 @@ object Printer:
       formatLine(s"else if ${ppExpr(e)} then", level) + ppStmtBody(thenBody, level + 1) + ppElse(elseBody, level)
     case _ => formatLine("else", level) + ppStmtBody(body, level + 1)
 
-  type FreshInfo = Map[String, (String, Int)]
+  def ppExpr(expr: Expr): String = renderExpr(expr)._1
 
-  def ppExpr(expr: Expr)(using freshNames: FreshInfo = Map.empty): String = renderExpr(expr)(using freshNames)._1
-
-  private def ppExprSeq(exprs: List[Expr])(using freshNames: FreshInfo): String =
+  private def ppExprSeq(exprs: List[Expr]): String =
     exprs.map(ppExpr(_)).mkString(", ")
 
   private object Precedence extends Enumeration:
@@ -62,15 +60,11 @@ object Printer:
 
   private type Rendered = (String, Precedence)
 
-  private def renderExpr(expr: Expr)(using freshNames: FreshInfo): Rendered = expr match
+  private def renderExpr(expr: Expr): Rendered = expr match
     case Const(n: Int) => (n.toString, Highest)
     case Const(b: Boolean) => (b.toString, Highest)
     case Const(c: Char) => ("'" + escapeJava(c.toString) + "'", Highest)
     case Const(s: String) => ("\"" + escapeJava(s) + "\"", Highest)
-    case FreshVar(i) =>
-      freshNames.get(i) match
-        case Some((x, k)) => (x + flat.util.renderSubscript(k), Highest)
-        case None => (s"?$i", Highest)
     case Var(x) => (x, Highest)
     case Global(decl) => (decl.name, Highest)
     case Lambda(params, e) => (s"λ ${ppParamGroup(params)}, ${ppExpr(e)}", Lowest)
@@ -148,6 +142,17 @@ object Printer:
           case e: Expr => ppExpr(e)
           case other => other.toString
         renderApply((expr.productPrefix, Highest), args.mkString(", "))
+
+  private def renderVar(name: String): Rendered =
+    name.indexOf('(') match
+      case 0 =>
+        (s"?$name", Highest)
+      case i if i > 0 =>
+        val x = name.substring(0, i)
+        val k = name.substring(i + 1, name.length - 1).toInt
+        (s"$x${flat.util.renderSubscript(k)}", Highest)
+      case _ =>
+        (name, Highest)
 
   private def renderApply(funArg: Rendered, arg: String): Rendered =
     val (f, funLevel) = funArg

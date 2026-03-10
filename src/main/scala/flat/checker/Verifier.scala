@@ -8,7 +8,7 @@ import flat.checker.ast.ExprSimplifier.*
 import flat.checker.ast.Printer.*
 import flat.regex.{simpl as _, *}
 import flat.util.allRight
-import flat.{Config, Issuer, Ops}
+import flat.{Config, Ops}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -62,7 +62,7 @@ object PrfCtx:
     PrfCtx(conds.map(simplify).flatMap(getConjuncts))
 
 /** Verifier: prove goals or answer type queries. */
-final class Verifier(using config: Config, issuer: Issuer) extends LazyLogging:
+final class Verifier(using config: Config) extends LazyLogging:
   //  def verify(vc: VC)(using varCtx: VarCtx): Unit =
 //    count = 0
 //    discharge(vc, Nil)

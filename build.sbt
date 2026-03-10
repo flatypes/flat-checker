@@ -23,6 +23,8 @@ libraryDependencies += "com.github.scopt" %% "scopt" % "4.1.0"
 libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.5.18"
 libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5"
 libraryDependencies += "com.ibm.icu" % "icu4j" % "78.1"
+libraryDependencies += "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "1.0.0"
+libraryDependencies += "org.eclipse.lsp4j" % "org.eclipse.lsp4j.jsonrpc" % "1.0.0"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % "test"
 
 assembly / assemblyOutputPath := file("target/flat-checker.jar")

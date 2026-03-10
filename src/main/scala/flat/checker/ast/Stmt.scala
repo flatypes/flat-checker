@@ -9,7 +9,7 @@ sealed trait GlobalStmt
 final case class Decl(name: String, sort: Sort)
 
 final case class FunDef(name: String, params: List[Decl], returnParams: List[Decl],
-                        requires: Expr, ensures: Expr,
+                        requires: List[Expr], ensures: List[Expr],
                         locals: List[Decl], body: List[Stmt]) extends GlobalStmt:
   val assignable: Map[String, Sort] = Map.from(for Decl(x, s) <- locals ++ returnParams yield x -> s)
 
