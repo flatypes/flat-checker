@@ -1,0 +1,11 @@
+method loop(value: String)
+{
+  var res = "Repeat: ";
+  var nondet: Bool = *;
+  while (nondet)
+    res = res + value + "!";
+
+  assert res.contains("t"); // should succeed
+  assert res.contains("!"); // may fail
+  assert res.contains("f"); // may fail
+}

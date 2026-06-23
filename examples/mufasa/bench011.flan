@@ -1,0 +1,18 @@
+method translateFuture(output: String): String
+{
+  var time = output;
+  if (output.indexOf("jaj") != -1) {
+    time = time.substring(0, time.length - 3) + "Hu";
+  } else {
+    if (output.indexOf("jar") != -1) {
+      time = time.substring(0, time.length - 3) + "wen";
+    } else {
+      if (output.indexOf("DIS") != -1) {
+        time = time.substring(0, time.length - 3) + "ben";
+      } else {
+        time = time + " ret";
+      }
+    }
+  }
+  return time;
+}

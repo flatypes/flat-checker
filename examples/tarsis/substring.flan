@@ -1,0 +1,15 @@
+method substring()
+{
+  var res = "substring test";
+  var nondet: Bool = *;
+  if (nondet)
+    res += " passed";
+  else
+    res += " failed";
+  res = res.substring(5, 18);
+
+  assert res.contains("g"); // should succeed
+  assert res.contains("p"); // may fail
+  assert res.contains("f"); // may fail
+  assert res.contains("d"); // should fail
+}

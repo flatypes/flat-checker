@@ -1,0 +1,19 @@
+method translateFuture(output: String): String
+{
+  var time = output;
+  if (output.indexOf("jaj") != -1) {
+    time = time.substring(0, time.length - 3) + "leS";
+  } else {
+    if (output.indexOf("jar") != -1) {
+      time = time.substring(0, time.length - 3) + "waQ";
+    } else {
+      if (output.indexOf("DIS") != -1) {
+        time = time.substring(0, time.length - 3) + "nem";
+      } else {
+        time = time + " pId";
+      }
+    }
+  }
+
+  return time;
+}

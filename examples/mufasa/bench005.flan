@@ -1,0 +1,17 @@
+method propertyName(methodName: String): String
+{
+  var pn: String;
+  if (methodName.startsWith("is")) {
+    pn = methodName.substring("is".length, methodName.length);
+  } else {
+    if (methodName.startsWith("get")) {
+      pn = methodName.substring("get".length, methodName.length);
+    } else {
+      pn = methodName;
+    }
+  }
+    
+  var x = pn.substring(0, 1).toLowerCase();
+  var y = pn.substring(1, pn.length).toLowerCase();
+  return x + y;
+}

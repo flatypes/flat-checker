@@ -50,3 +50,6 @@ build/
 
 smt/
 *.json
+
+### Antlr ###
+src/main/gen

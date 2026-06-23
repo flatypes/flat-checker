@@ -1,0 +1,12 @@
+method countLine(s: String, kdx: Int): Int
+{
+  var c = 1;
+  var i = kdx;
+  while (i > -1)
+  {
+    if (s[i] == '\n')
+      c += 1;
+    i -= 1;
+  }
+  return c;
+}

@@ -1,0 +1,52 @@
+method parseHost(input: String): Map[String, String]?
+{
+  input = input.trim();
+  input = input.toLowerCase();
+  var r: Map[String, String]?;
+  if (!input.startsWith("https://")) {
+    r = null;
+  } else {
+    input = input.substring(8, input.length);
+    if (!input.startsWith("www.")) {
+      r = null;
+    } else {
+      if (input.endsWith(".it")) {
+        var domain = input.substring(4, input.length - 3);
+        r = Map("a" -> "https", "b" -> "www", "c" -> domain, "d" -> "it");
+      } else {
+        r = null;
+      }
+    }
+  }
+  return r;
+}
+
+method parseFirstDomain(s: String): Map[String, String]?
+{
+  var stop = false;
+  var result: Map[String, String]?;
+  while (!stop)
+  {
+    if (s.length == 0) {
+      stop = true;
+      result = null;
+    } else {
+      var index = s.indexOf("\n");
+      var sub: String;
+      if (index == -1) {
+        sub = s.substring(0, s.length);
+        s = "";
+      } else {
+        sub = s.substring(0, index);
+        s = s.substring(index + 1, s.length);
+      }
+
+      result = parseHost(sub);
+      if (result != null) {
+          stop = true;
+      }
+    }
+  }
+
+  return result;
+}

@@ -1,5 +1,6 @@
 package flat
 
+import flat.flan.Parsers
 import flat.util.{Aggregator, MetricCollector}
 import scopt.OParser
 
@@ -80,6 +81,18 @@ object CLI:
           return
         case _ =>
           System.exit(1)
+
+    if args.head == "parse" then
+      val path = os.Path(Path.of(args(1)).toAbsolutePath)
+      val uri = "file://" + path.toString
+      val inputCtx = InputContext(Map(uri -> os.read(path)))
+      Parsers.parseProgram(os.read(path), uri) match
+        case Left(diagnostics) =>
+          inputCtx.printDiagnostics(uri, diagnostics)
+          System.exit(1)
+        case Right(_) =>
+          println("OK")
+          return
 
     // normal command
     OParser.parse(parser, args, Config()) match

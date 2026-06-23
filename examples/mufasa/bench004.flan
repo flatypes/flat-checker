@@ -1,0 +1,34 @@
+const HEADINGPREFIX = ""
+const squashedPrefix = "a"
+
+method apply(line: String): String?
+{
+  var inProgressReport = true;
+  if (line.startsWith("\r\u001b")) {
+    line = line.substring(2, line.length);
+    if ("[K" == line) {
+      inProgressReport = true;
+    }
+    return null;
+  } else {
+    if (line.startsWith(squashedPrefix)) {
+      line = line.substring(squashedPrefix.length, line.length);
+      inProgressReport = false;
+      lastLine = line;
+      if (line.startsWith(HEADINGPREFIX)) {
+        line = line.substring(HEADINGPREFIX.length, line.length);
+        heading = line + " > ";
+      } else {
+        line = line;
+      }
+    } else {
+      if (inProgressReport) {
+        inProgressReport = false;
+        line = lastLine + line;
+      } else {
+        return null;
+      }
+    }
+  }
+  return line;
+}

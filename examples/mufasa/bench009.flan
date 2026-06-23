@@ -1,0 +1,12 @@
+method parse(name: String): Map[String, Int | String]?
+{
+  var colonIndex = name.indexOf(":");
+  if (colonIndex < 0) {
+    var tid: Map[String, Int | String] = Map();
+    tid += "outputIndex" -> 0;
+    tid += "name" -> name;
+    return tid;
+  } else {
+    return null;
+  }
+}

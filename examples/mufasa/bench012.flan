@@ -1,0 +1,67 @@
+method parseHost(input: String): String?
+{
+  input = input.trim();
+  if (!input.startsWith("https://")) {
+    return null;
+  } else {
+    input = input.substring(8, input.length);
+    if (input[0] == '[') {
+      return null;
+    } else {
+      var index = input.indexOf(":");
+      if (index != -1) {
+        return null;
+      } else {
+        index = input.indexOf("/");
+        var hostName = input.substring(0, index).toLowerCase();
+        if (isValidDomain(hostName)) {
+          return hostName + "\n";
+        } else {
+          return null;
+        }
+      }
+    }
+  }
+}
+
+method isValidDomain(input: String): Bool
+{
+  if (!input.startsWith("www.")) {
+    return false;
+  } else {
+    if (input.endsWith(".it")) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+method parseFirst3(s: String): String?
+{
+  var i = 0;
+  var domains = "";
+  while (i < 1)
+  {
+    if (s.length == 0) {
+      return null;
+    } else {
+      var index = s.indexOf("\n");
+      var sub: String;
+      if (index == -1) {
+        sub = s.substring(0, s.length);
+        s = "";
+      } else {
+        sub = s.substring(0, index);
+        s = s.substring(index + 1, s.length);
+      }
+      result = parseHost(sub);
+      if (result != null) {
+        domains += result;
+        i += 1;
+      }
+    }
+  }
+
+  return domains;
+}

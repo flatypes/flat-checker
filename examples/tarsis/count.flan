@@ -1,0 +1,14 @@
+method count()
+{
+  var str;
+  var nondet: Bool = *;
+  if (nondet)
+    str = "this is the thing";
+  else
+    str = "the throat";
+  var count = str.count("th");
+  
+  assert count > 0; // should succeed
+  assert count == 0; // should fail
+  assert count == 3; // may fail
+}

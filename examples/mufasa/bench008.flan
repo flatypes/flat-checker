@@ -1,0 +1,12 @@
+method coerceLocalScriptURL(scriptURL: String): String?
+{
+  if (scriptURL.startsWith("assets://")) {
+    return null;
+  } else {
+    scriptURL = scriptURL.substring(scriptURL.indexOf("/") + 1, scriptURL.length);
+    if ("://" !in scriptURL) {
+      scriptURL = "file://" + scriptURL;
+    }
+    return scriptURL;
+  }
+}

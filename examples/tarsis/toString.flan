@@ -1,0 +1,18 @@
+method toString(names: Seq[String])
+{
+  var res = "People: {";
+  var i = 0;
+  while (i < names.length)
+  {
+    res += names[i];
+    if (i != names.length - 1) {
+      res += ", ";
+    }
+    i += 1;
+  }
+  res += "}";
+
+  assert res.contains("People"); // should succeed
+  assert res.contains(",");      // may fail
+  assert res.contains("not");    // may fail
+}

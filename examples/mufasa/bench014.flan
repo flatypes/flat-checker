@@ -1,0 +1,14 @@
+method fixStations(stations: Map[String, String]): Map[String, String]
+{
+  var result: Map[String, String] = Map();
+  for (st in stations)
+  {
+    var input = stations[st];
+    var code = input.substring(0, 3).toUpperCase();
+    var semiC = input.indexOf(';');
+    var name = input.substring(semiC + 1, input.length);
+    result += st -> code + ": " + name;
+  }
+
+  return result;
+}

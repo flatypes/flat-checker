@@ -1,0 +1,18 @@
+method removeCurlies(input: String): String
+{
+  var result = "";
+  var skip = false;
+  var i = 0;
+  while (input.length > i + 1)
+  {
+    var c = input[i];
+    if (c == '{')
+      skip = true;
+    if (!skip)
+      result += c;
+    if (c == '}')
+      skip = false;
+    i += 1;
+  }
+  return result;
+}

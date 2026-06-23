@@ -1,0 +1,10 @@
+method normalizeLoGLine(line: String): String
+{
+  if ("ERROR" in line)
+    return line.substring(line.indexOf("ERROR"), line.length);
+  else
+    if ("WARN" in line)
+      return line.substring(line.indexOf("WARN"), line.length);
+    else
+      return line;
+}
