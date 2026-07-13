@@ -1,12 +1,16 @@
 package flat
 
-import flat.flan.Parsers
+import com.typesafe.scalalogging.LazyLogging
+import flat.checker.parsing.Parser
+import flat.checker.typing.Checker
+import flat.checker.verif.Verifier
+import flat.checker.{Reporter, Source}
 import flat.util.{Aggregator, MetricCollector}
 import scopt.OParser
 
 import java.nio.file.Path
 
-object CLI:
+object CLI extends LazyLogging:
   private val builder = OParser.builder[Config]
 
   private val parser =
@@ -82,17 +86,10 @@ object CLI:
         case _ =>
           System.exit(1)
 
-    if args.head == "parse" then
-      val path = os.Path(Path.of(args(1)).toAbsolutePath)
-      val uri = "file://" + path.toString
-      val inputCtx = InputContext(Map(uri -> os.read(path)))
-      Parsers.parseProgram(os.read(path), uri) match
-        case Left(diagnostics) =>
-          inputCtx.printDiagnostics(uri, diagnostics)
-          System.exit(1)
-        case Right(_) =>
-          println("OK")
-          return
+    if args.head == "flan" then
+      // wip: flan file
+      runFlan(args.drop(1).toSeq.map(Path.of(_).toAbsolutePath).map(os.Path(_)))
+      return
 
     // normal command
     OParser.parse(parser, args, Config()) match
@@ -100,3 +97,39 @@ object CLI:
         Driver.run(using config)
       case _ =>
         System.exit(1)
+
+  private def runFlan(inputs: Seq[os.Path]): Unit =
+    val paths = inputs.flatMap(collectFlan)
+    if paths.isEmpty then
+      Console.err.println("No input files!")
+      System.exit(1)
+
+    for path <- paths.sorted do
+      logger.info("Checking: {}", path)
+      val source = Source.fromPath(path)
+      val reporter = Reporter(source)
+      val parser = Parser(using reporter)
+      val tree = parser.parse(source)
+      if reporter.hasError then
+        reporter.printTo(Console.err)
+        System.exit(1)
+
+      val typeChecker = Checker(using reporter)
+      val program = typeChecker.checkProgram(tree)
+      if reporter.hasError then
+        reporter.printTo(Console.err)
+        System.exit(1)
+
+      val verifier = Verifier(using reporter)
+      verifier.verify(program)
+      if reporter.hasError then
+        reporter.printTo(Console.err)
+        System.exit(1)
+
+      reporter.printTo(Console.err) // print warnings if any
+      Console.println("Typing success: " + path.toString)
+
+  private def collectFlan(path: os.Path): Seq[os.Path] =
+    if os.isDir(path) then os.walk(path).filter(_.ext == "flan")
+    else if os.isFile(path) && path.ext == "flan" then Seq(path)
+    else Seq.empty

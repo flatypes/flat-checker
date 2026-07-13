@@ -1,9 +1,11 @@
 method loop(value: String)
 {
   var res = "Repeat: ";
-  var nondet: Bool = *;
-  while (nondet)
+  while *
+    invariant res.startsWith("Repeat: ")
+  {
     res = res + value + "!";
+  }
 
   assert res.contains("t"); // should succeed
   assert res.contains("!"); // may fail

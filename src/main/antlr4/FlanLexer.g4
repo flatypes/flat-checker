@@ -22,6 +22,13 @@ NULL: 'null';
 TRUE: 'true';
 FALSE: 'false';
 LAMBDA: 'lambda';
+BOOL: 'Bool';
+INT: 'Int';
+CHAR: 'Char';
+STRING: 'String';
+SEQ: 'Seq';
+SET: 'Set';
+MAP: 'Map';
 
 // Delimiters
 OPEN_PAREN: '(';
@@ -69,18 +76,20 @@ AUG_BIT_XOR: '^=';
 BIT_NOT: '~';
 
 // Constants
-INT: '-'? ([0-9]+ | '0x' HexDigit+ | '0b' [01]+);
+INT_LITERAL: '-'? ([0-9]+ | '0x' HexDigit+ | '0b' [01]+);
 fragment HexDigit: [0-9a-fA-F];
 
-CHAR: '\'' ( ~('\'' | '\\' | '\r' | '\n') | '\\' CharEscape ) '\'';
-STRING: '"' ( ~('"' | '\\' | '\r' | '\n') | '\\' CharEscape )* '"';
+CHAR_LITERAL: '\'' ( ~('\'' | '\\' | '\r' | '\n') | '\\' CharEscape ) '\'';
+STRING_LITERAL: '"' ( ~('"' | '\\' | '\r' | '\n') | '\\' CharEscape )* '"';
+REGEX_LITERAL: 'r"' ( ~('"' | '\\' | '\r' | '\n') | '\\' CharEscape )* '"';
 
 fragment CharEscape
-  : [btnrf]
+  : '\\' | '\'' | '"'
+  | [abfnrtv]
+  | OctDigit OctDigit OctDigit
   | UnicodeEscape
-  | '\'' | '"' | '\\'
   ;
-
+fragment OctDigit: [0-7];
 fragment UnicodeEscape
   : 'x' HexDigit HexDigit
   | 'u' HexDigit HexDigit HexDigit HexDigit
@@ -95,53 +104,3 @@ fragment IdentPart: IdentStart | [0-9];
 WHITESPACE: [ \t\r\n\u000C]+ -> skip;
 COMMENT: '/*' .*? '*/' -> channel(HIDDEN);
 LINE_COMMENT: '//' ~[\r\n]* -> channel(HIDDEN);
-
-// Formal languages
-CC_BEGIN: 'r[' '^'? -> pushMode(CC);
-RE_BEGIN: 'r"' -> pushMode(RE);
-
-// Character classes
-mode CC;
-CC_END: ']' -> popMode;
-CC_DASH: '-';
-CC_CHAR: ~('[' | ']' | '-' | '\\' | '\r' | '\n') | '\\' RE_CharEscape;
-CC_CHAR_TYPE: '\\' CC_CharTypeEscape;
-
-fragment CC_CharTypeEscape
-  : [pP] '{' [_a-zA-Z0-9]+ '}'
-  ;
-
-// Regular expressions
-mode RE;
-RE_END: '"' -> popMode;
-RE_OPEN_PAREN: '(' -> type(OPEN_PAREN);
-RE_CLOSE_PAREN: ')' -> type(CLOSE_PAREN);
-RE_UNION: '|' -> type(VERT);
-RE_STAR: '*' -> type(STAR);
-RE_PLUS: '+' -> type(PLUS);
-RE_OPT: '?' -> type(QUESTION);
-RE_CHAR: RE_NormalChar | '\\' RE_CharEscape;
-RE_CHAR_TYPE: '.' | '\\' CC_CharTypeEscape;
-
-fragment RE_NormalChar
-  : ~('"' | '^' | '$' | '\\' | '.' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '\r' | '\n');
-
-fragment RE_CharEscape
-  : [tnrf]
-  | 'c' [a-zA-Z]
-  | UnicodeEscape
-  | RE_SyntaxChar
-  ;
-
-fragment RE_SyntaxChar
-  : '"' | '^' | '$' | '\\' | '.' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '-'
-  ;
-
-RE_CC_BEGIN: '[' '^'? -> type(CC_BEGIN), pushMode(CC);
-RE_QUANT_BEGIN: '{' -> type(OPEN_CURLY), pushMode(QUANT);
-
-// RE Quantifiers
-mode QUANT;
-QUANT_END: '}' -> type(CLOSE_CURLY), popMode;
-QUANT_COMMA: ',' -> type(COMMA);
-QUANT_INT: [0-9]+ -> type(INT);

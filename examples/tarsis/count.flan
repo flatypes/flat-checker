@@ -1,11 +1,11 @@
 method count()
 {
-  var str;
-  var nondet: Bool = *;
-  if (nondet)
+  var str: String;
+  if * {
     str = "this is the thing";
-  else
+  } else {
     str = "the throat";
+  }
   var count = str.count("th");
   
   assert count > 0; // should succeed

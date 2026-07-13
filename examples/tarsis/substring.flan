@@ -1,11 +1,11 @@
 method substring()
 {
   var res = "substring test";
-  var nondet: Bool = *;
-  if (nondet)
+  if * {
     res += " passed";
-  else
+  } else {
     res += " failed";
+  }
   res = res.substring(5, 18);
 
   assert res.contains("g"); // should succeed
