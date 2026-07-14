@@ -3,6 +3,7 @@ package flat.checker.flan
 import flat.checker.flan.tpd.*
 
 object Show:
+  // Types and sorts
   extension (sort: Sort)
     def show: String = sort match
       case NullSort => "null"
@@ -18,107 +19,175 @@ object Show:
       case UnionSort(s1, s2) => s"${s1.show} | ${s2.show}"
       case NoSort => "?"
 
-  extension (expr: Expr)
-    def show: String = expr match
+  extension (typ: NormType)
+    def show: String = typ match
+      case NormType(s, None) => s.show
+      case NormType(s, Some(e)) => s"${s.show}[${e.show}]"
+
+  extension (varDecl: VarDecl)
+    def show: String = s"${varDecl.name}: ${varDecl.typ.show}"
+
+  // Expressions
+  val LEVEL_TIGHTER = 0
+  val LEVEL_PREFIX = 10
+  val LEVEL_MUL = 20
+  val LEVEL_ADD = 30
+  val LEVEL_REL = 40
+  val LEVEL_BIT = 50
+  val LEVEL_BIT_AND = 55
+  val LEVEL_BIT_OR = 60
+  val LEVEL_AND = 70
+  val LEVEL_OR = 80
+  val LEVEL_ARROW = 90
+  val LEVEL_LOOSER = 100
+
+  private def getLevel(expr: Expr): Int = expr match
+    case _: Negate | Not | BitNot => LEVEL_PREFIX
+    case _: Mul => LEVEL_MUL
+    case _: Add | Sub | SeqConcat | SetDiff => LEVEL_ADD
+    case _: Eq | Ne | Le | Lt | Subset => LEVEL_REL
+    case _: BitXor | BitShL | BitShR => LEVEL_BIT
+    case _: BitAnd | SetInter => LEVEL_BIT_AND
+    case _: BitOr | SetUnion => LEVEL_BIT_OR
+    case _: And => LEVEL_AND
+    case _: Or => LEVEL_OR
+    case _: Implies => LEVEL_ARROW
+    case _: Lambda | Ite => LEVEL_LOOSER
+    case _ => LEVEL_TIGHTER
+
+  val ASSOC_NONE = 0
+  val ASSOC_LEFT = 1
+  val ASSOC_RIGHT = 2
+
+  private def showExpr(expr: Expr, paren: Boolean = false): String =
+    val s = expr match
+      // Constants and variables
       case Const(null) => "null"
       case Const(b: Boolean) => b.toString
       case Const(i: Int) => i.toString
-      case Const(c: Char) => "'" + escapeChar(c) + "'"
-      case Const(s: String) => "\"" + escapeString(s) + "\""
-      case Var(x) =>
-        x.split(':') match
-          case Array(name) => name
-          case Array(name, ver) => name + ver.map(subscriptDigits)
-          case _ => throw IllegalArgumentException(s"invalid variable name: $x")
+      case Const(c: Char) => s"'${escapeChar(c)}'"
+      case Const(s: String) => s"\"${escapeString(s)}\""
+      case Var(x) => showVar(x)
       case MethodRef(f) => f
-      case Apply(ef, es) => ef.show + es.map(_.show).mkString("(", ", ", ")")
-      case Lambda(ps, e) => ps.map(_.show).mkString("(", ", ", ")") + " -> " + e.show
-      // Basic
-      case Eq(e1, e2) => s"(${e1.show} == ${e2.show})"
-      case Ne(e1, e2) => s"(${e1.show} ≠ ${e2.show})"
-      case Ite(e, e1, e2) => s"(${e.show} ? ${e1.show} : ${e2.show})"
-      // Boolean operations
-      case And(e1, e2) => s"(${e1.show} ∧ ${e2.show})"
-      case Or(e1, e2) => s"(${e1.show} ∨ ${e2.show})"
-      case Not(e) => s"¬(${e.show})"
-      case Implies(e1, e2) => s"(${e1.show} ⇒ ${e2.show})"
-      // Int operations
-      case Negate(e) => s"-${e.show}"
-      case Add(e1, e2) => s"(${e1.show} + ${e2.show})"
-      case Sub(e1, e2) => s"(${e1.show} - ${e2.show})"
-      case Mul(e1, e2) => s"(${e1.show} * ${e2.show})"
-      case Le(e1, e2) => s"(${e1.show} ≤ ${e2.show})"
-      case Lt(e1, e2) => s"(${e1.show} < ${e2.show})"
-      case BitAnd(e1, e2) => s"(${e1.show} & ${e2.show})"
-      case BitOr(e1, e2) => s"(${e1.show} | ${e2.show})"
-      case BitXor(e1, e2) => s"(${e1.show} ^ ${e2.show})"
-      case BitNot(e) => s"~(${e.show})"
-      case BitShL(e1, e2) => s"${e1.show} << ${e2.show}"
-      case BitShR(e1, e2) => s"${e1.show} >> ${e2.show}"
-      // Char operations
-      case CharToInt(c) => s"${c.show}.toInt"
-      case CharFromInt(i) => s"${i.show}.toChar"
-      case CharToString(c) => s"${c.show}.toString"
-      // Sequence operations
-      case SeqLit(es) => es.map(_.show).mkString("Seq(", ", ", ")")
-      case SeqLength(s) => s"${s.show}.length"
-      case SeqSelect(s, i) => s"${s.show}[${i.show}]"
-      case SeqUpdate(s, i, e) => s"${s.show}.update(${i.show}, ${e.show})"
-      case SeqSlice(s, i, NoExpr) => s"${s.show}.slice(${i.show})"
-      case SeqSlice(s, i, j) => s"${s.show}.slice(${i.show}, ${j.show})"
-      case SeqConcat(s1, s2) => s"(${s1.show} ++ ${s2.show})"
-      case SeqReverse(s) => s"${s.show}.reverse"
-      case SeqIndexOf(s, t, Const(0)) => s"${s.show}.indexOf(${t.show})"
-      case SeqIndexOf(s, t, start) => s"${s.show}.indexOf(${t.show}, ${start.show})"
-      case SeqContains(s, t) => s"${s.show}.contains(${t.show})"
-      case SeqStartsWith(s, t) => s"${s.show}.startsWith(${t.show})"
-      case SeqEndsWith(s, t) => s"${s.show}.endsWith(${t.show})"
-      case SeqCount(e, et) => s"${e.show}.count(${et.show})"
-      case SeqForall(s, ep) => s"${s.show}.forall(${ep.show})"
-      // String operations
-      case StringSplit(s, t) => s"${s.show}.split(${t.show})"
-      case StringTrim(s) => s"${s.show}.trim"
-      case StringToLower(s) => s"${s.show}.toLowerCase"
-      case StringToUpper(s) => s"${s.show}.toUpperCase"
-      case StringToInt(s) => s"${s.show}.toInt"
-      case StringFromInt(i) => s"${i.show}.toString"
-      // Set operations
-      case SetLit(es) => es.map(_.show).mkString("Set(", ", ", ")")
-      case SetSize(s) => s"|${s.show}|"
-      case SetContains(s, t) => s"${t.show} ∈ ${s.show}"
-      case Subset(s1, s2) => s"${s1.show} ⊆ ${s2.show}"
-      case SetUnion(s1, s2) => s"${s1.show} ∪ ${s2.show}"
-      case SetInter(s1, s2) => s"${s1.show} ∩ ${s2.show}"
-      case SetDiff(s1, s2) => s"${s1.show} ∖ ${s2.show}"
-      case SetForall(e, ep) => s"${e.show}.forall(${ep.show})"
-      // Map operations
+
+      // Functional
+      case Apply(ef, es) => showTighter(ef) + es.map(showExpr(_)).mkString("(", ", ", ")")
+      case Lambda(ps, e) => s"λ ${showParamList(ps)}, ${showExpr(e)}"
+
+      // Universal
+      case Eq(e1, e2) => showInfix("==", LEVEL_REL, ASSOC_NONE, e1, e2)
+      case Ne(e1, e2) => showInfix("≠", LEVEL_REL, ASSOC_NONE, e1, e2)
+      case Ite(e, e1, e2) => s"if ${showExpr(e)} then ${showExpr(e1)} else ${showExpr(e2)}"
+
+      // Bool
+      case And(e1, e2) => showInfix("∧", LEVEL_AND, ASSOC_RIGHT, e1, e2)
+      case Or(e1, e2) => showInfix("∨", LEVEL_OR, ASSOC_RIGHT, e1, e2)
+      case Not(e) => showPrefix("¬", e)
+      case Implies(e1, e2) => showInfix("⇒", LEVEL_ARROW, ASSOC_RIGHT, e1, e2)
+
+      // Int arithmetic and relational
+      case Negate(e) => showPrefix("-", e)
+      case Add(e1, e2) => showInfix("+", LEVEL_ADD, ASSOC_LEFT, e1, e2)
+      case Sub(e1, e2) => showInfix("-", LEVEL_ADD, ASSOC_LEFT, e1, e2)
+      case Mul(e1, e2) => showInfix("*", LEVEL_MUL, ASSOC_LEFT, e1, e2)
+      case Le(e1, e2) => showInfix("≤", LEVEL_REL, ASSOC_NONE, e1, e2)
+      case Lt(e1, e2) => showInfix("<", LEVEL_REL, ASSOC_NONE, e1, e2)
+
+      // Int bitwise
+      case BitAnd(e1, e2) => showInfix("&", LEVEL_BIT_AND, ASSOC_LEFT, e1, e2)
+      case BitOr(e1, e2) => showInfix("|", LEVEL_BIT_OR, ASSOC_LEFT, e1, e2)
+      case BitXor(e1, e2) => showInfix("^", LEVEL_BIT, ASSOC_LEFT, e1, e2)
+      case BitNot(e) => showPrefix("~", e)
+      case BitShL(e1, e2) => showInfix("<<", LEVEL_BIT, ASSOC_LEFT, e1, e2)
+      case BitShR(e1, e2) => showInfix(">>", LEVEL_BIT, ASSOC_LEFT, e1, e2)
+
+      // Char
+      case CharToInt(e) => showMemberApply(e, "toInt")
+      case CharFromInt(e) => showMemberApply(e, "toChar")
+      case CharToString(e) => showMemberApply(e, "toString")
+
+      // Seq
+      case SeqLit(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
+      case SeqLength(e) => s"|${showExpr(e)}|"
+      case SeqSelect(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
+      case SeqUpdate(e, ei, ev) => s"${showTighter(e)}[${showExpr(ei)} = ${showExpr(ev)}]"
+      case SeqSlice(e, ei, NoExpr) => s"${showTighter(e)}[${showExpr(ei)}:]"
+      case SeqSlice(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
+      case SeqConcat(e1, e2) => showInfix("++", LEVEL_ADD, ASSOC_LEFT, e1, e2)
+      case SeqReverse(e) => showMemberApply(e, "reverse")
+      case SeqIndexOf(e, et, Const(0)) => showMemberApply(e, "indexOf", et)
+      case SeqIndexOf(e, et, ei) => showMemberApply(e, "indexOf", et, ei)
+      case SeqContains(e, et) => showMemberApply(e, "contains", et)
+      case SeqStartsWith(e, et) => showMemberApply(e, "startsWith", et)
+      case SeqEndsWith(e, et) => showMemberApply(e, "endsWith", et)
+      case SeqCount(e, ep) => showMemberApply(e, "count", ep)
+      case SeqForall(e, ep) => showMemberApply(e, "forall", ep)
+
+      // String
+      case StringSplit(e, et) => showMemberApply(e, "split", et)
+      case StringTrim(e) => showMemberApply(e, "trim")
+      case StringToLower(e) => showMemberApply(e, "toLower")
+      case StringToUpper(e) => showMemberApply(e, "toUpper")
+      case StringToInt(e) => showMemberApply(e, "toInt")
+      case StringFromInt(e) => showMemberApply(e, "toString")
+
+      // Set
+      case SetLit(es) => es.map(showExpr(_)).mkString("{", ", ", "}")
+      case SetSize(e) => s"|${showExpr(e)}|"
+      case SetContains(e, et) => showMemberApply(e, "contains", et)
+      case Subset(e1, e2) => showInfix("⊆", LEVEL_REL, ASSOC_NONE, e1, e2)
+      case SetUnion(e1, e2) => showInfix("∪", LEVEL_BIT_OR, ASSOC_LEFT, e1, e2)
+      case SetInter(e1, e2) => showInfix("∩", LEVEL_BIT_AND, ASSOC_LEFT, e1, e2)
+      case SetDiff(e1, e2) => showInfix("∖", LEVEL_ADD, ASSOC_LEFT, e1, e2)
+      case SetForall(e, ep) => showMemberApply(e, "forall", ep)
+
+      // Map
       case MapLit(eks, evs) =>
-        (eks.map(_.show) zip evs.map(_.show)).map(_ + " = " + _).mkString("Map(", ", ", ")")
-      case MapKeys(m) => s"${m.show}.keys"
-      case MapValues(m) => s"${m.show}.values"
-      case MapItems(m) => s"${m.show}.items"
-      case MapSize(m) => s"|${m.show}|"
-      case MapContains(m, k) => s"${k.show} ∈ ${m.show}"
-      case MapSelect(m, k) => s"${m.show}[${k.show}]"
-      case MapUpdate(m, k, v) => s"${m.show}.update(${k.show}, ${v.show})"
-      // Tuple operations
-      case TupleExpr(es) => es.map(_.show).mkString("(", ", ", "))")
-      case TupleSelect(i, e) => s"${e.show}._${i + 1}"
+        (for (ek, ev) <- (eks zip evs) yield s"${showExpr(ek)}: ${showExpr(ev)}").mkString("{", ", ", "}")
+      case MapKeys(e) => showMemberApply(e, "keys")
+      case MapValues(e) => showMemberApply(e, "values")
+      case MapItems(e) => showMemberApply(e, "items")
+      case MapSize(e) => s"|${showExpr(e)}|"
+      case MapContains(e, ek) => showMemberApply(e, "contains", ek)
+      case MapSelect(e, ek) => s"${showTighter(e)}[${showExpr(ek)}]"
+      case MapUpdate(e, ek, ev) => s"${showTighter(e)}[${showExpr(ek)} = ${showExpr(ev)}]"
+
+      // Tuple
+      case TupleExpr(es) => es.map(showExpr(_)).mkString("(", ", ", ")")
+      case TupleSelect(i, e) => showMemberApply(e, "_" + (i + 1))
+
       // Other
       case NoExpr => "?"
 
-  extension (vd: VarDecl)
-    def show: String = s"${vd.name}: ${vd.typ.sort.show}"
+    if paren then s"($s)" else s
 
-  private val subscriptDigits = Map(
-    '0' -> '₀',
-    '1' -> '₁',
-    '2' -> '₂',
-    '3' -> '₃',
-    '4' -> '₄',
-    '5' -> '₅',
-    '6' -> '₆',
-    '7' -> '₇',
-    '8' -> '₈',
-    '9' -> '₉'
-  )
+  private def showVar(name: String): String =
+    name.split(':') match
+      case Array(x) => x
+      case Array(x, ver) if ver.forall(c => '0' <= c && c <= '9') =>
+        x + ver.map(c => (c - '0' + '₀').toChar).mkString
+      case _ => throw IllegalArgumentException(s"invalid variable name: $name")
+
+  private def showParamList(ps: Seq[VarDecl]): String =
+    ps.map(_.show).mkString("(", ", ", ")")
+
+  private def showPrefix(op: String, expr: Expr): String =
+    op + showExpr(expr, getLevel(expr) > LEVEL_PREFIX)
+
+  private def showInfix(op: String, level: Int, assoc: Int, left: Expr, right: Expr): String =
+    val leftLevel = getLevel(left)
+    val rightLevel = getLevel(right)
+    val s1 = showExpr(left, leftLevel > level || (leftLevel == level && assoc != ASSOC_LEFT))
+    val s2 = showExpr(right, rightLevel > level || (rightLevel == level && assoc != ASSOC_RIGHT))
+    s"$s1 $op $s2"
+
+  private def showMemberApply(receiver: Expr, member: String, args: Expr*): String =
+    val s1 = showExpr(receiver, getLevel(receiver) > LEVEL_TIGHTER)
+    val s2 = if args.isEmpty then "" else args.map(showExpr(_)).mkString("(", ", ", ")")
+    s"$s1.$member$s2"
+
+  private def showTighter(expr: Expr): String =
+    showExpr(expr, getLevel(expr) > LEVEL_TIGHTER)
+
+  extension (expr: Expr)
+    def show: String = showExpr(expr)

@@ -55,6 +55,9 @@ object Simplifier:
         e.simplify match
           case Const(b: Boolean) => Const(!b)(expr.range)
           case Not(e) => e
+          case Eq(e1, e2) => Ne(e1, e2)(expr.range)
+          case Le(e1, e2) => Lt(e2, e1)(expr.range)
+          case Lt(e1, e2) => Le(e2, e1)(expr.range)
           case e => Not(e)(expr.range)
       case Implies(e1, e2) =>
         (e1.simplify, e2.simplify) match

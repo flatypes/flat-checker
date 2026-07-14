@@ -6,6 +6,7 @@ import flat.checker.flan.untpd.*
 import flat.checker.{Reporter, Source}
 import org.antlr.v4.runtime.*
 import org.antlr.v4.runtime.tree.TerminalNode
+import org.eclipse.lsp4j
 import org.eclipse.lsp4j.{Position, Range}
 
 import scala.jdk.CollectionConverters.*

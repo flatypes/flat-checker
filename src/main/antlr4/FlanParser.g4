@@ -63,7 +63,7 @@ guard
   ;
 
 block
-  : '{' stmt* '}'
+  : '{' stmt* '}' | stmt
   ;
 
 invariantSpec

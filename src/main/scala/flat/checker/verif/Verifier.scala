@@ -2,6 +2,7 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
+import flat.checker.flan.Show.show
 import flat.checker.flan.Subst.*
 import flat.checker.flan.tpd.*
 import org.eclipse.lsp4j.Range
@@ -197,8 +198,10 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
   private inline def prove(value: Expr, ctx: PrfCtx, err: => VerifError): Boolean =
     if prover.prove(value, ctx) then
+      logger.trace("Proved:\n{}", showTask(ctx, value))
       true
     else
+      logger.debug("FAILED:\n{}", showTask(ctx, value))
       reporter.report(err)
       false
 
@@ -210,3 +213,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       case While(_, _, b) => collectModifiedVars(b)
       case _ => Nil
     vars.distinct
+
+  private def showTask(ctx: PrfCtx, value: Expr): String =
+    val lines = for e <- ctx.premises yield s"  ${e.show}\n"
+    lines.mkString + s" => ${value.show}\n"

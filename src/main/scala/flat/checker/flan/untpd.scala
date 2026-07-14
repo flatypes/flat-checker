@@ -114,3 +114,5 @@ object untpd:
   final case class Ne(left: Expr, right: Expr)(val range: Range) extends Expr
 
   final case class Ite(cond: Expr, thenValue: Expr, elseValue: Expr)(val range: Range) extends Expr
+
+  final case class And(left: Expr, right: Expr)(val range: Range) extends Expr

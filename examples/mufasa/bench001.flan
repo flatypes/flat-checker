@@ -1,18 +1,23 @@
 method removeCurlies(input: String): String
+  ensures '{' !in _
 {
   var result = "";
   var skip = false;
   var i = 0;
   while (input.length > i + 1)
+    invariant 0 <= i
+    invariant '{' !in result
   {
-    var c = input[i];
+    var c = input.charAt(i);
     if (c == '{')
       skip = true;
     if (!skip)
       result += c;
     if (c == '}')
       skip = false;
-    i += 1;
+
+    i = i + 1;
   }
+
   return result;
 }
