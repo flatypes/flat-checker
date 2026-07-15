@@ -1,19 +1,21 @@
 package flat.checker.verif
 
+import com.typesafe.scalalogging.LazyLogging
 import flat.checker.flan.Sort
 import flat.checker.flan.tpd.*
 import io.github.cvc5
 
-class SMTSolver(using vars: Map[String, Sort]):
+class SMTSolver(using vars: Map[String, Sort]) extends LazyLogging:
   private val encoder = SMTEncoder()
   private val slv = cvc5.Solver(encoder.tm)
   slv.setOption("tlimit-per", "3000")
+  encoder.axioms.foreach(slv.assertFormula)
 
   def push(): Unit = slv.push()
 
   def pop(): Unit = slv.pop()
 
-  def assume(cond: Expr): Unit =
+  def add(cond: Expr): Unit =
     val term = encoder.encodeExpr(cond)(using Map.empty)
     slv.assertFormula(term)
 

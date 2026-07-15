@@ -21,3 +21,7 @@ def escapeString(s: String): String =
     case '\\' => "\\\\"
     case c =>
       if 0x20 <= c && c <= 0x7E then c.toString else escapeNonPrintable(c)
+
+def escapeSMTString(s: String): String =
+  s.flatMap: c =>
+    if 0x20 <= c && c <= 0x7E then c.toString else String.format("\\u{%x}", c.toInt)

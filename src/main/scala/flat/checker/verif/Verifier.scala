@@ -5,6 +5,7 @@ import flat.checker.Reporter
 import flat.checker.flan.Show.show
 import flat.checker.flan.Subst.*
 import flat.checker.flan.tpd.*
+import flat.checker.verif.Simplifier.simplify
 import org.eclipse.lsp4j.Range
 
 class Verifier(using reporter: Reporter) extends LazyLogging:
@@ -197,11 +198,12 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
   private val prover = Prover()
 
   private inline def prove(value: Expr, ctx: PrfCtx, err: => VerifError): Boolean =
-    if prover.prove(value, ctx) then
-      logger.trace("Proved:\n{}", showTask(ctx, value))
+    val goal = Goal(ctx.premises, value.simplify(using ctx.vars))(using ctx.vars)
+    if prover.prove(goal) then
+      logger.trace("Proved:\n{}", showTask(ctx, goal.conclusion))
       true
     else
-      logger.debug("FAILED:\n{}", showTask(ctx, value))
+      logger.debug("FAILED:\n{}", showTask(ctx, goal.conclusion))
       reporter.report(err)
       false
 
@@ -216,4 +218,4 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
   private def showTask(ctx: PrfCtx, value: Expr): String =
     val lines = for e <- ctx.premises yield s"  ${e.show}\n"
-    lines.mkString + s" => ${value.show}\n"
+    lines.mkString + s" ⇒ ${value.show}\n"

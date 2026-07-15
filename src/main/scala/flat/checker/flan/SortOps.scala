@@ -1,5 +1,7 @@
 package flat.checker.flan
 
+import flat.checker.flan.tpd.*
+
 object SortOps:
   extension (left: Sort)
     infix def :<:(right: Sort): Boolean =
@@ -31,3 +33,66 @@ object SortOps:
           else if right :<: left then left
           else UnionSort(left, right)
 
+  extension (expr: Expr)
+    def sort(using ctx: Map[String, Sort]): Sort =
+      expr match
+        // Constants and variables
+        case Const(null) => NullSort
+        case Const(_: Int) => IntSort
+        case Const(_: Boolean) => BoolSort
+        case Const(_: Char) => CharSort
+        case Const(_: String) => stringSort
+        case Var(x) => ctx(x)
+        case MethodRef(f) => throw IllegalArgumentException(s"Cannot get sort of method reference: $f")
+        // Functional
+        case Apply(e, _) => e.sort.asInstanceOf[FunSort].returnSort
+        case Lambda(ps, e) => FunSort(ps.map(_.typ.sort), e.sort)
+        // Universal
+        case _: Eq | Ne => BoolSort
+        case Ite(_, e1, e2) => e1.sort lub e2.sort
+        // Bool
+        case _: And | Or | Not | Implies => BoolSort
+        // Int
+        case _: Negate | Add | Sub | Mul => IntSort
+        case _: Le | Lt => BoolSort
+        case _: BitAnd | BitOr | BitXor | BitShL | BitShR => IntSort
+        // Char
+        case _: CharToInt => IntSort
+        case _: CharFromInt => CharSort
+        case _: CharToString => stringSort
+        // Seq
+        case s: SeqLit => SeqSort(s.elemSort)
+        case _: SeqLength | SeqIndexOf | SeqCount => IntSort
+        case _: SeqContains | SeqStartsWith | SeqEndsWith | SeqForall => BoolSort
+        case SeqSelect(e, _) => e.sort.asInstanceOf[SeqSort].elemSort
+        case SeqUpdate(e, _, _) => e.sort
+        case SeqSlice(e, _, _) => e.sort
+        case SeqConcat(e, _) => e.sort
+        case SeqReverse(e) => e.sort
+        // String
+        case _: StringSplit => SeqSort(stringSort)
+        case _: StringTrim | StringToLower | StringToUpper | StringFromInt => stringSort
+        case _: StringToInt => IntSort
+        // Set
+        case s: SetLit => SetSort(s.elemSort)
+        case _: SetSize => IntSort
+        case _: SetContains | Subset | SetForall => BoolSort
+        case SetUnion(e, _) => e.sort
+        case SetInter(e, _) => e.sort
+        case SetDiff(e, _) => e.sort
+        // Map
+        case m: MapLit => MapSort(m.keySort, m.valSort)
+        case MapKeys(e) => e.sort.asInstanceOf[MapSort].keySort
+        case MapValues(e) => SetSort(e.sort.asInstanceOf[MapSort].valueSort)
+        case MapItems(e) =>
+          val mapSort = e.sort.asInstanceOf[MapSort]
+          SetSort(TupleSort(List(mapSort.keySort, mapSort.valueSort)))
+        case _: MapSize => IntSort
+        case _: MapContains => BoolSort
+        case MapSelect(e, _) => e.sort.asInstanceOf[MapSort].valueSort
+        case MapUpdate(e, _, _) => e.sort
+        // Tuple
+        case TupleExpr(es) => TupleSort(es.map(_.sort))
+        case TupleSelect(i, e) => e.sort.asInstanceOf[TupleSort].elemSorts(i)
+        // Others
+        case NoExpr => NoSort

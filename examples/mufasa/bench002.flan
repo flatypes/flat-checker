@@ -5,7 +5,8 @@ method countLine(s: String, kdx: Int): Int
   var c = 1;
   var i = kdx;
   while (i > -1)
-    invariant i <= kdx
+    invariant -1 <= i && i <= kdx
+    invariant c == s[i + 1:kdx + 1].count('\n') + 1
   {
     if (s.charAt(i) == '\n')
       c = c + 1;

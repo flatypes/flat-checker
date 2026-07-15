@@ -1,8 +1,9 @@
 package flat.checker.verif
 
+import flat.checker.flan.*
+import flat.checker.flan.SortOps.sort
 import flat.checker.flan.Subst.subst
 import flat.checker.flan.tpd.*
-import flat.checker.flan.{CharSort, mkTupleSort, stringSort}
 
 object Simplifier:
   extension (expr: Expr)
@@ -13,7 +14,7 @@ object Simplifier:
       case MapLit(eks, _) => eks.forall(_.isConst) && eks.distinct.size == eks.size
       case _ => false
 
-    def simplify: Expr = expr match
+    def simplify(using sorts: Map[String, Sort]): Expr = expr match
       // Functional
       case Apply(e, es) =>
         (e.simplify, es.map(_.simplify)) match
@@ -25,7 +26,7 @@ object Simplifier:
       case Eq(e1, e2) =>
         (e1.simplify, e2.simplify) match
           case (Const(v1), Const(v2)) => Const(v1 == v2)(expr.range)
-          case (e1, e2) => Eq(e1, e2)(expr.range)
+          case (e1, e2) => if e1 == e2 then Const(true) else Eq(e1, e2)(expr.range)
       case Ne(e1, e2) =>
         (e1.simplify, e2.simplify) match
           case (Const(v1), Const(v2)) => Const(v1 != v2)(expr.range)
@@ -146,6 +147,11 @@ object Simplifier:
         (e.simplify, ei.simplify, ej.simplify) match
           case (s@SeqLit(es), Const(i: Int), Const(j: Int)) => SeqLit(es.slice(i, j))(s.elemSort, s.range)
           case (Const(s: String), Const(i: Int), Const(j: Int)) => Const(s.substring(i, j))(expr.range)
+          case (e, ei, ej) if ei == ej =>
+            e.sort match
+              case `stringSort` => Const("")(expr.range)
+              case SeqSort(s) => SeqLit(Nil)(s, expr.range)
+              case _ => assert(false)
           case (e, ei, ej) => SeqSlice(e, ei, ej)(expr.range)
       case SeqConcat(e1, e2) =>
         (e1.simplify, e2.simplify) match

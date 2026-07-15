@@ -56,6 +56,12 @@ object tpd:
 
     def subtrees: List[Expr] = productIterator.collect { case e: Expr => e }.toList
 
+    def collect[T](pf: PartialFunction[Expr, T]): List[T] =
+      if pf.isDefinedAt(this) then List(pf(this)) else subtrees.flatMap(_.collect(pf))
+
+    def collectFirst[T](pf: PartialFunction[Expr, T]): Option[T] =
+      if pf.isDefinedAt(this) then Some(pf(this)) else subtrees.collectFirst(Function.unlift(_.collectFirst(pf)))
+
     def rebuild(subtrees: List[Expr]): Expr
 
     def rebuild(f: Expr => Expr): Expr = rebuild(subtrees.map(f))
@@ -70,6 +76,8 @@ object tpd:
 
   final case class Const(lit: Literal)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Const = this
+
+  given Conversion[Literal, Const] = Const(_)(noRange)
 
   final case class Var(name: String)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Var = this

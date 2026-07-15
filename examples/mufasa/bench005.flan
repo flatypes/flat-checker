@@ -11,7 +11,7 @@ method propertyName(methodName: String): String
     }
   }
     
-  var x = pn.substring(0, 1).toLowerCase();
-  var y = pn.substring(1, pn.length).toLowerCase();
+  var x = pn.substring(0, 1).toLower();
+  var y = pn.substring(1, pn.length);
   return x + y;
 }

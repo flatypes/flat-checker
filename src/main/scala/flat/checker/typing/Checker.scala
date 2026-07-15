@@ -3,7 +3,6 @@ package flat.checker.typing
 import flat.checker.Reporter
 import flat.checker.flan.*
 import flat.checker.flan.tpd.*
-import flat.checker.typing.Typer
 
 import scala.collection.mutable.ListBuffer
 

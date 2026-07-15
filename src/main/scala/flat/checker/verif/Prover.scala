@@ -1,16 +1,24 @@
 package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
-import flat.checker.verif.Simplifier.simplify
 
 class Prover extends LazyLogging:
-  def prove(assertion: Expr, ctx: PrfCtx): Boolean =
-    val conclusion = assertion.simplify
-    conclusion match
+  def prove(goal: Goal): Boolean =
+    goal.conclusion match
       case Const(true) => true
       case Const(false) => false
       case _ =>
-        val solver = SMTSolver(using ctx.vars)
-        ctx.premises.foreach(solver.assume)
-        solver.prove(conclusion)
+        val solver = SMTSolver(using goal.sorts)
+        goal.premises.foreach(solver.add)
+        if solver.prove(goal.conclusion) then
+          true
+        else
+          val lemmas = LemmaSketches.all.flatMap(_.inst(goal))
+          if lemmas.nonEmpty then
+            logger.debug(s"Lemmas: ${lemmas.map(_.show).mkString(", ")}")
+            lemmas.foreach(solver.add)
+            solver.prove(goal.conclusion)
+          else
+            false
