@@ -9,12 +9,15 @@ method removeCurlies(input: String): String
     invariant '{' !in result
   {
     var c = input.charAt(i);
-    if (c == '{')
+    if (c == '{') {
       skip = true;
-    if (!skip)
+    }
+    if (!skip) {
       result += c;
-    if (c == '}')
+    }
+    if (c == '}') {
       skip = false;
+    }
 
     i = i + 1;
   }

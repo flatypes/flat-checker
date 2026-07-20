@@ -13,24 +13,6 @@ class SMTEncoder(using vars: Map[String, Sort]):
 
   private val strCount = tm.mkConst((str, str) -> int, "str.count")
 
-  def axioms: List[Term] =
-    val c = tm.mkVar(str, "c")
-    val s = tm.mkVar(str, "s")
-    val i = tm.mkVar(int, "i")
-    val j = tm.mkVar(int, "j")
-    val s1 = tm.mkVar(str, "s1")
-    val s2 = tm.mkVar(str, "s2")
-    List(
-      // s[i] ≠ c ==> s[i:j].count(c) = s[i+1:j].count(c)
-      mkForall(List(c, s, i, j),
-        // tm.mkTerm(IMPLIES,
-        // tm.mkTerm(DISTINCT, tm.mkTerm(STRING_CHARAT, s, i), c),
-        tm.mkTerm(EQUAL,
-          mkApplyUF(strCount, mkSubstr(s, tm.mkTerm(ADD, i, 1), j), c),
-          mkApplyUF(strCount, mkSubstr(s, i, j), c)),
-        mkApplyUF(strCount, mkSubstr(s, tm.mkTerm(ADD, i, 1), j), c))
-    )
-
   private val uninterpretedTerms = mutable.Map.empty[Expr, cvc5.Term]
 
   def encodeSort(sort: Sort): cvc5.Sort = sort match
@@ -199,6 +181,7 @@ class SMTEncoder(using vars: Map[String, Sort]):
     case TupleSelect(i, e) => encodeTupleSelect(i, e)
 
     // Others
+    case StringInLang(_, _) => encodeUninterpreted(expr, BoolSort)
     case _ => throw UnsupportedOperationException(s"encode ${expr.getClass.getSimpleName}")
 
   // DSL

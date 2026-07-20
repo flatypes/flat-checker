@@ -9,7 +9,6 @@ class SMTSolver(using vars: Map[String, Sort]) extends LazyLogging:
   private val encoder = SMTEncoder()
   private val slv = cvc5.Solver(encoder.tm)
   slv.setOption("tlimit-per", "3000")
-  encoder.axioms.foreach(slv.assertFormula)
 
   def push(): Unit = slv.push()
 

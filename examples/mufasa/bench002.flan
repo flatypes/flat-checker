@@ -8,8 +8,9 @@ method countLine(s: String, kdx: Int): Int
     invariant -1 <= i && i <= kdx
     invariant c == s[i + 1:kdx + 1].count('\n') + 1
   {
-    if (s.charAt(i) == '\n')
+    if (s.charAt(i) == '\n') {
       c = c + 1;
+    }
     i = i - 1;
   }
   return c;

@@ -1,8 +1,11 @@
 method stripCommentAndWhitespace(line: String): String
+  ensures '#' !in _
+  ensures ' ' !in _
 {
   var hash = line.indexOf("#");
   if (hash != -1) {
     line = line.substring(0, hash);
   }
+
   return line.trim();
 }

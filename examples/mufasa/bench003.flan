@@ -1,10 +1,11 @@
 method normalizeLoGLine(line: String): String
+  ensures _.startsWith("ERROR") || _.startsWith("WARN") || _ == line
 {
-  if ("ERROR" in line)
+  if (line.contains("ERROR")) {
     return line.substring(line.indexOf("ERROR"), line.length);
-  else
-    if ("WARN" in line)
-      return line.substring(line.indexOf("WARN"), line.length);
-    else
-      return line;
+  } else if (line.contains("WARN")) {
+    return line.substring(line.indexOf("WARN"), line.length);
+  } else {
+    return line;
+  }
 }

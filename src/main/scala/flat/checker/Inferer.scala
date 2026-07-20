@@ -204,7 +204,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
     if t.isEmpty then
       return BoolSet.True
     val r = inferLang(str)
-    if r.derivative(t).isEmpty then BoolSet.False
+    if r.deriv(t).isEmpty then BoolSet.False
     else if r.forallPrefix(t) then BoolSet.True
     else BoolSet.All
 
@@ -220,7 +220,7 @@ class Inferer(using config: Config, ctx: PrfCtx) extends LazyLogging:
       // TODO: why not just forallInfix?
       val r = inferLang(str)
       val r1 = r.splitSuffix(t.head)
-      if r1.derivative(t).isEmpty then BoolSet.False
+      if r1.deriv(t).isEmpty then BoolSet.False
       else if r.forallContains(t.head) && r1.forallPrefix(t) then BoolSet.True
       else BoolSet.All
 

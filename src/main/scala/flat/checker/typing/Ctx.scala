@@ -3,6 +3,7 @@ package flat.checker.typing
 import flat.checker.*
 import flat.checker.flan.tpd.*
 import flat.checker.flan.{FunSort, Sort}
+import flat.regex.RegEx
 import org.eclipse.lsp4j.Range
 
 import scala.collection.mutable.ListBuffer
@@ -11,6 +12,8 @@ sealed trait Info:
   val range: Range
 
 final case class TypeInfo(typ: NormType)(val range: Range) extends Info
+
+final case class LangInfo(regEx: RegEx)(val range: Range) extends Info
 
 final case class ConstInfo(sort: Sort, value: Expr)(val range: Range) extends Info
 
@@ -25,15 +28,18 @@ sealed trait Ctx:
   def lookup(name: String): Option[Info]
 
 final case class GlobalCtx(types: Map[String, TypeInfo] = Map.empty,
+                           langs: Map[String, LangInfo] = Map.empty,
                            consts: Map[String, ConstInfo] = Map.empty,
                            methods: Map[String, MethodInfo] = Map.empty) extends Ctx:
   def lookup(name: String): Option[Info] =
     types.get(name)
+      .orElse(langs.get(name))
       .orElse(consts.get(name))
       .orElse(methods.get(name))
 
   def define(name: String, info: Info): GlobalCtx = info match
     case t: TypeInfo => copy(types = types + (name -> t))
+    case l: LangInfo => copy(langs = langs + (name -> l))
     case c: ConstInfo => copy(consts = consts + (name -> c))
     case m: MethodInfo => copy(methods = methods + (name -> m))
     case _ => throw IllegalArgumentException(s"Cannot define ${info.getClass.getSimpleName}")

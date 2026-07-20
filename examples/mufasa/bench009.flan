@@ -1,12 +1,11 @@
-method parse(name: String): Map[String, Int | String]?
+method parse(name: String): String
+  requires !name.contains(":")
+  ensures _ == name
 {
   var colonIndex = name.indexOf(":");
   if (colonIndex < 0) {
-    var tid: Map[String, Int | String] = Map();
-    tid += "outputIndex" -> 0;
-    tid += "name" -> name;
-    return tid;
+    return name;
   } else {
-    return null;
+    return "null";
   }
 }

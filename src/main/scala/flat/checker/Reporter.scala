@@ -117,6 +117,10 @@ class Reporter(source: Source):
     val diagnostic = Diagnostic(range, s"Type Error: '$name' is not a type", Error, "checker")
     buffer += diagnostic
 
+  def reportNotLang(range: Range, name: String): Unit =
+    val diagnostic = Diagnostic(range, s"Type Error: '$name' is not a language", Error, "checker")
+    buffer += diagnostic
+
   def reportMissingArgs(range: Range, funType: FunSort, actual: Int): Unit =
     val diagnostic = Diagnostic(range, multiLineMessage(
       s"Type Error: missing ${funType.arity - actual} argument(s)",

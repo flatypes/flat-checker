@@ -1,17 +1,19 @@
-method propertyName(methodName: String): String
+lang UpperCase = r"[A-Z][a-zA-Z0-9]*"
+lang MethodName = ("is" | "get")? UpperCase
+lang PropertyName = r"[a-z][a-zA-Z0-9]*"
+
+method propertyName(methodName: MethodName): PropertyName
 {
   var pn: String;
   if (methodName.startsWith("is")) {
     pn = methodName.substring("is".length, methodName.length);
+  } else if (methodName.startsWith("get")) {
+    pn = methodName.substring("get".length, methodName.length);
   } else {
-    if (methodName.startsWith("get")) {
-      pn = methodName.substring("get".length, methodName.length);
-    } else {
-      pn = methodName;
-    }
+    pn = methodName;
   }
-    
+
   var x = pn.substring(0, 1).toLower();
-  var y = pn.substring(1, pn.length);
+  var y = pn.substring(1, pn.length + 1);
   return x + y;
 }

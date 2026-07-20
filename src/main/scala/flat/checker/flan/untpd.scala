@@ -9,13 +9,15 @@ object untpd:
   sealed trait TopDef:
     val ident: Ident
 
-  final case class MethodDef(ident: Ident, params: List[Param], returnType: Option[Type],
-                             requires: List[Expr], ensures: List[Expr], body: Option[List[Stmt]])
-                            (val endRange: Range) extends TopDef
+  final case class TypeDef(ident: Ident, value: Type) extends TopDef
+
+  final case class LangDef(ident: Ident, value: Lang) extends TopDef
 
   final case class ConstDef(ident: Ident, value: Expr) extends TopDef
 
-  final case class TypeDef(ident: Ident, value: Type) extends TopDef
+  final case class MethodDef(ident: Ident, params: List[Param], returnType: Option[Type],
+                             requires: List[Expr], ensures: List[Expr], body: Option[List[Stmt]])
+                            (val endRange: Range) extends TopDef
 
   final case class Ident(name: String)(val range: Range)
 
@@ -77,6 +79,29 @@ object untpd:
   final case class FunType(paramTypes: List[Type], returnType: Type) extends Type
 
   final case class UnionType(left: Type, right: Type) extends Type
+
+  // Formal Languages
+  sealed trait Lang
+
+  final case class LangConst(value: String)(val range: Range) extends Lang
+
+  final case class LangName(name: String)(val range: Range) extends Lang
+
+  final case class RegEx(regEx: flat.regex.RegEx) extends Lang
+
+  final case class LangStar(lang: Lang)(val range: Range) extends Lang
+
+  final case class LangPlus(lang: Lang)(val range: Range) extends Lang
+
+  final case class LangOpt(lang: Lang)(val range: Range) extends Lang
+
+  final case class LangPower(lang: Lang, exp: Int)(val range: Range) extends Lang
+
+  final case class LangLoop(lang: Lang, min: Int, max: Option[Int])(val range: Range) extends Lang
+
+  final case class LangConcat(left: Lang, right: Lang)(val range: Range) extends Lang
+
+  final case class LangUnion(left: Lang, right: Lang)(val range: Range) extends Lang
 
   // Expressions
   trait Expr:

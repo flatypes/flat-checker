@@ -4,6 +4,7 @@ import flat.checker.Reporter
 import flat.checker.flan.*
 import flat.checker.flan.SortOps.*
 import flat.checker.flan.tpd.*
+import flat.regex.{Inf, Interval, RegEx}
 import org.eclipse.lsp4j.{Position, Range}
 
 import scala.collection.mutable
@@ -17,6 +18,7 @@ class Typer(using reporter: Reporter):
     case t@untpd.TypeName(x) =>
       ctx.lookup(x) match
         case Some(TypeInfo(typ)) => typ
+        case Some(LangInfo(r)) => NormType(stringSort, Some(StringInLang(Var("_"), r)))
         case Some(_) =>
           reporter.reportNotType(t.range, x)
           NoSort
@@ -63,6 +65,27 @@ class Typer(using reporter: Reporter):
     val conjuncts = preds.zipWithIndex.collect { case (Some(p), i) => (p, i) }
     if conjuncts.isEmpty then None
     else Some(mkLambda(sort, tup => mkAnd(conjuncts.map { (p, i) => mkApply(p, TupleSelect(i, tup)()) })))
+
+  def translate(node: untpd.Lang)(using ctx: Ctx): RegEx = node match
+    case untpd.LangConst(s) => RegEx.fromString(s)
+    case n@untpd.LangName(x) =>
+      ctx.lookup(x) match
+        case Some(LangInfo(r)) => r
+        case Some(_) =>
+          reporter.reportNotLang(n.range, x)
+          RegEx.RENone
+        case None =>
+          reporter.reportNameUndefined(n.range)
+          RegEx.RENone
+    case untpd.RegEx(r) => r
+    case untpd.LangStar(l) => translate(l).*
+    case untpd.LangPlus(l) => translate(l).+
+    case untpd.LangOpt(l) => translate(l).?
+    case untpd.LangPower(l, n) => translate(l) ^ n
+    case untpd.LangLoop(l, n1, Some(n2)) => translate(l).loop(Interval(n1, n2))
+    case untpd.LangLoop(l, n1, None) => translate(l).loop(Interval(n1, Inf))
+    case untpd.LangConcat(l1, l2) => translate(l1) ++ translate(l2)
+    case untpd.LangUnion(l1, l2) => translate(l1) | translate(l2)
 
   def infer(node: untpd.Expr)(using ctx: Ctx, vs: VarStore): (Sort, Expr) = node match
     case untpd.Const(null) => (NullSort, Const(null)(node.range))

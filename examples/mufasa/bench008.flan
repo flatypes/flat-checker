@@ -1,12 +1,15 @@
-method coerceLocalScriptURL(scriptURL: String): String?
+method coerceLocalScriptURL(scriptURL: String): String
+  requires !scriptURL.contains("://") && scriptURL.contains("/")
+  ensures _.startsWith("file://")
 {
   if (scriptURL.startsWith("assets://")) {
-    return null;
+    return "null";
   } else {
     scriptURL = scriptURL.substring(scriptURL.indexOf("/") + 1, scriptURL.length);
-    if ("://" !in scriptURL) {
+    if (!scriptURL.contains("://")) {
       scriptURL = "file://" + scriptURL;
     }
+
     return scriptURL;
   }
 }

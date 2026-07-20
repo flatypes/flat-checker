@@ -124,22 +124,32 @@ enum RegEx extends Domain:
     case r => r
 
   /** Returns the Brzozowski derivative at the character `c`. */
-  def derivative(c: Char): RegEx = this match
+  def deriv(c: Char): RegEx = this match
     case RENone => RENone
     case RENull => RENone
     case RELit(cs) => if cs.contains(c) then RENull else RENone
     case REConcat(r1, r2) =>
-      if r1.nullable then (r1.derivative(c) ++ r2) | r2.derivative(c)
-      else r1.derivative(c) ++ r2
-    case REUnion(r1, r2) => r1.derivative(c) | r2.derivative(c)
-    case REStar(r) => r.derivative(c) ++ this
+      if r1.nullable then (r1.deriv(c) ++ r2) | r2.deriv(c)
+      else r1.deriv(c) ++ r2
+    case REUnion(r1, r2) => r1.deriv(c) | r2.deriv(c)
+    case REStar(r) => r.deriv(c) ++ this
 
   /** Returns the Brzozowski derivative at the string `t`. */
-  def derivative(t: String): RegEx =
+  def deriv(t: String): RegEx =
     var r = this
     for c <- t do
-      r = r.derivative(c)
+      r = r.deriv(c)
     r
+
+  def deriv(set: CharSet): RegEx = this match
+    case RENone => RENone
+    case RENull => RENone
+    case RELit(s) => if (s & set).isEmpty then RENone else RENull
+    case REConcat(r1, r2) =>
+      if r1.nullable then (r1.deriv(set) ++ r2) | r2.deriv(set)
+      else r1.deriv(set) ++ r2
+    case REUnion(r1, r2) => r1.deriv(set) | r2.deriv(set)
+    case REStar(r) => r.deriv(set) ++ this
 
   /** Returns the Brzozowski derivative at any char. */
   def derivativeAny: RegEx = this match
@@ -154,7 +164,7 @@ enum RegEx extends Domain:
 
   /** Tests if the given string `s` is a member. */
   def contains(s: String): Boolean =
-    if s.isEmpty then nullable else derivative(s).nullable
+    if s.isEmpty then nullable else deriv(s).nullable
 
   /** Tests if this RE is subset of `that`. */
   infix def subsetOf(that: RegEx): Boolean = RESub.check(this, that)

@@ -1,11 +1,12 @@
 package flat.checker.parsing
 
 import flat.antlr.{FlanLexer, FlanParser, FlanParserBaseVisitor}
-import flat.checker.flan.Literal
 import flat.checker.flan.untpd.*
+import flat.checker.flan.{Literal, parseInt, unescape}
 import flat.checker.{Reporter, Source}
+import flat.regex.REParser
 import org.antlr.v4.runtime.*
-import org.antlr.v4.runtime.tree.TerminalNode
+import org.antlr.v4.runtime.tree.{RuleNode, TerminalNode}
 import org.eclipse.lsp4j
 import org.eclipse.lsp4j.{Position, Range}
 
@@ -67,6 +68,14 @@ class Parser(using reporter: Reporter):
       val ident = toIdent(node.IDENT)
       val value = node.`type`.accept(TypeVisitor)
       TypeDef(ident, value)
+
+    override def visitLangDef(node: FlanParser.LangDefContext): TopDef =
+      val ident = toIdent(node.IDENT)
+      val value = node.lang.accept(LangVisitor)
+      LangDef(ident, value)
+
+    override def visitChildren(node: RuleNode): TopDef =
+      throw NotImplementedError(s"TopDefVisitor.visit${node.getClass.getSimpleName}")
 
   private object StmtVisitor extends FlanParserBaseVisitor[Stmt]:
     override def visitVarStmt(node: FlanParser.VarStmtContext): Stmt =
@@ -132,6 +141,9 @@ class Parser(using reporter: Reporter):
       val cond = node.expr.accept(ExprVisitor)
       Assert(cond)
 
+    override def visitChildren(node: RuleNode): Stmt =
+      throw NotImplementedError(s"StmtVisitor.visit${node.getClass.getSimpleName}")
+
   private object ExprVisitor extends FlanParserBaseVisitor[Expr]:
     override def visitConst(node: FlanParser.ConstContext): Expr =
       val value = toLiteral(node.literal)
@@ -144,36 +156,6 @@ class Parser(using reporter: Reporter):
       else if node.INT_LITERAL != null then parseInt(node.getText)
       else if node.CHAR_LITERAL != null then unescape(node.getText.drop(1).dropRight(1)).head
       else unescape(node.getText.drop(1).dropRight(1))
-
-    private def parseInt(text: String): Int =
-      val numberPart = if text.startsWith("-") then text.drop(1) else text
-      val n =
-        if numberPart.startsWith("0x") then Integer.parseInt(numberPart.drop(2), 16)
-        else if numberPart.startsWith("0b") then Integer.parseInt(numberPart.drop(2), 2)
-        else Integer.parseInt(numberPart)
-      if text.startsWith("-") then -n else n
-
-    private def unescape(text: String): String =
-      var i = 0
-      val sb = StringBuilder()
-      while i < text.length do
-        text.charAt(i) match
-          case '\\' =>
-            text.charAt(i + 1) match
-              case '\\' | '\'' | '"' => sb += text.charAt(i); i += 2
-              case 'a' => sb += '\u0007'; i += 2
-              case 'b' => sb += '\b'; i += 2
-              case 'f' => sb += '\f'; i += 2
-              case 'n' => sb += '\n'; i += 2
-              case 'r' => sb += '\r'; i += 2
-              case 't' => sb += '\t'; i += 2
-              case 'v' => sb += '\u000B'; i += 2
-              case c if '0' <= c && c <= '7' => Integer.parseInt(text.substring(i + 1, i + 4), 8).toChar; i += 4
-              case 'x' => sb += Integer.parseInt(text.substring(i + 2, i + 4), 16).toChar; i += 4
-              case 'u' => sb += Integer.parseInt(text.substring(i + 2, i + 6), 16).toChar; i += 6
-              case _ => throw IllegalArgumentException("Unknown escape sequence")
-          case c => sb += c; i += 1
-      sb.toString
 
     override def visitTermName(node: FlanParser.TermNameContext): Expr =
       val name = node.IDENT.getText
@@ -263,6 +245,9 @@ class Parser(using reporter: Reporter):
       val elseValue = node.expr(2).accept(this)
       Ite(cond, thenValue, elseValue)(getRange(node))
 
+    override def visitChildren(node: RuleNode): Expr =
+      throw NotImplementedError(s"ExprVisitor.visit${node.getClass.getSimpleName}")
+
   private object TypeVisitor extends FlanParserBaseVisitor[Type]:
     override def visitNullType(node: FlanParser.NullTypeContext): Type = NullType
 
@@ -308,6 +293,66 @@ class Parser(using reporter: Reporter):
       node.`type`(0).accept(this) match
         case TupleType(ts) => FunType(ts, returnType)
         case t => FunType(List(t), returnType)
+
+    override def visitChildren(node: RuleNode): Type =
+      throw NotImplementedError(s"TypeVisitor.visit${node.getClass.getSimpleName}")
+
+  private object LangVisitor extends FlanParserBaseVisitor[Lang]:
+    override def visitSingletonLang(node: FlanParser.SingletonLangContext): Lang =
+      val value =
+        if node.CHAR_LITERAL != null then unescape(node.CHAR_LITERAL.getText.drop(1).dropRight(1))
+        else unescape(node.STRING_LITERAL.getText.drop(1).dropRight(1))
+      LangConst(value)(getRange(node))
+
+    override def visitLangName(node: FlanParser.LangNameContext): Lang =
+      LangName(node.IDENT.getText)(getRange(node))
+
+    override def visitRegexLang(node: FlanParser.RegexLangContext): Lang =
+      val pattern = node.REGEX_LITERAL.getText.drop(2).dropRight(1)
+      val regEx = REParser.tryParse(pattern, Map.empty) match
+        case Left(msg) =>
+          reporter.reportSyntaxError(msg, getRange(node.REGEX_LITERAL))
+          flat.regex.RegEx.RENone
+        case Right(r) => r
+      RegEx(regEx)
+
+    override def visitParenLang(node: FlanParser.ParenLangContext): Lang = node.lang.accept(this)
+
+    override def visitLangStar(node: FlanParser.LangStarContext): Lang =
+      val lang = node.lang.accept(this)
+      LangStar(lang)(getRange(node))
+
+    override def visitLangPlus(node: FlanParser.LangPlusContext): Lang =
+      val lang = node.lang.accept(this)
+      LangPlus(lang)(getRange(node))
+
+    override def visitLangOpt(node: FlanParser.LangOptContext): Lang =
+      val lang = node.lang.accept(this)
+      LangOpt(lang)(getRange(node))
+
+    override def visitLangPower(node: FlanParser.LangPowerContext): Lang =
+      val lang = node.lang.accept(this)
+      val exp = parseInt(node.INT_LITERAL.getText)
+      LangPower(lang, exp)(getRange(node))
+
+    override def visitLangLoop(node: FlanParser.LangLoopContext): Lang =
+      val lang = node.lang.accept(this)
+      val min = parseInt(node.INT_LITERAL(0).getText)
+      val max = if node.INT_LITERAL.size() > 1 then Some(parseInt(node.INT_LITERAL(1).getText)) else None
+      LangLoop(lang, min, max)(getRange(node))
+
+    override def visitLangConcat(node: FlanParser.LangConcatContext): Lang =
+      val left = node.lang(0).accept(this)
+      val right = node.lang(1).accept(this)
+      LangConcat(left, right)(getRange(node))
+
+    override def visitLangUnion(node: FlanParser.LangUnionContext): Lang =
+      val left = node.lang(0).accept(this)
+      val right = node.lang(1).accept(this)
+      LangUnion(left, right)(getRange(node))
+
+    override def visitChildren(node: RuleNode): Lang =
+      throw NotImplementedError(s"LangVisitor.visit${node.getClass.getSimpleName}")
 
   private def toIdent(node: TerminalNode): Ident = Ident(node.getText)(getRange(node))
 

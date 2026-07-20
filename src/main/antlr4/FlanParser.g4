@@ -142,11 +142,16 @@ type
 
 // Languages
 lang
-  : CHAR_LITERAL                    #singletonLang
-  | STRING_LITERAL                  #singletonLang
-  | IDENT                           #langName
-  | REGEX_LITERAL                   #regexLang
-  | '(' lang ')'                    #parenLang
-  | <assoc=right> lang lang         #langConcat
-  | <assoc=right> lang '|' lang     #langUnion
+  : CHAR_LITERAL                                #singletonLang
+  | STRING_LITERAL                              #singletonLang
+  | IDENT                                       #langName
+  | REGEX_LITERAL                               #regexLang
+  | '(' lang ')'                                #parenLang
+  | lang '*'                                    #langStar
+  | lang '+'                                    #langPlus
+  | lang '?'                                    #langOpt
+  | lang '{' INT_LITERAL '}'                    #langPower
+  | lang '{' INT_LITERAL ',' INT_LITERAL? '}'   #langLoop
+  | <assoc=right> lang lang                     #langConcat
+  | <assoc=right> lang '|' lang                 #langUnion
   ;

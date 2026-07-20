@@ -5,7 +5,7 @@ case object Inf:
   override def toString: String = "∞"
 
 /** Interval: a range of integers in between `lb` (can be -∞) and `ub` (can be +∞). */
-final case class Interval(lb: Int | Inf.type = Inf, ub: Int | Inf.type = Inf):
+final case class Interval(lb: Int | Inf.type = Inf, ub: Int | Inf.type = Inf) extends Domain:
   /** Tests if this interval is empty. */
   def isEmpty: Boolean = (lb, ub) match
     case (n1: Int, n2: Int) => n1 > n2

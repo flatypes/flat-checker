@@ -28,6 +28,10 @@ class Checker(using reporter: Reporter):
       val value = typer.normalize(t)(using ctx)
       TypeInfo(value)(id.range)
 
+    case untpd.LangDef(id, l) =>
+      val regEx = typer.translate(l)(using ctx)
+      LangInfo(regEx)(id.range)
+
     case untpd.ConstDef(id, e) =>
       val (sort, value) = typer.infer(e)(using ctx, VarStore())
       ConstInfo(sort, value)(id.range)

@@ -27,11 +27,11 @@ object AOps extends LazyLogging:
     def forallPrefix(t: String): Boolean =
       if t.isEmpty then true
       else !take1.nullable && re.first.isSingleton && re.first.contains(t.head) &&
-        re.derivative(t.head).forallPrefix(t.tail)
+        re.deriv(t.head).forallPrefix(t.tail)
 
     def startsWith(t: String): Option[Boolean] =
       if t.isEmpty then Some(true)
-      else if re.derivative(t).isEmpty then Some(false)
+      else if re.deriv(t).isEmpty then Some(false)
       else if forallPrefix(t) then Some(true)
       else None
 
@@ -70,7 +70,7 @@ object AOps extends LazyLogging:
       require(t.nonEmpty)
       for
         (rl, rr) <- split(t.head)
-        r2 = rr.derivative(t)
+        r2 = rr.deriv(t)
         if !r2.isEmpty
       yield (rl, fromString(t) ++ r2)
 
@@ -101,7 +101,7 @@ object AOps extends LazyLogging:
         else None
       case _ =>
         val r1 = re.splitSuffix(t.head)
-        if r1.derivative(t).isEmpty then Some(false)
+        if r1.deriv(t).isEmpty then Some(false)
         else if re.forallContains(t.head) && r1.forallPrefix(t) then Some(true)
         else None
 
@@ -296,6 +296,22 @@ object AOps extends LazyLogging:
         for s1 <- r1.maxNumber(base); s2 <- r2.maxNumber(base) yield
           if parseInt(s1, base) >= parseInt(s2, base) then s1 else s2
       case REStar(_) => None
+
+    def toLower: RegEx = re match
+      case RENone => RENone
+      case RENull => RENull
+      case RELit(cs) => RELit(CharSetAbs.toLower(cs))
+      case REConcat(r1, r2) => r1.toLower ++ r2.toLower
+      case REUnion(r1, r2) => r1.toLower | r2.toLower
+      case REStar(r) => r.toLower.*
+
+    def toUpper: RegEx = re match
+      case RENone => RENone
+      case RENull => RENull
+      case RELit(cs) => RELit(CharSetAbs.toUpper(cs))
+      case REConcat(r1, r2) => r1.toUpper ++ r2.toUpper
+      case REUnion(r1, r2) => r1.toUpper | r2.toUpper
+      case REStar(r) => r.toUpper.*
 
   private inline def parseInt(s: String, base: Int): Int =
     if s.isEmpty then 0 else Integer.parseInt(s, base)

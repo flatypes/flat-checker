@@ -29,9 +29,9 @@ object RESub:
           cs <- (next(r1) <| next(r2)).toList
           if !cs.isEmpty
           c = cs.head
-          r11 = r1.derivative(c)
+          r11 = r1.deriv(c)
           if !r11.isEmpty
-          r21 = r2.derivative(c)
+          r21 = r2.deriv(c)
           _ = if r21.isEmpty then disproved = true
         yield (r11, r21)
       if disproved then false else prove(rest ++ subGoals, ctx :+ (r1, r2))

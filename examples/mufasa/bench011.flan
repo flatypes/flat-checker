@@ -1,18 +1,18 @@
-method translateFuture(output: String): String
+lang Present = r"[0-9]+(jaj|jar|DIS)?"
+lang Past = r"[0-9]+(Hu|wen|ben| ret)?"
+
+method translatePast(output: Present): Past
 {
   var time = output;
   if (output.indexOf("jaj") != -1) {
-    time = time.substring(0, time.length - 3) + "Hu";
+    time = time.slice(0, time.length - 3) + "Hu";
+  } else if (output.indexOf("jar") != -1) {
+    time = time.slice(0, time.length - 3) + "wen";
+  } else if (output.indexOf("DIS") != -1) {
+    time = time.slice(0, time.length - 3) + "ben";
   } else {
-    if (output.indexOf("jar") != -1) {
-      time = time.substring(0, time.length - 3) + "wen";
-    } else {
-      if (output.indexOf("DIS") != -1) {
-        time = time.substring(0, time.length - 3) + "ben";
-      } else {
-        time = time + " ret";
-      }
-    }
+    time = time + " ret";
   }
+
   return time;
 }

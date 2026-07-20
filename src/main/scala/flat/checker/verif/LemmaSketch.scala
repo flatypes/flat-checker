@@ -4,8 +4,8 @@ import flat.checker.flan.Sort
 import flat.checker.flan.tpd.*
 import flat.checker.verif.Simplifier.simplify
 
-final class Goal(val premises: List[Expr], val conclusion: Expr)
-                (using val sorts: Map[String, Sort]):
+final case class Goal(premises: List[Expr], conclusion: Expr)
+                     (using val sorts: Map[String, Sort]):
   private val solver = SMTSolver()
 
   private var solverSetup = false
@@ -39,4 +39,17 @@ object LemmaSketches:
     yield
       Eq(SeqCount(SeqSlice(s, i, j), t), Add(SeqCount(SeqSlice(s, Add(i, 1), j), t), n))
 
-  val all: List[LemmaSketch] = List(stringSliceCount)
+  /** !s.trim.contains(" ") */
+  private val stringTrimNoWhiteSpace: LemmaSketch = goal =>
+    for s <- goal.conclusion.collectFirst { case Not(SeqContains(StringTrim(e), _)) => e }
+      yield Not(SeqContains(StringTrim(s), Const(" ")))
+
+  /** If !s.contains(c), then !s.trim.contains(c) */
+  private val stringTrimNotContainTrans: LemmaSketch = goal =>
+    for
+      (s, c) <- goal.conclusion.collectFirst:
+        case Not(SeqContains(StringTrim(e), et))
+          if goal.have(Eq(SeqLength(et), 1), Not(SeqContains(e, et))) => (e, et)
+    yield Not(SeqContains(StringTrim(s), c))
+
+  val all: List[LemmaSketch] = List(stringSliceCount, stringTrimNoWhiteSpace, stringTrimNotContainTrans)

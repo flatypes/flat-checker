@@ -8,7 +8,7 @@ import org.apache.commons.text.StringEscapeUtils.escapeJava
  * @param set   the underlying set of characters
  * @param isInc if true, `set` stores the characters that should be included; otherwise excluded
  * */
-final class CharSet private(private val set: Set[Char], private val isInc: Boolean) extends Domain:
+final class CharSet(val set: Set[Char], val isInc: Boolean) extends Domain:
   /** Tests if this CS is empty. */
   def isEmpty: Boolean = set.isEmpty && isInc
 
@@ -61,6 +61,8 @@ final class CharSet private(private val set: Set[Char], private val isInc: Boole
   /** Excludes the given character `c`. */
   def -(c: Char): CharSet = new CharSet(if isInc then set - c else set + c, isInc)
 
+  def --(chars: IterableOnce[Char]): CharSet = new CharSet(if isInc then set -- chars else set ++ chars, isInc)
+  
   override def equals(obj: Any): Boolean = obj match
     case that: CharSet => isInc == that.isInc && set == that.set
     case _ => false
@@ -139,6 +141,12 @@ object CharSet:
     require(2 <= base && base <= 36)
     if base <= 10 then from('0' until ('0' + base).toChar)
     else from('0' to '9') | from('A' until ('A' + (base - 10)).toChar) | from('a' until ('a' + (base - 10)).toChar)
+
+// abstract operation for charset
+object CharSetAbs:
+  extension (cs: CharSet)
+    def toLower: CharSet = new CharSet(cs.set.map(_.toLower), cs.isInc)
+    def toUpper: CharSet = new CharSet(cs.set.map(_.toUpper), cs.isInc)
 
 object CharExt:
   extension (c: Char)

@@ -66,7 +66,7 @@ final class LemmaSynth(using config: Config) extends LazyLogging:
       found match
         case BoolSet.True => indices.map(inIndex(idx, _, str))
         case BoolSet.False => List(EQ(idx, Const(-1)))
-        case BoolSet.All =>
+        case BoolSet.Top =>
           indices.filterNot(_ == IndexInterval(IndexL(0), IndexR(1)))
             .map(i => Or(EQ(idx, Const(-1)), inIndex(idx, i, str)))
 

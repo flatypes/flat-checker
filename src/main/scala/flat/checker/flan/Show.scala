@@ -1,6 +1,7 @@
 package flat.checker.flan
 
 import flat.checker.flan.tpd.*
+import flat.regex.RegEx
 
 object Show:
   // Types and sorts
@@ -26,6 +27,40 @@ object Show:
 
   extension (varDecl: VarDecl)
     def show: String = s"${varDecl.name}: ${varDecl.typ.show}"
+
+  // Regular Expressions
+
+  import RegEx.*
+
+  private def showRegEx(regEx: RegEx): String = regEx match
+    case RENone => "∅"
+    case RENull => "ε"
+    case RELit(cs) =>
+      if cs.isEmpty then "∅"
+      else if cs.isSingleton then cs.head.toString
+      else if cs.isFull then "."
+      else
+        val (ranges, pos) = cs.toSMT
+        val ss = ranges.map:
+          case c: Char => c.toString
+          case (c1, c2) => s"$c1-$c2"
+        "[" + (if pos then "" else "^") + ss.mkString + "]"
+    case REConcat(r1, r2) =>
+      val s1 = if r1.isInstanceOf[REUnion] then "(" + showRegEx(r1) + ")" else showRegEx(r1)
+      val s2 = if r2.isInstanceOf[REUnion] then "(" + showRegEx(r2) + ")" else showRegEx(r2)
+      s1 + s2
+    case REUnion(r1, r2) => // right associative
+      val s1 = if r1.isInstanceOf[REUnion] then "(" + showRegEx(r1) + ")" else showRegEx(r1)
+      val s2 = showRegEx(r2)
+      s"$s1|$s2"
+    case REStar(r) =>
+      val s = showRegEx(r)
+      if s.length == 1 then s + "*" else "(" + s + ")" + "*"
+
+  extension (regEx: RegEx)
+    def show: String =
+      val s = showRegEx(regEx)
+      if s.length > 80 then s.take(80) + "..." else s
 
   // Expressions
   val LEVEL_TIGHTER = 0
@@ -111,7 +146,7 @@ object Show:
       case SeqLength(e) => s"|${showExpr(e)}|"
       case SeqSelect(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
       case SeqUpdate(e, ei, ev) => s"${showTighter(e)}[${showExpr(ei)} = ${showExpr(ev)}]"
-      case SeqSlice(e, ei, NoExpr) => s"${showTighter(e)}[${showExpr(ei)}:]"
+      case SeqSlice(e, ei, ej) if ej == NoExpr || ej == SeqLength(e) => s"${showTighter(e)}[${showExpr(ei)}:]"
       case SeqSlice(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
       case SeqConcat(e1, e2) => showInfix("++", LEVEL_ADD, ASSOC_LEFT, e1, e2)
       case SeqReverse(e) => showMemberApply(e, "reverse")
@@ -155,6 +190,9 @@ object Show:
       // Tuple
       case TupleExpr(es) => es.map(showExpr(_)).mkString("(", ", ", ")")
       case TupleSelect(i, e) => showMemberApply(e, "_" + (i + 1))
+
+      // Domain
+      case StringInLang(e, r) => s"${showExpr(e)} ∈ ${r.show}"
 
       // Other
       case NoExpr => "?"

@@ -11,25 +11,24 @@ import org.eclipse.lsp4j.Range
 class Verifier(using reporter: Reporter) extends LazyLogging:
   def verify(program: Program): Unit =
     val methodInfos = Map.from(for node <- program.body yield
-      node.name -> MethodInfo(node.params, node.returns, node.requires, node.ensures))
+      node.name -> MethodInfo(node.params, node.returns, node.requires, node.ensures, node.locals))
     program.body.foreach(verifyBody(_, methodInfos))
 
-  private def verifyBody(method: MethodDef, methodInfos: Map[String, MethodInfo]): Unit =
-    for body <- method.body do
-      val state = State(
-        methods = methodInfos,
-        currentMethod = method.name,
-        types = method.types,
-        values = Map.from(for x <- method.vars yield x -> Var(versioned(x, 0))),
-        freshCounts = Map.from(for x <- method.vars yield x -> 1),
-        ctx = PrfCtx(vars = for (x, t) <- method.types yield versioned(x, 0) -> t.sort))
-      val onReturn: (Range, State) => Unit = (r, st) => assert(method.ensures, st, _ => PostNotProvedError(r))
-      assume(method.requires, state,
-        execBody(body, _, onReturn(method.endRange, _))
-          (using Handlers(
-            onReturn = onReturn,
-            onBreak = (_, _) => throw RuntimeException("break outside of loop"),
-            onContinue = (_, _) => throw RuntimeException("continue outside of loop"))))
+  private def verifyBody(node: MethodDef, methodInfos: Map[String, MethodInfo]): Unit =
+    node.body match
+      case None => // abstract method, nothing to verify
+      case Some(body) =>
+        val state = State(methods = methodInfos, currentMethod = node.name)
+        val m = methodInfos(node.name)
+        val onReturn: (Range, State) => Unit = (r, st) => assert(m.ensures, st, _ => PostNotProvedError(r))
+        havoc(m.paramNames, state, st1 =>
+          assume(m.requires, st1, st2 =>
+            havoc(m.localNames, st2, st3 =>
+              execBody(body, st3, onReturn(node.endRange, _))
+                (using Handlers(
+                  onReturn = onReturn,
+                  onBreak = (_, _) => throw RuntimeException("break outside of loop"),
+                  onContinue = (_, _) => throw RuntimeException("continue outside of loop"))))))
 
   private case class Handlers(onReturn: (Range, State) => Unit,
                               onBreak: (Range, State) => Unit,
@@ -76,19 +75,19 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
   private def update(name: String, expr: Expr, state: State, cont: State => Unit): Unit =
     if check(expr, state) then
+      for e <- state.types(name).reft do
+        assert(e.subst("_", expr), state, ReftNotProvedError(expr.range))
       val (v, st) = eval(expr, state)
-      for e <- st.types(name).reft do
-        assert(e.subst("_", v), st, ReftNotProvedError(expr.range))
       cont(st.copy(values = st.values + (name -> v)))
     else
       havoc(name, state, cont)
 
   private def havoc(name: String, state: State, cont: State => Unit): Unit =
     val typ = state.types(name)
-    var (x, st) = state.fresh(name, typ.sort)
+    var (y, st) = state.fresh(name, typ.sort)
     for e <- typ.reft do
-      st = st.add(e.subst("_", Var(x)))
-    cont(st.copy(values = st.values + (name -> Var(x))))
+      st = st.add(e.subst("_", Var(y)))
+    cont(st.copy(values = st.values + (name -> Var(y))))
 
   private def havoc(names: List[String], state: State, cont: State => Unit): Unit = names match
     case Nil => cont(state)

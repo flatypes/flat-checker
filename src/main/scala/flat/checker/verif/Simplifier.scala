@@ -15,6 +15,8 @@ object Simplifier:
       case _ => false
 
     def simplify(using sorts: Map[String, Sort]): Expr = expr match
+      case Const(_) | Var(_) | MethodRef(_) => expr
+
       // Functional
       case Apply(e, es) =>
         (e.simplify, es.map(_.simplify)) match
@@ -57,6 +59,7 @@ object Simplifier:
           case Const(b: Boolean) => Const(!b)(expr.range)
           case Not(e) => e
           case Eq(e1, e2) => Ne(e1, e2)(expr.range)
+          case Ne(e1, e2) => Eq(e1, e2)(expr.range)
           case Le(e1, e2) => Lt(e2, e1)(expr.range)
           case Lt(e1, e2) => Le(e2, e1)(expr.range)
           case e => Not(e)(expr.range)
@@ -292,8 +295,13 @@ object Simplifier:
           case TupleExpr(es) => es(i)
           case es => TupleSelect(i, es)(expr.range)
 
-      // Others
-      case _ => expr
+      // Domain
+      case StringInLang(e, r) =>
+        e.simplify match
+          case Const(s: String) => Const(r.contains(s))
+          case e => StringInLang(e, r)
+
+      case _ => throw NotImplementedError(s"Simplifier.simplify(${expr.getClass.getSimpleName})")
 
   extension (s: String)
     private def countSlice(t: String): Int = s.sliding(t.length).count(_ == t)
