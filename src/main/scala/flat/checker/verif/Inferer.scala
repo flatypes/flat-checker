@@ -3,9 +3,8 @@ package flat.checker.verif
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
-import flat.regex.AOps.*
 import flat.regex.*
-import flat.regex.REAbsOps.*
+import flat.regex.REOps.*
 
 class Inferer(goal: Goal) extends LazyLogging:
   def infer(expr: Expr): Domain = expr match
@@ -62,19 +61,19 @@ class Inferer(goal: Goal) extends LazyLogging:
     case SeqIndexOf(e, et, ei) => ???
     case SeqContains(e, et) =>
       (infer(e), et) match
-        case (r: RegEx, Const(t: String)) if t.length == 1 => r.absContains(t.head)
+        case (r: RegEx, Const(t: String)) if t.length == 1 => r.absContain(t.head)
         case _ =>
           logger.warn(s"Cannot infer ${expr.show}")
           BoolSet.Top
     case SeqStartsWith(e, et) =>
       (infer(e), et) match
-        case (r: RegEx, Const(t: String)) => r.absStartsWith(t)
+        case (r: RegEx, Const(t: String)) => r.absStartWith(t)
         case _ =>
           logger.warn(s"Cannot infer ${expr.show}")
           BoolSet.Top
     case SeqEndsWith(e, et) =>
       (infer(e), et) match
-        case (r: RegEx, Const(t: String)) => r.reverse.absStartsWith(t)
+        case (r: RegEx, Const(t: String)) => r.reverse.absEndWith(t)
         case _ =>
           logger.warn(s"Cannot infer ${expr.show}")
           BoolSet.Top
@@ -101,9 +100,9 @@ class Inferer(goal: Goal) extends LazyLogging:
         case _ =>
           logger.warn(s"Cannot infer ${expr.show}")
           RegEx.all
-    case StringToInt(e) => ???
+    case StringToInt(e) =>
       infer(e) match
-        case r: RegEx => r.absToInt
+        case r: RegEx => ???
         case _ =>
           logger.warn(s"Cannot infer ${expr.show}")
           Interval(0, Inf)

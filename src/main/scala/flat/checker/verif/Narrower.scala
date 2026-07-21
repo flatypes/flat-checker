@@ -3,7 +3,7 @@ package flat.checker.verif
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
-import flat.regex.RENarrowOps.*
+import flat.regex.REOps.*
 import flat.regex.RegEx
 
 import scala.collection.mutable
@@ -30,20 +30,20 @@ class Narrower(goal: Goal) extends LazyLogging:
     val newPremises: List[Expr] = updated.toList.map(e => StringInLang(e, langs(e)))
     goal.copy(premises = goal.premises ++ newPremises)(using goal.sorts)
 
-  private def apply(target: Expr, regEx: RegEx, premise: Expr): Option[RegEx] = premise match
+  private def apply(e: Expr, r: RegEx, premise: Expr): Option[RegEx] = premise match
     // prefix, suffix
-    case SeqStartsWith(`target`, Const(t: String)) => Some(regEx.filterStartWith(t))
-    case Not(SeqStartsWith(`target`, Const(t: String))) => Some(regEx.filterNotStartWith(t))
-    case SeqEndsWith(`target`, Const(t: String)) => Some(regEx.filterEndWith(t))
-    case Not(SeqEndsWith(`target`, Const(t: String))) => Some(regEx.filterNotEndWith(t))
+    case SeqStartsWith(`e`, Const(t: String)) => Some(r.filterStartWith(t))
+    case Not(SeqStartsWith(`e`, Const(t: String))) => Some(r.filterNotStartWith(t))
+    case SeqEndsWith(`e`, Const(t: String)) => Some(r.filterEndWith(t))
+    case Not(SeqEndsWith(`e`, Const(t: String))) => Some(r.filterNotEndWith(t))
     // equality
-    case Eq(`target`, Const(t: String)) => Some(regEx.filterEq(t))
-    case Ne(`target`, Const(t: String)) => Some(regEx.filterNe(t))
+    case Eq(`e`, Const(t: String)) => Some(r.filterEq(t))
+    case Ne(`e`, Const(t: String)) => Some(r.filterNe(t))
     // infix
-    case SeqContains(`target`, Const(t: String)) => Some(regEx.filterContain(t))
-    case Ne(SeqIndexOf(`target`, Const(t: String), Const(0)), Const(-1)) => Some(regEx.filterContain(t))
-    case Le(Const(0), SeqIndexOf(`target`, Const(t: String), Const(0))) => Some(regEx.filterContain(t))
-    case Not(SeqContains(`target`, Const(t: String))) => Some(regEx.filterNotContain(t))
-    case Eq(SeqIndexOf(`target`, Const(t: String), Const(0)), Const(-1)) => Some(regEx.filterNotContain(t))
-    case Lt(SeqIndexOf(`target`, Const(t: String), Const(0)), Const(0)) => Some(regEx.filterNotContain(t))
+    case SeqContains(`e`, Const(t: String)) => Some(r.filterContain(t))
+    case Ne(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(-1)) => Some(r.filterContain(t))
+    case Le(Const(0), SeqIndexOf(`e`, Const(t: String), Const(0))) => Some(r.filterContain(t))
+    case Not(SeqContains(`e`, Const(t: String))) => Some(r.filterNotContain(t))
+    case Eq(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(-1)) => Some(r.filterNotContain(t))
+    case Lt(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(0)) => Some(r.filterNotContain(t))
     case _ => None

@@ -1,6 +1,6 @@
 package flat.regex
 
-import flat.regex.RENarrowOps.filterNotContain
+import flat.regex.REOps.filterNotContain
 import flat.regex.RegEx.*
 
 import scala.annotation.tailrec
