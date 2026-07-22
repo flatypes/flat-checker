@@ -180,17 +180,25 @@ object REOps:
       case 0 => IndexSet(false, Set(0))
       case 1 => absIndexOf(t.head)
       case _ =>
-        val lengths = splitAtIndexOfSlice(t).map(_._1.absLength)
+        val lengths = splitAtIndexOf(t).map(_._1.absLength)
         IndexSet(!forallContain(t), NatSet.union(lengths))
 
-    private def splitAtIndexOfSlice(t: String): List[(RegEx, RegEx)] =
-      val forbiddenPrefixes = List.from(for n <- 1 until t.length; if t.endsWith(t.take(n)) yield t.dropRight(n))
-      for (r1, r2) <- splitBy(t.head); r2f = r2.filterStartWith(t.tail); if !r2f.isEmpty
-          r1f = r1.filterNotContain(t).filterNotEndWith(forbiddenPrefixes); if !r1f.isEmpty
+    private def splitAtIndexOf(t: String): List[(RegEx, RegEx)] =
+      val forbiddenPrefixes = for n <- (1 until t.length).toList; if t.endsWith(t.take(n)) yield t.dropRight(n)
+      for
+        (r1, r2) <- splitBy(t.head); r2f = r2.filterStartWith(t.tail); if !r2f.isEmpty
+        r1f = r1.filterNotContain(t).filterNotEndWith(forbiddenPrefixes); if !r1f.isEmpty
       yield (r1f, fromChar(t.head) ++ r2f)
 
-    private def filterNotEndWith(ts: List[String]): RegEx =
-      ts.foldLeft(r)(_.filterNotStartWith(_))
+    private def filterNotEndWith(ts: List[String]): RegEx = ts.foldLeft(r)(_.filterNotStartWith(_))
+
+    /** Abstract operation for `s.count(c)`. */
+    def absCount(c: Char): NatSet = r match
+      case RENone | RENull => Set(0)
+      case RELit(a) => if a.contains(c) then Set(1) else Set(0)
+      case REUnion(r1, r2) => r1.absCount(c) | r2.absCount(c)
+      case REConcat(r1, r2) => r1.absCount(c) + r2.absCount(c)
+      case REStar(r1) => if r1.existsContain(c) then NatSet.From(0) else Set(0)
 
     /* Slice Operations */
     /** Abstract operation for `s.drop(1)`. */
@@ -204,16 +212,6 @@ object REOps:
       require(n >= 0)
       if n == 0 then r else r.absDrop1.absDrop(n - 1)
 
-    /** Abstract operation for `s.dropRight(n)`. */
-    def absDropRight(n: Int): RegEx =
-      require(n >= 0)
-      r.reverse.absDrop(n).reverse
-
-    /** Abstract operation for `s.charAt(i)`. */
-    def absCharAt(i: Int): CharSet =
-      require(i >= 0)
-      absDrop(i).first
-
     /** Abstract operation for `s.take(n)`. */
     def absTake(n: Int): RegEx =
       require(n >= 0)
@@ -222,12 +220,36 @@ object REOps:
         val rs = for (a, r1) <- r.splitAt0 yield RELit(a) ++ r1.absTake(n - 1)
         (if r.nullable then RENull else RENone) | union(rs)
 
+    /** Abstract operation for `s.charAt(i)`. */
+    def absCharAt(i: Int): CharSet =
+      require(i >= 0)
+      r.absDrop(i).first
+
+    /** Abstract operation for `s.slice(i, j)`. */
+    def absSlice(i: Int, j: Int): RegEx =
+      require(0 <= i && i <= j)
+      r.absDrop(i).absTake(j - i)
+
+    /** Abstract operation for `s.dropRight(n)`. */
+    def absDropRight(n: Int): RegEx =
+      require(n >= 0)
+      r.reverse.absDrop(n).reverse
+
     /** Abstract operation for `s.takeRight(n)`. */
     def absTakeRight(n: Int): RegEx =
       require(n >= 0)
       r.reverse.absTake(n).reverse
 
+    /** Abstract operation for `s.drop(s.indexOf(t))`. */
+    def absDropIndexOf(t: String): RegEx =
+      union(r.splitAtIndexOf(t).map(_._2))
+
+    /** Abstract operation for `s.take(s.indexOf(t))`. */
+    def absTakeIndexOf(t: String): RegEx =
+      union(r.splitAtIndexOf(t).map(_._1))
+
     /* Conversion */
+    /** Abstract operation for `s.map(f)`. */
     def absMap(f: CharSet => CharSet): RegEx = r match
       case RENone | RENull => r
       case RELit(a) => RELit(f(a))
@@ -235,20 +257,12 @@ object REOps:
       case REConcat(r1, r2) => r1.absMap(f) ++ r2.absMap(f)
       case REStar(r1) => r1.absMap(f).*
 
+    /** Abstract operation for `s.toLower`. */
     def absToLower: RegEx = r.absMap(CharSetAbs.toLower)
 
+    /** Abstract operation for `s.toUpper`. */
     def absToUpper: RegEx = r.absMap(CharSetAbs.toUpper)
 
-    def absCount(c: Char): Interval = r match
-      case RENone | RENull => Interval(0, 0)
-      case RELit(a) => if a.contains(c) then Interval(1, 1) else Interval(0, 0)
-      case REUnion(r1, r2) => r1.absCount(c) + r2.absCount(c)
-      case REConcat(r1, r2) => r1.absCount(c) + r2.absCount(c)
-      case REStar(r1) =>
-        val count = r1.absCount(c)
-        if count.isEmpty then Interval(0, 0)
-        else if count.isSingleton then Interval(0, Inf)
-        else Interval(0, Inf)
 
   private class FilterNotContainSolver(r: RegEx, t: String) extends LazyLogging:
     require(t.nonEmpty)
