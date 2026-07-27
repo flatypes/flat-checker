@@ -1,26 +1,59 @@
 package flat.checker.domain
 
-import org.scalatest.funspec.AnyFunSpec
+import org.scalatest.prop.TableDrivenPropertyChecks
+import org.scalatest.propspec.AnyPropSpec
 
-class CharSetTest extends AnyFunSpec:
-  describe("[0-7]"):
-    val a = CharSet.from('0' to '7')
-    val b = CharSet.from('0' to '9')
+class CharSetTest extends AnyPropSpec, TableDrivenPropertyChecks:
+  private val alphabet = Set('a', 'b', 'c', 'A', 'B', 'C')
 
-    it("is nonempty"):
-      assert(a.nonEmpty)
+  private val examples = Seq.from:
+    for chars <- alphabet.subsets; pos <- Seq(true, false) yield CharSet(pos, chars)
 
-    it("contains '0'"):
-      assert(a.contains('0'))
+  private val sets = Table("set", examples *)
 
-    it("not contain '8'"):
-      assert(!a.contains('8'))
+  private val setPairs = Table(("left", "right"), (for a <- examples; b <- examples yield (a, b)) *)
 
-    it("is subset of [0-9]"):
-      assert(a.subsetOf(b))
+  private val setsWithChars = Table(("set", "char"), (for a <- examples; c <- alphabet yield (a, c)) *)
 
-    it("union with [89] is [0-9]"):
-      assert((a | CharSet('8', '9')).equiv(b))
+  property("subset"):
+    forAll(setPairs.filter { (a, b) => a.pos || !b.pos }):
+      (a, b) =>
+        val set1 = a.toFinSet(alphabet)
+        val set2 = b.toFinSet(alphabet)
+        assertResult(set1.subsetOf(set2))(a.subsetOf(b))
 
-    it("intersection with [89] is empty"):
-      assert((a & CharSet('8', '9')).isEmpty)
+  property("union"):
+    forAll(setPairs):
+      (a, b) =>
+        val set1 = a.toFinSet(alphabet)
+        val set2 = b.toFinSet(alphabet)
+        val actual = (a | b).toFinSet(alphabet)
+        assertResult(set1 | set2)(actual)
+
+  property("intersection"):
+    forAll(setPairs):
+      (a, b) =>
+        val set1 = a.toFinSet(alphabet)
+        val set2 = b.toFinSet(alphabet)
+        val actual = (a & b).toFinSet(alphabet)
+        assertResult(set1 & set2)(actual)
+
+  property("complement"):
+    forAll(sets):
+      a =>
+        val set = a.toFinSet(alphabet)
+        val actual = (~a).toFinSet(alphabet)
+        assertResult(alphabet -- set)(actual)
+
+  property("contains"):
+    forAll(setsWithChars):
+      (a, c) =>
+        val set = a.toFinSet(alphabet)
+        assertResult(set.contains(c))(a.contains(c))
+
+  property("remove"):
+    forAll(setsWithChars):
+      (a, c) =>
+        val set = a.toFinSet(alphabet)
+        val actual = (a - c).toFinSet(alphabet)
+        assertResult(set - c)(actual)

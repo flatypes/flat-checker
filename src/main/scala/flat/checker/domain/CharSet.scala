@@ -2,44 +2,44 @@ package flat.checker.domain
 
 import flat.checker.util.CharSetUtil.compress
 
+/** Infinite set of characters. */
 final case class CharSet(pos: Boolean, chars: Set[Char]):
   def isEmpty: Boolean = pos && chars.isEmpty
 
-  def nonEmpty: Boolean = !isEmpty
+  def nonEmpty: Boolean = !pos || chars.nonEmpty
 
   def isFull: Boolean = !pos && chars.isEmpty
 
   def isSingleton: Boolean = pos && chars.size == 1
 
-  def contains(c: Char): Boolean = if pos then chars.contains(c) else !chars.contains(c)
-
-  def unary_! : CharSet = new CharSet(!pos, chars)
-
-  def toSet: Set[Char] = if pos then chars else Set.from(0.toChar to 127.toChar) -- chars
-
-  def subsetOf(that: CharSet): Boolean = (this.pos, that.pos) match
+  def subsetOf(that: CharSet): Boolean = (pos, that.pos) match
     case (true, true) => chars.subsetOf(that.chars)
-    case (true, false) => (chars & that.chars).isEmpty
-    case (false, true) => toSet.subsetOf(that.chars)
     case (false, false) => that.chars.subsetOf(chars)
+    case (true, false) => (chars & that.chars).isEmpty
+    case (false, true) => false // NOTE: left is infinite, right is finite
 
-  def equiv(that: CharSet): Boolean = this.subsetOf(that) && that.subsetOf(this)
+  def |(that: CharSet): CharSet = (pos, that.pos) match
+    case (true, true) => new CharSet(true, chars | that.chars)
+    case (false, false) => new CharSet(false, chars & that.chars)
+    case (true, false) => new CharSet(false, that.chars -- chars)
+    case (false, true) => new CharSet(false, chars -- that.chars)
 
-  def |(that: CharSet): CharSet = (this.pos, that.pos) match
-    case (true, true) => new CharSet(true, this.chars | that.chars)
-    case (true, false) => new CharSet(false, that.chars -- this.chars)
-    case (false, true) => new CharSet(false, this.chars -- that.chars)
-    case (false, false) => new CharSet(false, this.chars & that.chars)
+  def &(that: CharSet): CharSet = (pos, that.pos) match
+    case (true, true) => new CharSet(true, chars & that.chars)
+    case (false, false) => new CharSet(false, chars | that.chars)
+    case (true, false) => new CharSet(true, chars -- that.chars)
+    case (false, true) => new CharSet(true, that.chars -- chars)
 
-  def &(that: CharSet): CharSet = (this.pos, that.pos) match
-    case (true, true) => new CharSet(true, this.chars & that.chars)
-    case (true, false) => new CharSet(true, this.chars -- that.chars)
-    case (false, true) => new CharSet(true, that.chars -- this.chars)
-    case (false, false) => new CharSet(false, this.chars | that.chars)
+  def unary_~ : CharSet = new CharSet(!pos, chars)
 
-  def -(c: Char): CharSet = if pos then new CharSet(true, chars - c) else new CharSet(false, chars + c)
+  def contains(c: Char): Boolean =
+    if pos then chars.contains(c) else !chars.contains(c)
 
-  def head: Char = if pos then chars.head else throw new NoSuchElementException("head of complement char set")
+  def -(c: Char): CharSet =
+    if pos then new CharSet(true, chars - c) else new CharSet(false, chars + c)
+
+  def toFinSet(alphabet: Set[Char]): Set[Char] =
+    if pos then chars else alphabet -- chars
 
   override def toString: String =
     val sign = if pos then "" else "^"
@@ -70,7 +70,7 @@ given Domain[Char, CharSet] with
     def subsetOf(b: CharSet): Boolean = a.subsetOf(b)
     def |(b: CharSet): CharSet = a | b
     def &(b: CharSet): CharSet = a & b
-    def unary_~ : CharSet = !a
+    def unary_~ : CharSet = ~a
 
     def contains(c: Char): Boolean = a.contains(c)
     def representative: Char =

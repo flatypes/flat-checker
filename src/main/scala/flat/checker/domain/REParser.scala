@@ -60,7 +60,7 @@ object REParser:
         neg <- '^'.?
         css <- classContent.*
         cs = if css.isEmpty then CharSet.empty else css.reduce(_ | _)
-      yield RegEx.lit(if neg.isDefined then !cs else cs)
+      yield RegEx.lit(if neg.isDefined then ~cs else cs)
 
     // classContent -> classChar ('-' classChar)? | classEscape
     private def classContent: Parser[CharSet] =
