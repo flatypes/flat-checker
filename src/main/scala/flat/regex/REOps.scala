@@ -322,8 +322,8 @@ object REOps:
           coef(getOrCreate(r2)) = fromChar(t.head)
         eqs += Eq(base, coef)
         i += 1
-//      logger.trace("Tasks:\n{}", tasks.map(_.show).mkString("\n"))
-//      logger.debug("Equations:\n{}", showEqs.mkString("\n"))
+      logger.trace("Tasks:\n{}", tasks.map(_.show).mkString("\n"))
+      logger.debug("Equations:\n{}", showEqs.mkString("\n"))
 
       // Step 2: solve equations via Arden's lemma: X = A * X + B => X = A.star * B
       i = eqs.length - 1
