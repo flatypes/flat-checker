@@ -19,13 +19,13 @@ extension (r: NatRE)
     case REPlus(r1, r2) => r1.isFinite && r2.isFinite
     case REComp(r1, r2) => r1.isFinite && r2.isFinite
 
-  def toSet(bound: Int = 0): Set[Int] = r match
+  def toFinSet(bound: Int = 0): Set[Int] = r match
     case REZero() => Set.empty
     case REOne() => Set(0)
     case RELit(n) => Set(n)
-    case REPlus(r1, r2) => r1.toSet(bound) ++ r2.toSet(bound)
-    case REComp(r1, r2) => for n1 <- r1.toSet(bound); n2 <- r2.toSet(bound) yield n1 + n2
+    case REPlus(r1, r2) => r1.toFinSet(bound) ++ r2.toFinSet(bound)
+    case REComp(r1, r2) => for n1 <- r1.toFinSet(bound); n2 <- r2.toFinSet(bound) yield n1 + n2
     case REStar(r1) =>
       // regarding r1.star as r1 ^ bound
       if bound == 0 then Set(0)
-      else Set.from(for n <- r1.toSet(bound); k <- 0 to bound yield n * k)
+      else Set.from(for n <- r1.toFinSet(bound); k <- 0 to bound yield n * k)

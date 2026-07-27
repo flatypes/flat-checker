@@ -30,6 +30,10 @@ object REOps extends LazyLogging:
       require(0 <= i)
       r.absDrop(i).first
 
+    def absAtRight(i: Int): D =
+      require(0 <= i)
+      r.reverse.absDrop(i).first
+
     /** Abstract operation for `s.take(n)`. */
     def absTake(n: Int): RegEx[T, D] =
       require(n >= 0)
@@ -123,7 +127,7 @@ object REOps extends LazyLogging:
         // case 1: empty
         val result1: RegEx[T, D] = if r.nullable then REOne() else REZero()
         // case 2: not start with x
-        val result2 = sum(for (a, r1) <- r.absSplitAt1 yield RELit(a - x) * r1)
+        val result2 = sum(for (a, r1) <- r.absSplitAt1 yield lit(a - x) * r1)
         // case 3: start with x but the rest not start with xs
         val r1 = r.deriv(x)
         val result3 = if r1.isEmpty then REZero() else r1.filterNotStartWith(xs)
@@ -211,13 +215,13 @@ object REOps extends LazyLogging:
 
     override protected def build(r: InputRE): (OutputRE, List[(OutputRE, InputRE)]) =
       val x = t.head
-      val t1 = t.tail
-      val notX = r.first - x
+      val a = r.first
+      val b = a - x
       // notContain(r) = REOne (if r is nullable)
       //               + x * notContain(r1) (where r1 = r.deriv(x) ∩ {s | s not start with t1})
       //               + (r.first - x) * notContain(r.deriv([^x]))
       (if r.nullable then REOne() else REZero(),
-        List((RegEx(x), r.deriv(x).filterNotStartWith(t1))) ++
-          (if notX.nonEmpty then List((RELit(notX), r.deriv(d => (d - x).nonEmpty))) else Nil))
+        (if a.contains(x) then List((RegEx(x), r.deriv(x).filterNotStartWith(t.tail))) else Nil) ++
+          (if b.nonEmpty then List((RELit(b), r.deriv(d => (d - x).nonEmpty))) else Nil))
 
   given Conversion[String, List[Char]] = _.toList

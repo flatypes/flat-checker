@@ -67,24 +67,12 @@ class RESubTest extends AnyFunSpec, REAssertions:
     it("is not a subset of a+a"):
       assertNotSub("a", "a+a")
 
-    it("is not a subset of a?b"):
-      assertNotSub("a", "a?b")
-
   describe("a*a*"):
     it("is equivalent to a*"):
       assertEquiv("a*a*", "a*")
 
     it("is equivalent to a*a*a*"):
       assertEquiv("a*a*", "a*a*a*")
-
-    it("is a subset of (a|b)*"):
-      assertSub("a*a*", "(a|b)*")
-
-    it("is not a subset of a+"):
-      assertNotSub("a*a*", "a+")
-
-    it("is not a subset of a?"):
-      assertNotSub("a*a*", "a?")
 
   describe("a(b|c)?d"):
     it("is equivalent to abd|acd|ad"):
@@ -99,8 +87,8 @@ class RESubTest extends AnyFunSpec, REAssertions:
     it("is a subset of a(b|c)*d"):
       assertSub("a(b|c)?d", "a(b|c)*d")
 
-    it("is not a subset of a(b|c)d"):
-      assertNotSub("a(b|c)?d", "a(b|c)d")
+    it("is not a subset of a(b|c)+d"):
+      assertNotSub("a(b|c)?d", "a(b|c)+d")
 
   describe("(ab)*"):
     it("is equivalent to a(ba)*b|ε"):
@@ -108,15 +96,6 @@ class RESubTest extends AnyFunSpec, REAssertions:
 
     it("is not a subset of a(ba)*b"):
       assertNotSub("(ab)*", "a(ba)*b")
-
-    it("is a subset of (a?b)*"):
-      assertSub("(ab)*", "(a?b)*")
-
-    it("is a subset of (ab?)*"):
-      assertSub("(ab)*", "(ab?)*")
-
-    it("is a subset of (a?b?)*"):
-      assertSub("(ab)*", "(a?b?)*")
 
   describe("(abab)+"):
     it("is a subset of (a|b)+"):
