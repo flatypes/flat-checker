@@ -8,15 +8,13 @@ import scala.util.parsing.combinator.Parsers
 import scala.util.parsing.input.{CharSequenceReader, OffsetPosition}
 
 object REParser:
-  private type RE = RegEx[Char, CharSet]
-
-  def parse(input: CharSequence): RE = tryParse(input) match
+  def parse(input: CharSequence): StrRE = tryParse(input) match
     case Left(err) => throw IllegalArgumentException(err)
     case Right(r) => r
 
-  def tryParse(input: CharSequence, rules: Map[String, RE] = Map.empty): Either[String, RE] =
+  def tryParse(input: CharSequence, rules: Map[String, StrRE] = Map.empty): Either[String, StrRE] =
     val in = CharSequenceReader(input)
-    val parsers = REParsers(rules)
+    val parsers = StrREParsers(rules)
     parsers.phrase(parsers.expr)(in) match
       case parsers.Success(r, _) => Right(r)
       case parsers.Failure(msg, nxt) => Left(formatError(input, nxt.offset, msg))
@@ -27,20 +25,20 @@ object REParser:
     val indentation = " ".repeat(pos.column - 1)
     "regular expression has invalid syntax:\n" + pos.lineContents + "\n" + indentation + "^\n" + indentation + msg
 
-  private class REParsers(rules: Map[String, RE]) extends Parsers:
+  private class StrREParsers(rules: Map[String, StrRE]) extends Parsers:
     type Elem = Char
 
     // expr -> alt ('|' alt)*
-    def expr: Parser[RE] = rep1sep(alt, '|') ^^ RegEx.sum
+    def expr: Parser[StrRE] = rep1sep(alt, '|') ^^ RegEx.sum
 
     // alt -> term*
-    private def alt: Parser[RE] = term.* ^^ RegEx.product
+    private def alt: Parser[StrRE] = term.* ^^ RegEx.product
 
     // term -> atom quantifier?
-    private def term: Parser[RE] = atom >> parseQuantifier
+    private def term: Parser[StrRE] = atom >> parseQuantifier
 
     // quantifier -> '*' | '+' | '?' | '{' (interval | int) '}'
-    private def parseQuantifier(r: RE): Parser[RE] =
+    private def parseQuantifier(r: StrRE): Parser[StrRE] =
       '*' ^^^ r.star | '+' ^^^ r.plus | '?' ^^^ r.opt | '{' ~> (int ^^ (r ^ _)) <~ '}' | success(r)
 
     // Reserved characters in regex syntax
@@ -48,19 +46,19 @@ object REParser:
 
     // atom -> char (EXCEPT syntaxChars) | '\' (charEscape | classEscape) | '.' | '[' classContents ']' | '(' expr ')'
     //       | '{' rule '}'
-    private def atom: Parser[RE] =
-      acceptMatch("character", { case c if !syntaxChars.contains(c) => RegEx(c) }) |
-        '\\' ~>! (charEscape ^^ RegEx.apply) |
-        '.' ^^^ RegEx.RELit(CharSet.full) | '[' ~>! classContents <~ ']' | '(' ~>! expr <~ ')' |
+    private def atom: Parser[StrRE] =
+      acceptMatch("character", { case c if !syntaxChars.contains(c) => RegEx.symbol(c) }) |
+        '\\' ~>! (charEscape ^^ RegEx.symbol) |
+        '.' ^^^ RegEx.Lit(CharSet.full) | '[' ~>! classContents <~ ']' | '(' ~>! expr <~ ')' |
         '{' ~>! rule <~ '}'
 
     // classContents -> '^'? classContent*
-    private def classContents: Parser[RE] =
+    private def classContents: Parser[StrRE] =
       for
         neg <- '^'.?
         css <- classContent.*
         cs = if css.isEmpty then CharSet.empty else css.reduce(_ | _)
-      yield RegEx.lit(if neg.isDefined then ~cs else cs)
+      yield RegEx.symbolSet(if neg.isDefined then ~cs else cs)
 
     // classContent -> classChar ('-' classChar)? | classEscape
     private def classContent: Parser[CharSet] =
@@ -90,7 +88,7 @@ object REParser:
 //        'w' ^^^ CharSet.asciiWord | 'W' ^^^ !CharSet.asciiWord |
 //        'p' ~>! '{' ~> acceptIf(_ != '}')(_ => "").+ <~ '}' >> { cs => parsePropertyValueExpr(cs.mkString) }
 
-    private def rule: Parser[RE] =
+    private def rule: Parser[StrRE] =
       ident >> { name =>
         rules.get(name) match
           case Some(r) => success(r)

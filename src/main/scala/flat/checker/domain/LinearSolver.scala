@@ -7,9 +7,9 @@ import flat.checker.domain.RegEx.*
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-abstract class LinearSolver[T1, D1, T2, D2] extends LazyLogging:
-  protected type InputRE = RegEx[T1, D1]
-  protected type OutputRE = RegEx[T2, D2]
+abstract class LinearSolver[A, B] extends LazyLogging:
+  protected type InputRE = RegEx[A]
+  protected type OutputRE = RegEx[B]
 
   protected def build(input: InputRE): (OutputRE, List[(OutputRE, InputRE)])
 
@@ -32,7 +32,7 @@ abstract class LinearSolver[T1, D1, T2, D2] extends LazyLogging:
             inputs += x
             inputs.length
           case k => k + 1
-        eqs(i)(j) = eqs(i).getOrElse(j, REZero()) + r
+        eqs(i)(j) = eqs(i).getOrElse(j, Zero()) + r
       i += 1
 
     logger.debug("equations:\n{}\nwhere\n{}",
@@ -58,7 +58,7 @@ abstract class LinearSolver[T1, D1, T2, D2] extends LazyLogging:
           //     = sum_{j != i} eqs(k)(j) * X_j + eqs(k)(i) * (sum_{j < i} eqs(i)(j) * X_j)
           //     = sum_{j != i} (eqs(k)(j) + eqs(k)(i) * eqs(i)(j)) * X_j
           for (j, r) <- eqs(i) do
-            eqs(k)(j) = eqs(k).getOrElse(j, REZero()) + eqs(k)(i) * r
+            eqs(k)(j) = eqs(k).getOrElse(j, Zero()) + eqs(k)(i) * r
           eqs(k).remove(i)
 
       i -= 1

@@ -7,10 +7,12 @@ import flat.checker.domain.RegEx.*
 import scala.collection.mutable
 
 object RESub extends LazyLogging:
+  private val set = summon[SymbolSet[CharSet]]
+
   /** Checks if `r1` ⊆ `r2`. */
-  def check[T, D](r1: RegEx[T, D], r2: RegEx[T, D])(using domain: Domain[T, D]): Boolean =
-    val queue = mutable.Queue.empty[(RegEx[T, D], RegEx[T, D])]
-    val visited = mutable.Set.empty[(RegEx[T, D], RegEx[T, D])]
+  def check(r1: StrRE, r2: StrRE): Boolean =
+    val queue = mutable.Queue.empty[(StrRE, StrRE)]
+    val visited = mutable.Set.empty[(StrRE, StrRE)]
 
     queue.enqueue((r1, r2))
     while queue.nonEmpty do
@@ -33,7 +35,7 @@ object RESub extends LazyLogging:
         logger.debug("prove by cycle: {} ⊆ {}", r1.pp, r2.pp)
       else
         for a <- next(r1) <| next(r2) do
-          val c = a.representative
+          val c: set.Symbol = a.representative
           queue.enqueue((r1.deriv(c), r2.deriv(c)))
         visited.add((r1, r2))
 
@@ -43,19 +45,19 @@ object RESub extends LazyLogging:
    * If the alphabet is empty, then the partition is empty.
    * Otherwise, for any equivalence class C in partition, the derivative of any c ∈ C is the same;
    * other characters form a special equivalence class where their derivatives are ∅. */
-  private type Partition[D] = List[D]
+  private type Partition = List[CharSet]
 
   /** Computes the equivalence class partitioning on the first set of `r`. */
-  private def next[T, D](r: RegEx[T, D])(using Lattice[D]): Partition[D] = r match
-    case REZero() | REOne() => Nil
-    case RELit(a) => List(a)
-    case REPlus(r1, r2) => next(r1) | next(r2)
-    case REComp(r1, r2) => if r1.nullable then next(r1) | next(r2) else next(r1)
-    case REStar(r1) => next(r1)
+  private def next(r: StrRE): Partition = r match
+    case Zero() | One() => Nil
+    case Lit(a) => List(a)
+    case Plus(r1, r2) => next(r1) | next(r2)
+    case Comp(r1, r2) => if r1.nullable then next(r1) | next(r2) else next(r1)
+    case Star(r1) => next(r1)
 
-  extension [D](p1: Partition[D])(using Lattice[D])
+  extension (p1: Partition)
     /** Joins two partitions into one. */
-    private def |(p2: Partition[D]): Partition[D] =
+    private def |(p2: Partition): Partition =
       if p1.isEmpty then p2
       else if p2.isEmpty then p1
       else
@@ -66,7 +68,7 @@ object RESub extends LazyLogging:
           (for y <- p2; z = y & comp1; if z.nonEmpty yield z)
 
     /** Left-biased join. Only include characters of `p1`. */
-    private def <|(p2: Partition[D]): Partition[D] =
+    private def <|(p2: Partition): Partition =
       require(p1.nonEmpty && p2.nonEmpty)
       val comp2 = ~p2.reduce(_ | _)
       (for x <- p1; y <- p2; z = x & y; if z.nonEmpty yield z) ++

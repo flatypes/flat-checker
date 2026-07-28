@@ -38,6 +38,9 @@ final case class CharSet(pos: Boolean, chars: Set[Char]):
   def -(c: Char): CharSet =
     if pos then new CharSet(true, chars - c) else new CharSet(false, chars + c)
 
+  def representative: Char =
+    if pos then chars.min else (chars.min - 1).toChar
+
   def toFinSet(alphabet: Set[Char]): Set[Char] =
     if pos then chars else alphabet -- chars
 
@@ -58,21 +61,15 @@ object CharSet:
 
   def from(it: Iterable[Char]): CharSet = new CharSet(true, Set.from(it))
 
-given Domain[Char, CharSet] with
-  def top: CharSet = CharSet.full
+given SymbolSet[CharSet] with
+  def empty: CharSet = CharSet.empty
 
-  def bot: CharSet = CharSet.empty
+  type Symbol = Char
 
-  def mkSingleton(c: Char): CharSet = new CharSet(true, Set(c))
+  def singleton(c: Char): CharSet = CharSet(c)
 
   extension (a: CharSet)
     def isEmpty: Boolean = a.isEmpty
-    def subsetOf(b: CharSet): Boolean = a.subsetOf(b)
-    def |(b: CharSet): CharSet = a | b
-    def &(b: CharSet): CharSet = a & b
-    def unary_~ : CharSet = ~a
-
     def contains(c: Char): Boolean = a.contains(c)
-    def representative: Char =
-      if a.pos then a.chars.min else (a.chars.min - 1).toChar
+    def |(b: CharSet): CharSet = a | b
     def -(c: Char): CharSet = a - c
