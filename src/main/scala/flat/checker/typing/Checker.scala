@@ -51,7 +51,7 @@ class Checker(using reporter: Reporter):
     // load parameters and check preconditions
     for (p, d) <- node.params zip info.params do
       val index = vs.add(d.name, d.typ)
-      ctx = ctx.define(d.name, VarInfo(d.typ, index)(p.ident.range))
+      ctx = ctx.define(d.name, VarInfo(d.typ, index, isVal = true)(p.ident.range))
     val requires = node.requires.map(typer.check(_, BoolSort)(using ctx, vs))
     // load return variable and check postconditions
     val index = vs.add("_", info.returnType)
@@ -105,7 +105,7 @@ class Checker(using reporter: Reporter):
 
       case untpd.Assign(id, rhs) =>
         ctx.lookup(id.name) match
-          case Some(VarInfo(typ, index)) =>
+          case Some(VarInfo(typ, index, false)) =>
             rhs match
               case e: untpd.Expr =>
                 val value = typer.check(e, typ.sort)(using ctx)
@@ -181,7 +181,7 @@ class Checker(using reporter: Reporter):
   private def narrow(cond: Expr, ctx: LocalCtx): LocalCtx = cond match
     case Ne(Var(x), Const(null)) =>
       ctx.lookup(x) match
-        case Some(VarInfo(NormType(sort, reft), _)) =>
+        case Some(VarInfo(NormType(sort, reft), _, _)) =>
           ctx.updateType(x, NormType(sortMinusNull(sort), reft))
         case _ => ctx
     case _ => ctx

@@ -123,6 +123,9 @@ object tpd:
       case List(e1, e2) => Or(e1, e2)(range)
       case _ => throw IllegalArgumentException("Or must have exactly 2 subtrees")
 
+  def mkOr(exprs: List[Expr]): Expr =
+    if exprs.isEmpty then Const(false)() else exprs.reduce(Or(_, _)())
+
   final case class Not(cond: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Not = subtrees match
       case List(e) => Not(e)(range)

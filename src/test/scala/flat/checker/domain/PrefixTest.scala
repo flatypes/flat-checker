@@ -39,3 +39,12 @@ class PrefixTest extends AnyFunSpec, REAssertions:
 
     it("may end with ac"):
       assertResult(BoolSet.Full)(r.absEndsWith("ac"))
+
+  describe("([a-zA-Z])*"):
+    val r = re("([a-zA-Z])*")
+
+    it("filter starts with 'begin' and ends with 'end'"):
+      assertCharRE("begin([a-zA-Z])*end")(r.filterStartsWith("begin").filterEndsWith("end"))
+
+    it("filter starts with 'aA' and ends with 'AZ'"):
+      assertCharRE("aA([a-zA-Z])*AZ|aAZ")(r.filterStartsWith("aA").filterEndsWith("AZ"))

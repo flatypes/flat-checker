@@ -65,6 +65,7 @@ LT: '<';
 GE: '>=';
 GT: '>';
 IN: 'in';
+IN_LANG: '∈';
 SHL: '<<';
 SHR: '>>';
 BIT_AND: '&';
@@ -84,15 +85,7 @@ STRING_LITERAL: '"' ( ~('"' | '\\' | '\r' | '\n') | '\\' CharEscape )* '"';
 REGEX_LITERAL: 'r"' ( ~('"' | '\\' | '\r' | '\n') | '\\' CharEscape )* '"';
 
 fragment CharEscape
-  : '\\' | '\'' | '"'
-  | [abfnrtv]
-  | OctDigit OctDigit OctDigit
-  | UnicodeEscape
-  ;
-fragment OctDigit: [0-7];
-fragment UnicodeEscape
-  : 'x' HexDigit HexDigit
-  | 'u' HexDigit HexDigit HexDigit HexDigit
+  : ~[\r\n]
   ;
 
 // Identifiers

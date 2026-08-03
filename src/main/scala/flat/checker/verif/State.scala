@@ -2,7 +2,7 @@ package flat.checker.verif
 
 import flat.checker.flan.*
 import flat.checker.flan.tpd.{Expr, NormType, VarDecl}
-import flat.checker.verif.Simplifier.simplify
+import flat.checker.verif.Simplifier.{simplify, toCNF}
 
 final case class MethodInfo(params: List[VarDecl], returns: VarDecl, requires: List[Expr], ensures: List[Expr],
                             locals: List[VarDecl] = Nil):
@@ -16,7 +16,8 @@ final case class VarInfo(typ: Sort, value: Expr)
 
 final case class PrfCtx(vars: Map[String, Sort] = Map.empty,
                         premises: List[Expr] = Nil):
-  def add(value: Expr): PrfCtx = copy(premises = premises :+ value.simplify(using vars))
+  def add(value: Expr): PrfCtx =
+    copy(premises = premises ++ value.simplify(using vars).toCNF)
 
 final case class State(methods: Map[String, MethodInfo] = Map.empty,
                        currentMethod: String = "",

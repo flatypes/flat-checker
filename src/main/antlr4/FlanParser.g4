@@ -92,6 +92,7 @@ expr
   | expr op='^' expr                      #infixExpr
   | expr op='|' expr                      #infixExpr
   | expr op=relOp expr                    #relExpr
+  | expr '∈' lang                         #inLang
   | <assoc=right> expr op='&&' expr       #infixExpr
   | <assoc=right> expr op='||' expr       #infixExpr
   | <assoc=right> expr op='==>' expr      #infixExpr

@@ -21,18 +21,18 @@ object RESub extends LazyLogging:
 
       val (r1, r2) = queue.dequeue()
       if r1.nullable && !r2.nullable then
-        logger.debug("disprove by null: {} ⊈ {}", r1.pp, r2.pp)
+        logger.trace("disprove by null: {} ⊈ {}", r1.pp, r2.pp)
         return false
 
       val first1 = r1.first
       if !first1.subsetOf(r2.first) then
-        logger.debug("disprove by first: {} ⊈ {}", r1.pp, r2.pp)
+        logger.trace("disprove by first: {} ⊈ {}", r1.pp, r2.pp)
         return false
 
       if first1.isEmpty || r1 == r2 then
-        logger.debug("prove by trivial: {} ⊆ {}", r1.pp, r2.pp)
+        logger.trace("prove by trivial: {} ⊆ {}", r1.pp, r2.pp)
       else if visited.contains((r1, r2)) then
-        logger.debug("prove by cycle: {} ⊆ {}", r1.pp, r2.pp)
+        logger.trace("prove by cycle: {} ⊆ {}", r1.pp, r2.pp)
       else
         for a <- next(r1) <| next(r2) do
           val c: set.Symbol = a.representative

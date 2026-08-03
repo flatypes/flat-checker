@@ -49,7 +49,7 @@ final case class CharSet(pos: Boolean, chars: Set[Char]):
   override def toString: String =
     val sign = if pos then "" else "^"
     val ranges = chars.compress.map:
-      case c: Char => c.toString
+      case c: Char => if 32 <= c && c <= 126 then c.toString else f"\\u${c.toInt}%04x"
       case (c1, c2) => s"$c1-$c2"
     val content = ranges.mkString
     s"[$sign$content]"

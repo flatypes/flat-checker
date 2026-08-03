@@ -26,7 +26,7 @@ object Prettifier:
 
     private def ppCharSet(a: CharSet): String =
       if a.isEmpty then "∅"
-      else if a.isFull then "."
+      else if a.isFull then "Σ"
       else if a.isSingleton then a.chars.head.toString
       else a.toString
 

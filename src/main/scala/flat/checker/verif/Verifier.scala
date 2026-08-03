@@ -48,6 +48,9 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
     case ExprStmt(e) =>
       check(e, state)
       cont(state)
+    case If(e, List(Assert(eb@Const(false))), Nil) =>
+      assert(Not(e), state, AssertNotProvedError(eb.range))
+      cont(state)
     case If(e, b1, b2) =>
       branch(e, state,
         execBody(b1, _, cont),
@@ -176,13 +179,19 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
     case Apply(MethodRef(f), es) =>
       val m = state.methods(f)
       val (vs, st1) = eval(es, state)
-      var (y, st) = st1.fresh(f, m.returns.typ.sort)
-      val v: Expr = Var(y)
-      for e <- m.returns.typ.reft do
-        st = st.add(e.subst("_", v))
-      for e <- m.ensures do
-        st = st.add(e.subst("_" :: m.paramNames, v :: vs))
-      (v, st)
+      var st = st1
+      m.ensures match
+        case List(Eq(Var("_"), e)) if e.collect { case Var("_") => () }.isEmpty =>
+          (e.subst(m.paramNames, vs), st)
+        case _ =>
+          val (y, st1) = st.fresh(f, m.returns.typ.sort)
+          st = st1
+          val v: Expr = Var(y)
+          for e <- m.returns.typ.reft do
+            st = st.add(e.subst("_", v))
+          for e <- m.ensures do
+            st = st.add(e.subst("_" :: m.paramNames, v :: vs))
+          (v, st)
     case _ =>
       val (vs, st) = eval(expr.subtrees, state)
       (expr.rebuild(vs), st)

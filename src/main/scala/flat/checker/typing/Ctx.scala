@@ -44,7 +44,7 @@ final case class GlobalCtx(types: Map[String, TypeInfo] = Map.empty,
     case m: MethodInfo => copy(methods = methods + (name -> m))
     case _ => throw IllegalArgumentException(s"Cannot define ${info.getClass.getSimpleName}")
 
-final case class VarInfo(normType: NormType, index: Int)(val range: Range) extends Info
+final case class VarInfo(normType: NormType, index: Int, isVal: Boolean = false)(val range: Range) extends Info
 
 final case class LocalCtx(global: GlobalCtx,
                           currentMethod: String,

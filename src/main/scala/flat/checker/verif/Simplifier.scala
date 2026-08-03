@@ -5,6 +5,7 @@ import flat.checker.flan.*
 import flat.checker.flan.SortOps.sort
 import flat.checker.flan.Subst.subst
 import flat.checker.flan.tpd.*
+
 object Simplifier:
   extension (expr: Expr)
     private def isConst: Boolean = expr match
@@ -302,6 +303,10 @@ object Simplifier:
           case e => StringInLang(e, r)
 
       case _ => throw NotImplementedError(s"Simplifier.simplify(${expr.getClass.getSimpleName})")
+
+    def toCNF: List[Expr] = expr match
+      case And(e1, e2) => e1.toCNF ++ e2.toCNF
+      case _ => List(expr)
 
   extension (s: String)
     private def countSlice(t: String): Int = s.sliding(t.length).count(_ == t)

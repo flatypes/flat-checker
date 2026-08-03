@@ -1,65 +1,72 @@
-method parseHost(input: String): String?
+lang Unreserved = r"[A-Za-z0-9\-._~]"
+lang PCTEncoded = r"%[0-9A-Fa-f][0-9A-Fa-f]"
+lang SubDelims = r"[!$&'()*+,;=]"
+lang Host = Unreserved* // (Unreserved | PCTEncoded | SubDelims)*
+lang Segment = (Unreserved | PCTEncoded | SubDelims | "@")*
+lang URL = "https://" Host ("/" Segment)+
+lang HostLine = "" | "www" Host ".it\n"
+
+method parseHost(url: URL): HostLine
 {
-  input = input.trim();
+  var input = url.trim();
   if (!input.startsWith("https://")) {
-    return null;
+    assert false;
+  }
+
+  input = input.substring(8, input.length);
+  if (input.charAt(0) == '[') {
+    assert false;
+  }
+
+  var index = input.indexOf(":");
+  if (index != -1) {
+    assert false;
+  }
+
+  index = input.indexOf("/");
+  var hostName = input.substring(0, index).toLower();
+  if (isValidDomain(hostName)) {
+    return hostName + "\n";
   } else {
-    input = input.substring(8, input.length);
-    if (input[0] == '[') {
-      return null;
-    } else {
-      var index = input.indexOf(":");
-      if (index != -1) {
-        return null;
-      } else {
-        index = input.indexOf("/");
-        var hostName = input.substring(0, index).toLowerCase();
-        if (isValidDomain(hostName)) {
-          return hostName + "\n";
-        } else {
-          return null;
-        }
-      }
-    }
+    return "";
   }
 }
 
 method isValidDomain(input: String): Bool
+  ensures _ == (input.startsWith("www.") && input.endsWith(".it"))
 {
   if (!input.startsWith("www.")) {
     return false;
-  } else {
-    if (input.endsWith(".it")) {
-      return true;
-    }
+  } else if (input.endsWith(".it")) {
+    return true;
   }
 
   return false;
 }
 
-method parseFirst3(s: String): String?
+lang URLLines = (URL ("\n" URL)*)?
+lang HostLines = ("www" Host ".it\n")*
+
+method parse(input: URLLines): HostLines
 {
-  var i = 0;
   var domains = "";
-  while (i < 1)
+  var s = input;
+  while (s.length > 0)
+    invariant s ∈ URLLines
+    invariant domains ∈ HostLines
   {
-    if (s.length == 0) {
-      return null;
+    var index = s.indexOf("\n");
+    var sub: String;
+    if (index == -1) {
+      sub = s.substring(0, s.length);
+      s = "";
     } else {
-      var index = s.indexOf("\n");
-      var sub: String;
-      if (index == -1) {
-        sub = s.substring(0, s.length);
-        s = "";
-      } else {
-        sub = s.substring(0, index);
-        s = s.substring(index + 1, s.length);
-      }
-      result = parseHost(sub);
-      if (result != null) {
-        domains += result;
-        i += 1;
-      }
+      sub = s.substring(0, index);
+      s = s.substring(index + 1, s.length);
+    }
+    var result = parseHost(sub);
+    if (result != "") {
+      domains = domains + result;
     }
   }
 

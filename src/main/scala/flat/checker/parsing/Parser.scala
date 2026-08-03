@@ -239,6 +239,11 @@ class Parser(using reporter: Reporter):
       else
         mkApply(left, Ident(node.relOp.getText)(getRange(node.relOp)), right)(getRange(node))
 
+    override def visitInLang(node: FlanParser.InLangContext): Expr =
+      val str = node.expr.accept(this)
+      val lang = node.lang.accept(LangVisitor)
+      InLang(str, lang)(getRange(node))
+
     override def visitIteExpr(node: FlanParser.IteExprContext): Expr =
       val cond = node.expr(0).accept(this)
       val thenValue = node.expr(1).accept(this)

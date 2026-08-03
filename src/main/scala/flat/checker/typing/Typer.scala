@@ -96,7 +96,7 @@ class Typer(using reporter: Reporter):
 
     case untpd.TermName(x) =>
       ctx.lookup(x) match
-        case Some(VarInfo(typ, index)) => (typ.sort, Var(vs.getName(index))(node.range))
+        case Some(VarInfo(typ, index, _)) => (typ.sort, Var(vs.getName(index))(node.range))
         case Some(ConstInfo(sort, value)) => (sort, value)
         case Some(m: MethodInfo) => (m.funSort, MethodRef(x)(node.range))
         case Some(_) =>
@@ -156,6 +156,11 @@ class Typer(using reporter: Reporter):
       else
         reporter.reportTypesUnrelated(node.range, leftType, rightType)
         (BoolSort, Const(true)(node.range))
+
+    case untpd.InLang(e, l) =>
+      val str = check(e, stringSort)
+      val re = translate(l)
+      (BoolSort, StringInLang(str, re)(node.range))
 
     case untpd.Ite(e, e1, e2) =>
       val cond = check(e, BoolSort)

@@ -1,8 +1,10 @@
 package flat.checker.domain
 
+import com.typesafe.scalalogging.LazyLogging
+
 /** A generic regular expression.
  * Names mirror the definition of a Kleene algebra. */
-enum RegEx[A]:
+enum RegEx[A] extends LazyLogging:
   case Zero()
   case One()
   case Lit(symbolSet: A)
@@ -76,8 +78,7 @@ enum RegEx[A]:
     case Star(r1) => r1.first
 
   def reverse: RegEx[A] = this match
-    case Zero() | One() => this
-    case Lit(d) => this
+    case Zero() | One() | Lit(_) => this
     case Plus(r1, r2) => r1.reverse + r2.reverse
     case Comp(r1, r2) => r2.reverse * r1.reverse
     case Star(r1) => r1.reverse.star
@@ -86,7 +87,7 @@ enum RegEx[A]:
     case Zero() | One() => Zero()
     case Lit(d) => if p(d) then One() else Zero()
     case Plus(r1, r2) => r1.deriv(p) + r2.deriv(p)
-    case Comp(r1, r2) => r1.deriv(p) * r2 + (if r1.nullable then r2.deriv(p) else Zero())
+    case Comp(r1, r2) => if r1.nullable then r1.deriv(p) * r2 + r2.deriv(p) else r1.deriv(p) * r2
     case Star(r1) => r1.deriv(p) * this
 
   def deriv(using set: SymbolSet[A])(x: set.Symbol): RegEx[A] = deriv(_.contains(x))
@@ -97,7 +98,7 @@ enum RegEx[A]:
       val r1 = deriv(x)
       if r1.isEmpty then Zero() else r1.deriv(xs)
 
-  def contains(using set: SymbolSet[A])(s: List[set.Symbol]): Boolean = deriv(s) == One()
+  def contains(using set: SymbolSet[A])(s: List[set.Symbol]): Boolean = deriv(s).nullable
 
 object RegEx:
   def symbol[A](using set: SymbolSet[A])(x: set.Symbol): RegEx[A] = Lit(set.singleton(x))

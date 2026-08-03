@@ -1,21 +1,21 @@
 package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.domain.*
 import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.RESub
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
-import flat.checker.verif.Type.TStr
+import flat.checker.verif.Type.*
+
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class Prover extends LazyLogging:
   def prove(goal: Goal): Boolean =
     goal.conclusion match
-      // trivial
-      case Const(true) => true
       // refinement type checking
       case StringInLang(e, r) =>
-        val goal1 = narrow(goal)
-        val inferer = Inferer(goal1)
+        val inferer = Inferer(goal)
         inferer.infer(e) match
           case TStr(r1) =>
             if RESub.check(r1, r) then
@@ -30,16 +30,74 @@ class Prover extends LazyLogging:
         if solver.prove(goal.conclusion) then
           true
         else
-          val goal1 = narrow(goal)
-          val lemmas = LemmaSketches.all.flatMap(_.inst(goal1))
+          val lemmas = synthesizeLemmas(goal)
           if lemmas.nonEmpty then
             logger.debug(s"Lemmas: ${lemmas.map(_.show).mkString(", ")}")
             lemmas.foreach(solver.add)
-            solver.prove(goal1.conclusion)
+            solver.prove(goal.conclusion)
           else
             false
 
+  private def synthesizeLemmas(goal: Goal): List[Expr] =
+    val inferer = Inferer(goal)
+    val lemmas = ListBuffer.empty[Expr]
+    goal.conclusion.collect:
+      case e@SeqLength(_) =>
+        inferer.infer(e) match
+          case TNat(set) =>
+            lemmas += inNatSet(e, set)
+          case _ => ()
+      case e@SeqSelect(_, Const(i: Int)) =>
+        inferer.infer(e) match
+          case TChar(set) =>
+            lemmas += inCharSet(e, set)
+          case _ => ()
+      case e@SeqStartsWith(_, _) =>
+        inferer.infer(e) match
+          case TBool(set) =>
+            lemmas ++= inBoolSet(e, set)
+          case _ => ()
+      case e@SeqEndsWith(_, _) =>
+        inferer.infer(e) match
+          case TBool(set) =>
+            lemmas ++= inBoolSet(e, set)
+          case _ => ()
+      case e@SeqContains(_, _) =>
+        inferer.infer(e) match
+          case TBool(set) =>
+            lemmas ++= inBoolSet(e, set)
+          case _ => ()
+      case e@SeqIndexOf(_, Const(_: String), Const(0)) =>
+        inferer.infer(e) match
+          case TIndex(set) =>
+            lemmas += inIndexSet(e, set)
+          case _ => ()
 
-  def narrow(goal: Goal): Goal =
-    val narrower = Narrower(goal)
-    narrower.narrow
+    lemmas.toList
+
+  private def inNatSet(elem: Expr, set: CountingRE): Expr =
+    if set.isFinite then
+      mkOr(for n <- set.toFinSet.toList.sorted yield Eq(elem, Const(n)))
+    else
+      Le(set.min, elem)
+
+  private def inCharSet(elem: Expr, set: CharSet): Expr =
+    if set.pos then mkOr(for c <- set.chars.toList.sorted yield Eq(elem, Const(c)))
+    else mkAnd(for c <- set.chars.toList.sorted yield Ne(elem, Const(c)))
+
+  private def inBoolSet(elem: Expr, set: BoolSet): List[Expr] = set match
+    case BoolSet.True => List(elem)
+    case BoolSet.False => List(Not(elem))
+    case _ => Nil
+
+  private def inIndexSet(elem: Expr, set: IndexSet): Expr =
+    val cases = ListBuffer.empty[Expr]
+    if set.neg.nonEmpty then
+      for i <- set.neg.toList.sorted do
+        cases += Eq(elem, Const(i))
+    if set.pos.isFinite then
+      for n <- set.pos.toFinSet.toList.sorted do
+        cases += Eq(elem, Const(n))
+    else
+      cases += Le(set.pos.min, elem)
+    mkOr(cases.toList)

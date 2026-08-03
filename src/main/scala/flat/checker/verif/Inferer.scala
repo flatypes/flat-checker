@@ -2,6 +2,7 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.Index.*
+import flat.checker.domain.Prettifier.pp
 import flat.checker.domain.REOps.*
 import flat.checker.domain.StrREOps.*
 import flat.checker.domain.{*, given}
@@ -22,7 +23,7 @@ class Inferer(goal: Goal) extends LazyLogging:
   def infer(expr: Expr): Type = expr match
     case Const(s: String) => TStr(RegEx.word(s.toList))
     case Var(x) =>
-      goal.premises.reverseIterator.collectFirst { case StringInLang(Var(`x`), r) => TStr(r) }
+      goal.premises.reverseIterator.collectFirst { case StringInLang(Var(`x`), r) => TStr(narrow(expr, r)) }
         .getOrElse:
           logger.warn(s"Cannot infer ${expr.show}")
           TStr(RegEx.Lit(CharSet.full))
@@ -30,7 +31,7 @@ class Inferer(goal: Goal) extends LazyLogging:
     // Seq Operations
     case SeqConcat(e1, e2) =>
       (infer(e1), infer(e2)) match
-        case (TStr(r1), TStr(r2)) => TStr(r1 * r2)
+        case (TStr(r1), TStr(r2)) => TStr(narrow(expr, r1 * r2))
         case (TStrSeq(r1), TStrSeq(r2)) => TStrSeq(r1 * r2)
         case _ => throw new Exception("Expected two sequence types for SeqConcat")
     case SeqLength(e) =>
@@ -45,7 +46,7 @@ class Inferer(goal: Goal) extends LazyLogging:
         case _ => throw new Exception("Expected a sequence type for SeqAt")
     case SeqSlice(e, ei, ej) =>
       (infer(e), inferIndex(ei, e), inferIndex(ej, e)) match
-        case (TStr(r), i, j) => TStr(r.absSlice(i, j))
+        case (TStr(r), i, j) => TStr(narrow(expr, r.absSlice(i, j)))
         case _ => throw new Exception(s"Cannot infer ${expr.show}")
     case SeqStartsWith(e, et) =>
       (infer(e), et) match
@@ -79,12 +80,16 @@ class Inferer(goal: Goal) extends LazyLogging:
     // String-specific
     case StringToLower(e) =>
       infer(e) match
-        case TStr(r) => TStr(r.absMap(_.map(_.toLower)))
+        case TStr(r) => TStr(narrow(expr, r.absMap(_.map(_.toLower))))
         case _ => throw new Exception("Expected a string type for StringToLower")
     case StringToUpper(e) =>
       infer(e) match
-        case TStr(r) => TStr(r.absMap(_.map(_.toUpper)))
+        case TStr(r) => TStr(narrow(expr, r.absMap(_.map(_.toUpper))))
         case _ => throw new Exception("Expected a string type for StringToUpper")
+    case StringTrim(e) =>
+      infer(e) match
+        case TStr(r) => TStr(narrow(expr, r.absTrim))
+        case _ => throw new Exception("Expected a string type for StringTrim")
 
     case other =>
       throw new Exception(s"Type inference not implemented for expression: $other")
@@ -94,4 +99,37 @@ class Inferer(goal: Goal) extends LazyLogging:
     case SeqLength(`seq`) => Right(0)
     case Add(SeqLength(`seq`), Const(i: Int)) if 0 <= i => Right(i)
     case Sub(SeqLength(`seq`), Const(i: Int)) if 0 <= i => Right(i)
+    case SeqIndexOf(`seq`, Const(s: String), Const(0)) => First(s.toList)
+    case Add(SeqIndexOf(`seq`, Const(s: String), Const(0)), Const(i: Int)) => First(s.toList, i)
     case _ => throw new Exception(s"Cannot infer index ${idx.show} for ${seq.show}")
+
+  private def narrow(e: Expr, r: StrRE): StrRE =
+    var r1 = r
+    for
+      premise <- goal.premises
+      r2 <- narrowBy(e, r1, premise)
+    do
+      logger.debug("Narrow {}: from {} to {} by {}", e.show, r1.pp, r2.pp, premise.show)
+      r1 = r2
+    r1
+
+  private def narrowBy(e: Expr, r: StrRE, premise: Expr): Option[StrRE] = premise match
+    // prefix, suffix
+    case SeqStartsWith(`e`, Const(t: String)) => Some(r.filterStartsWith(t.toList))
+    case Not(SeqStartsWith(`e`, Const(t: String))) => Some(r.filterNotStartWith(t.toList))
+    case SeqEndsWith(`e`, Const(t: String)) => Some(r.filterEndsWith(t.toList))
+    case Not(SeqEndsWith(`e`, Const(t: String))) => Some(r.filterNotEndWith(t.toList))
+    // equality
+    case Eq(`e`, Const(t: String)) => Some(r.filterEq(t.toList))
+    case Ne(`e`, Const(t: String)) => Some(r.filterNe(t.toList))
+    // infix
+    case SeqContains(`e`, Const(t: String)) => Some(r.filterContains(t.toList))
+    case Ne(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(-1)) => Some(r.filterContains(t.toList))
+    case Le(Const(0), SeqIndexOf(`e`, Const(t: String), Const(0))) => Some(r.filterContains(t.toList))
+    case Not(SeqContains(`e`, Const(t: String))) => Some(r.filterNotContain(t.toList))
+    case Eq(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(-1)) => Some(r.filterNotContain(t.toList))
+    case Lt(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(0)) => Some(r.filterNotContain(t.toList))
+    // emptiness
+    case Lt(Const(0), SeqLength(`e`)) => Some(r.filterNonEmpty)
+    case Ne(Const(0), SeqLength(`e`)) => Some(r.filterNonEmpty)
+    case _ => None

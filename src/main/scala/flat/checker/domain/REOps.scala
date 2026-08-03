@@ -104,8 +104,8 @@ object REOps extends LazyLogging:
       case (Left(i), Right(j)) => r.absDrop(i).absDropRight(j)
       case (Left(i), Left(j)) => r.absDrop(i).absTake(j - i)
       case (Right(i), Right(j)) => r.absDropRight(i).absTakeRight(j - i)
-      case (First(w), Right(0)) => r.dropIndexOf(w.asInstanceOf[List[set.Symbol]])
-      case (Left(0), First(w)) => r.takeIndexOf(w.asInstanceOf[List[set.Symbol]])
+      case (First(w, k), Right(0)) => r.dropIndexOf(w.asInstanceOf[List[set.Symbol]]).absDrop(k)
+      case (Left(0), First(w, 0)) => r.takeIndexOf(w.asInstanceOf[List[set.Symbol]])
       case _ =>
         logger.warn(s"Cannot slice ${r.pp} with indices $start and $end")
         Zero()
@@ -162,12 +162,12 @@ object REOps extends LazyLogging:
     def filterNe(t: List[set.Symbol]): RegEx[A] = word(t) * r.deriv(t).filterNonEmpty + r.filterNotStartWith(t)
 
     /** Computes {s ∈ r | s ≠ []}. */
-    private def filterNonEmpty: RegEx[A] = r match
+    def filterNonEmpty: RegEx[A] = r match
       case Zero() | One() => Zero()
       case Lit(_) => r
       case Plus(r1, r2) => r1.filterNonEmpty + r2.filterNonEmpty
       case Comp(r1, r2) => r1.filterNonEmpty * r2 + (if r1.nullable then r2.filterNonEmpty else Zero())
-      case Star(r1) => r1.filterNonEmpty + r
+      case Star(r1) => r1.filterNonEmpty * r
 
     private def findAny(x: set.Symbol): List[(RegEx[A], RegEx[A])] = r match
       case Zero() | One() => Nil
