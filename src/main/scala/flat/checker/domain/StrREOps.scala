@@ -1,9 +1,9 @@
 package flat.checker.domain
 
-import flat.checker.domain.REOps
-
 object StrREOps:
   extension (r: StrRE)
+    def filterStartWith(s: String): StrRE = REOps.filterStartsWith(r)(s.toList)
+    
     def absStartsWithStr(s: String): BoolSet = REOps.absStartsWith(r)(s.toList)
 
     def absEndsWithStr(s: String): BoolSet = REOps.absEndsWith(r)(s.toList)

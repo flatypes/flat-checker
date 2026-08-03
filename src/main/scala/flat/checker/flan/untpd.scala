@@ -87,7 +87,7 @@ object untpd:
 
   final case class LangName(name: String)(val range: Range) extends Lang
 
-  final case class RegEx(regEx: flat.regex.RegEx) extends Lang
+  final case class RegEx(regEx: flat.checker.domain.StrRE) extends Lang
 
   final case class LangStar(lang: Lang)(val range: Range) extends Lang
 

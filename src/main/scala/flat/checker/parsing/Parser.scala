@@ -1,10 +1,10 @@
 package flat.checker.parsing
 
 import flat.antlr.{FlanLexer, FlanParser, FlanParserBaseVisitor}
+import flat.checker.domain.REParser
 import flat.checker.flan.untpd.*
 import flat.checker.flan.{Literal, parseInt, unescape}
 import flat.checker.{Reporter, Source}
-import flat.regex.REParser
 import org.antlr.v4.runtime.*
 import org.antlr.v4.runtime.tree.{RuleNode, TerminalNode}
 import org.eclipse.lsp4j
@@ -312,7 +312,7 @@ class Parser(using reporter: Reporter):
       val regEx = REParser.tryParse(pattern, Map.empty) match
         case Left(msg) =>
           reporter.reportSyntaxError(msg, getRange(node.REGEX_LITERAL))
-          flat.regex.RegEx.RENone
+          flat.checker.domain.RegEx.Zero()
         case Right(r) => r
       RegEx(regEx)
 

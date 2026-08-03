@@ -1,9 +1,11 @@
 package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.domain.Prettifier.pp
+import flat.checker.domain.RESub
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
-import flat.regex.{RESub, RegEx}
+import flat.checker.verif.Type.TStr
 
 class Prover extends LazyLogging:
   def prove(goal: Goal): Boolean =
@@ -15,12 +17,13 @@ class Prover extends LazyLogging:
         val goal1 = narrow(goal)
         val inferer = Inferer(goal1)
         inferer.infer(e) match
-          case r1: RegEx =>
+          case TStr(r1) =>
             if RESub.check(r1, r) then
               true
             else
-              logger.debug("{} inferred: {}", e.show, r1.show)
+              logger.debug("{} inferred: {}", e.show, r1.pp)
               false
+          case _ => ???
       case _ =>
         val solver = SMTSolver(using goal.sorts)
         goal.premises.foreach(solver.add)

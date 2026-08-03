@@ -1,114 +1,97 @@
 package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.domain.Index.*
+import flat.checker.domain.REOps.*
+import flat.checker.domain.StrREOps.*
+import flat.checker.domain.{*, given}
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
-import flat.regex.*
-import flat.regex.REOps.*
+
+enum Type:
+  case TBool(dom: BoolSet)
+  case TNat(dom: CountingRE)
+  case TIndex(dom: IndexSet)
+  case TChar(dom: CharSet)
+  case TStr(dom: StrRE)
+  case TStrSeq(dom: RegEx[StrRE])
+
+import flat.checker.verif.Type.*
 
 class Inferer(goal: Goal) extends LazyLogging:
-  def infer(expr: Expr): Domain = expr match
-    // Constants and variables
-    case Const(s: String) => RegEx.fromString(s)
+  def infer(expr: Expr): Type = expr match
+    case Const(s: String) => TStr(RegEx.word(s.toList))
     case Var(x) =>
-      goal.premises.reverseIterator.collectFirst { case StringInLang(Var(`x`), r) => r }
+      goal.premises.reverseIterator.collectFirst { case StringInLang(Var(`x`), r) => TStr(r) }
         .getOrElse:
           logger.warn(s"Cannot infer ${expr.show}")
-          RegEx.all
+          TStr(RegEx.Lit(CharSet.full))
 
-    // Char
-    case CharToInt(e) => ???
-    case CharFromInt(e) => ???
-    case CharToString(e) => ???
-
-    // Seq[Char]
-    case SeqLit(es) => ???
-    case SeqLength(e) =>
-      infer(e) match
-        case r: RegEx => r.absLength
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          Interval(0, Inf)
-    case SeqSelect(e, ei) =>
-      (infer(e), ei) match
-        case (r: RegEx, Const(i: Int)) => r.absCharAt(i)
-        case (r: RegEx, Sub(SeqLength(`e`), Const(k: Int))) => r.reverse.absCharAt(k - 1)
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          CharSet.full
-    case SeqUpdate(e, ei, ej) => ???
-    case SeqSlice(e, ei, ej) =>
-      (infer(e), ei, ej) match
-        case (r: RegEx, Const(i: Int), Const(j: Int)) => r.absDrop(i).absTake(j - i)
-        case (r: RegEx, Const(i: Int), SeqLength(e)) => r.absDrop(i)
-        case (r: RegEx, Const(i: Int), Add(SeqLength(e), Const(k: Int))) if k > 0 => r.absDrop(i)
-        case (r: RegEx, Const(i: Int), Sub(SeqLength(e), Const(k: Int))) if k > 0 => r.absDrop(i).absDropRight(k)
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          RegEx.all
+    // Seq Operations
     case SeqConcat(e1, e2) =>
       (infer(e1), infer(e2)) match
-        case (r1: RegEx, r2: RegEx) => r1 ++ r2
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          TopDomain
-    case SeqReverse(e) =>
+        case (TStr(r1), TStr(r2)) => TStr(r1 * r2)
+        case (TStrSeq(r1), TStrSeq(r2)) => TStrSeq(r1 * r2)
+        case _ => throw new Exception("Expected two sequence types for SeqConcat")
+    case SeqLength(e) =>
       infer(e) match
-        case r: RegEx => r.reverse
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          TopDomain
-    case SeqIndexOf(e, et, ei) => ???
-    case SeqContains(e, et) =>
-      (infer(e), et) match
-        case (r: RegEx, Const(t: String)) if t.length == 1 => r.absContain(t.head)
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          BoolSet.Top
+        case TStr(r) => TNat(r.absLength)
+        case TStrSeq(r) => TNat(r.absLength)
+        case _ => throw new Exception("Expected a sequence type for SeqLength")
+    case SeqSelect(e, Const(i: Int)) =>
+      infer(e) match
+        case TStr(r) => TChar(r.absAt(i))
+        case TStrSeq(r) => TStr(r.absAt(i))
+        case _ => throw new Exception("Expected a sequence type for SeqAt")
+    case SeqSlice(e, ei, ej) =>
+      (infer(e), inferIndex(ei, e), inferIndex(ej, e)) match
+        case (TStr(r), i, j) => TStr(r.absSlice(i, j))
+        case _ => throw new Exception(s"Cannot infer ${expr.show}")
     case SeqStartsWith(e, et) =>
       (infer(e), et) match
-        case (r: RegEx, Const(t: String)) => r.absStartWith(t)
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          BoolSet.Top
+        case (TStr(r), Const(s: String)) => TBool(r.absStartsWith(s.toList))
+        case _ => throw new Exception("Expected a sequence type for SeqStartsWith")
     case SeqEndsWith(e, et) =>
       (infer(e), et) match
-        case (r: RegEx, Const(t: String)) => r.reverse.absEndWith(t)
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          BoolSet.Top
+        case (TStr(r), Const(s: String)) => TBool(r.absEndsWith(s.toList))
+        case _ => throw new Exception("Expected a sequence type for SeqEndsWith")
+    case SeqContains(e, et) =>
+      (infer(e), et) match
+        case (TStr(r), Const(s: String)) => TBool(r.absContains(s.toList))
+        case _ => throw new Exception("Expected a sequence type for SeqContains")
+    case SeqIndexOf(e, et, Const(0)) =>
+      (infer(e), et) match
+        case (TStr(r), Const(s: String)) => TIndex(r.absIndexOfStr(s))
+        case _ => throw new Exception("Expected a sequence type for SeqIndexOf")
+    case StringSplit(e, et) =>
+      (infer(e), et) match
+        case (TStr(r), Const(s: String)) => TStrSeq(r.absSplitStr(s))
+        case _ => throw new Exception("Expected a sequence type for SeqSplit")
     case SeqCount(e, et) =>
       (infer(e), et) match
-        case (r: RegEx, Const(t: String)) if t.length == 1 => r.absCount(t.head)
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          Interval(0, Inf)
-    case SeqForall(e, ep) => ???
+        case (TStr(r), Const(s: String)) => TNat(r.absCountStr(s))
+        case _ => throw new Exception("Expected a sequence type for SeqCount")
+    case SeqReverse(e) =>
+      infer(e) match
+        case TStrSeq(r) => TStrSeq(r.reverse)
+        case _ => throw new Exception("Expected a sequence type for SeqReverse")
 
-    // String
-    case StringSplit(e, et) => ???
-    case StringTrim(e) => ???
+    // String-specific
     case StringToLower(e) =>
       infer(e) match
-        case r: RegEx => r.absToLower
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          RegEx.all
+        case TStr(r) => TStr(r.absMap(_.map(_.toLower)))
+        case _ => throw new Exception("Expected a string type for StringToLower")
     case StringToUpper(e) =>
       infer(e) match
-        case r: RegEx => r.absToUpper
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          RegEx.all
-    case StringToInt(e) =>
-      infer(e) match
-        case r: RegEx => ???
-        case _ =>
-          logger.warn(s"Cannot infer ${expr.show}")
-          Interval(0, Inf)
-    case StringFromInt(e) => ???
+        case TStr(r) => TStr(r.absMap(_.map(_.toUpper)))
+        case _ => throw new Exception("Expected a string type for StringToUpper")
 
-    // Other
-    case _ =>
-      logger.warn(s"Cannot infer ${expr.show}")
-      TopDomain
+    case other =>
+      throw new Exception(s"Type inference not implemented for expression: $other")
+
+  private def inferIndex(idx: Expr, seq: Expr): Index = idx match
+    case Const(i: Int) if 0 <= i => Left(i)
+    case SeqLength(`seq`) => Right(0)
+    case Add(SeqLength(`seq`), Const(i: Int)) if 0 <= i => Right(i)
+    case Sub(SeqLength(`seq`), Const(i: Int)) if 0 <= i => Right(i)
+    case _ => throw new Exception(s"Cannot infer index ${idx.show} for ${seq.show}")

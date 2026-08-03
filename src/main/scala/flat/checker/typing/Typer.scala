@@ -1,10 +1,10 @@
 package flat.checker.typing
 
 import flat.checker.Reporter
+import flat.checker.domain.{RegEx, StrRE, given}
 import flat.checker.flan.*
 import flat.checker.flan.SortOps.*
 import flat.checker.flan.tpd.*
-import flat.regex.{Inf, Interval, RegEx}
 import org.eclipse.lsp4j.{Position, Range}
 
 import scala.collection.mutable
@@ -66,26 +66,26 @@ class Typer(using reporter: Reporter):
     if conjuncts.isEmpty then None
     else Some(mkLambda(sort, tup => mkAnd(conjuncts.map { (p, i) => mkApply(p, TupleSelect(i, tup)()) })))
 
-  def translate(node: untpd.Lang)(using ctx: Ctx): RegEx = node match
-    case untpd.LangConst(s) => RegEx.fromString(s)
+  def translate(node: untpd.Lang)(using ctx: Ctx): StrRE = node match
+    case untpd.LangConst(s) => RegEx.word(s.toList)
     case n@untpd.LangName(x) =>
       ctx.lookup(x) match
         case Some(LangInfo(r)) => r
         case Some(_) =>
           reporter.reportNotLang(n.range, x)
-          RegEx.RENone
+          RegEx.Zero()
         case None =>
           reporter.reportNameUndefined(n.range)
-          RegEx.RENone
+          RegEx.Zero()
     case untpd.RegEx(r) => r
-    case untpd.LangStar(l) => translate(l).*
-    case untpd.LangPlus(l) => translate(l).+
-    case untpd.LangOpt(l) => translate(l).?
+    case untpd.LangStar(l) => translate(l).star
+    case untpd.LangPlus(l) => translate(l).plus
+    case untpd.LangOpt(l) => translate(l).opt
     case untpd.LangPower(l, n) => translate(l) ^ n
-    case untpd.LangLoop(l, n1, Some(n2)) => translate(l).loop(Interval(n1, n2))
-    case untpd.LangLoop(l, n1, None) => translate(l).loop(Interval(n1, Inf))
-    case untpd.LangConcat(l1, l2) => translate(l1) ++ translate(l2)
-    case untpd.LangUnion(l1, l2) => translate(l1) | translate(l2)
+    case untpd.LangLoop(l, n1, Some(n2)) => ???
+    case untpd.LangLoop(l, n1, None) => ???
+    case untpd.LangConcat(l1, l2) => translate(l1) * translate(l2)
+    case untpd.LangUnion(l1, l2) => translate(l1) + translate(l2)
 
   def infer(node: untpd.Expr)(using ctx: Ctx, vs: VarStore): (Sort, Expr) = node match
     case untpd.Const(null) => (NullSort, Const(null)(node.range))

@@ -1,5 +1,6 @@
 package flat.checker.flan
 
+import flat.checker.domain.Prettifier.pp
 import flat.checker.flan.tpd.*
 import flat.regex.RegEx
 
@@ -192,7 +193,7 @@ object Show:
       case TupleSelect(i, e) => showMemberApply(e, "_" + (i + 1))
 
       // Domain
-      case StringInLang(e, r) => s"${showExpr(e)} ∈ ${r.show}"
+      case StringInLang(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
 
       // Other
       case NoExpr => "?"

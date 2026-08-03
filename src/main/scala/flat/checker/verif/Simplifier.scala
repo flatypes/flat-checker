@@ -1,10 +1,10 @@
 package flat.checker.verif
 
+import flat.checker.domain.given
 import flat.checker.flan.*
 import flat.checker.flan.SortOps.sort
 import flat.checker.flan.Subst.subst
 import flat.checker.flan.tpd.*
-
 object Simplifier:
   extension (expr: Expr)
     private def isConst: Boolean = expr match
@@ -298,7 +298,7 @@ object Simplifier:
       // Domain
       case StringInLang(e, r) =>
         e.simplify match
-          case Const(s: String) => Const(r.contains(s))
+          case Const(s: String) => Const(r.contains(s.toList))
           case e => StringInLang(e, r)
 
       case _ => throw NotImplementedError(s"Simplifier.simplify(${expr.getClass.getSimpleName})")

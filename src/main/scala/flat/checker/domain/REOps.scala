@@ -1,6 +1,8 @@
 package flat.checker.domain
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.domain.Index.*
+import flat.checker.domain.Prettifier.pp
 import flat.checker.domain.RegEx.*
 
 import scala.annotation.tailrec
@@ -25,6 +27,8 @@ object REOps extends LazyLogging:
         val r1 = r.deriv(_.nonEmpty)
         if r1.isEmpty then One() else r1.absDrop(n - 1)
 
+    def absDropRight(n: Int): RegEx[A] = r.reverse.absDrop(n).reverse
+
     /** Abstract operation for `s(i)`. */
     def absAt(i: Int): A =
       require(0 <= i)
@@ -42,6 +46,8 @@ object REOps extends LazyLogging:
         val result1: RegEx[A] = if r.nullable then One() else Zero() // s is empty
         val result2 = sum(for (d, r1) <- r.absSplitAt1.toList yield Lit(d) * r1.absTake(n - 1)) // s is nonempty
         result1 + result2
+
+    def absTakeRight(n: Int): RegEx[A] = r.reverse.absTake(n).reverse
 
     /** Abstract operation for `s.splitAt(1)`. */
     def absSplitAt1: List[(A, RegEx[A])] = r match
@@ -94,6 +100,16 @@ object REOps extends LazyLogging:
       val neg = if r.filterNotContain(t).nonEmpty then Set(-1) else Set.empty
       IndexSet(neg, takeIndexOf(t).absLength)
 
+    def absSlice(start: Index, end: Index): RegEx[A] = (start, end) match
+      case (Left(i), Right(j)) => r.absDrop(i).absDropRight(j)
+      case (Left(i), Left(j)) => r.absDrop(i).absTake(j - i)
+      case (Right(i), Right(j)) => r.absDropRight(i).absTakeRight(j - i)
+      case (First(w), Right(0)) => r.dropIndexOf(w.asInstanceOf[List[set.Symbol]])
+      case (Left(0), First(w)) => r.takeIndexOf(w.asInstanceOf[List[set.Symbol]])
+      case _ =>
+        logger.warn(s"Cannot slice ${r.pp} with indices $start and $end")
+        Zero()
+
     /** Abstract operation for `s.count(t)`. */
     def absCount(t: List[set.Symbol]): CountingRE = t match
       case Nil => throw IllegalArgumentException("absCount: t must be non-empty")
@@ -130,7 +146,7 @@ object REOps extends LazyLogging:
         val result2 = sum(for (a, r1) <- r.absSplitAt1 yield symbolSet(a - x) * r1)
         // case 3: start with x but the rest not start with xs
         val r1 = r.deriv(x)
-        val result3 = if r1.isEmpty then Zero() else r1.filterNotStartWith(xs)
+        val result3 = if r1.isEmpty then Zero() else symbol(x) * r1.filterNotStartWith(xs)
         result1 + result2 + result3
 
     /** Computes {s ∈ r | s ends with t}. */
@@ -222,6 +238,6 @@ object REOps extends LazyLogging:
       //               + (r.first - x) * notContain(r.deriv([^x]))
       (if r.nullable then One() else Zero(),
         (if a.contains(x) then List((symbol(x), r.deriv(x).filterNotStartWith(t.tail))) else Nil) ++
-          (if b.nonEmpty then List((Lit(b), r.deriv(d => (d - x).nonEmpty))) else Nil))
+          (if b.nonEmpty then List((Lit(b), r.deriv(a => (a - x).nonEmpty))) else Nil))
 
   given Conversion[String, List[Char]] = _.toList

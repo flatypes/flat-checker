@@ -1,5 +1,6 @@
 package flat.checker.flan
 
+import flat.checker.domain.StrRE
 import flat.regex.RegEx
 import org.eclipse.lsp4j.{Position, Range}
 
@@ -209,65 +210,6 @@ object tpd:
       case List(e) => CharToString(e)(range)
       case _ => throw IllegalArgumentException("CharToString must have exactly 1 subtree")
 
-  // Str Operations
-  final case class StrConcat(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrConcat = subtrees match
-      case List(e1, e2) => StrConcat(e1, e2)(range)
-      case _ => throw IllegalArgumentException("StrConcat must have exactly 2 subtrees")
-
-  final case class StrLength(str: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrLength = subtrees match
-      case List(e) => StrLength(e)(range)
-      case _ => throw IllegalArgumentException("StrLength must have exactly 1 subtree")
-
-  final case class CharAt(str: Expr, idx: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): CharAt = subtrees match
-      case List(e1, e2) => CharAt(e1, e2)(range)
-      case _ => throw IllegalArgumentException("CharAt must have exactly 2 subtrees")
-
-  final case class Substr(str: Expr, start: Expr, end: Expr = NoExpr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): Substr = subtrees match
-      case List(e1, e2) => Substr(e1, e2)(range)
-      case List(e1, e2, e3) => Substr(e1, e2, e3)(range)
-      case _ => throw IllegalArgumentException("StrSlice must have 2 or 3 subtrees")
-
-  final case class StrStartsWith(str: Expr, prefix: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrStartsWith = subtrees match
-      case List(e1, e2) => StrStartsWith(e1, e2)(range)
-      case _ => throw IllegalArgumentException("StrStartsWith must have exactly 2 subtrees")
-
-  final case class StrEndsWith(str: Expr, suffix: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrEndsWith = subtrees match
-      case List(e1, e2) => StrEndsWith(e1, e2)(range)
-      case _ => throw IllegalArgumentException("StrEndsWith must have exactly 2 subtrees")
-
-  final case class StrContains(str: Expr, sub: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrContains = subtrees match
-      case List(e1, e2) => StrContains(e1, e2)(range)
-      case _ => throw IllegalArgumentException("StrContains must have exactly 2 subtrees")
-
-  final case class StrIndexOf(str: Expr, sub: Expr, start: Expr = Const(0))
-                             (val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrIndexOf = subtrees match
-      case List(e1, e2) => StrIndexOf(e1, e2, Const(0))(range)
-      case List(e1, e2, e3) => StrIndexOf(e1, e2, e3)(range)
-      case _ => throw IllegalArgumentException("StrIndexOf must have 2 or 3 subtrees")
-
-  final case class StrSplit(str: Expr, sep: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrSplit = subtrees match
-      case List(e1, e2) => StrSplit(e1, e2)(range)
-      case _ => throw IllegalArgumentException("StrSplit must have exactly 2 subtrees")
-
-  final case class StrCount(str: Expr, sub: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrCount = subtrees match
-      case List(e1, e2) => StrCount(e1, e2)(range)
-      case _ => throw IllegalArgumentException("StrCount must have exactly 2 subtrees")
-
-  final case class StrReverse(str: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrReverse = subtrees match
-      case List(e) => StrReverse(e)(range)
-      case _ => throw IllegalArgumentException("StrReverse must have exactly 1 subtree")
-
   // Tuple operations
   final case class TupleExpr(elems: List[Expr])(val range: Range = noRange) extends Expr:
     require(elems.length != 1, "TupleExpr must have at least 2 elements or none")
@@ -464,7 +406,7 @@ object tpd:
       case _ => throw IllegalArgumentException("MapUpdate must have exactly 3 subtrees")
 
   // Domain membership
-  final case class StringInLang(str: Expr, regEx: RegEx)(val range: Range = noRange) extends Expr:
+  final case class StringInLang(str: Expr, regEx: StrRE)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StringInLang = subtrees match
       case List(e) => StringInLang(e, regEx)(range)
       case _ => throw IllegalArgumentException("StringInRegEx must have exactly 1 subtree")

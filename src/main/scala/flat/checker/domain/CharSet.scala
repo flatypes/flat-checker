@@ -44,6 +44,8 @@ final case class CharSet(pos: Boolean, chars: Set[Char]):
   def toFinSet(alphabet: Set[Char]): Set[Char] =
     if pos then chars else alphabet -- chars
 
+  def map(f: Char => Char): CharSet = CharSet(pos, chars.map(f))
+
   override def toString: String =
     val sign = if pos then "" else "^"
     val ranges = chars.compress.map:

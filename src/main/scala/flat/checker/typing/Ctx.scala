@@ -1,9 +1,9 @@
 package flat.checker.typing
 
 import flat.checker.*
+import flat.checker.domain.StrRE
 import flat.checker.flan.tpd.*
 import flat.checker.flan.{FunSort, Sort}
-import flat.regex.RegEx
 import org.eclipse.lsp4j.Range
 
 import scala.collection.mutable.ListBuffer
@@ -13,7 +13,7 @@ sealed trait Info:
 
 final case class TypeInfo(typ: NormType)(val range: Range) extends Info
 
-final case class LangInfo(regEx: RegEx)(val range: Range) extends Info
+final case class LangInfo(regEx: StrRE)(val range: Range) extends Info
 
 final case class ConstInfo(sort: Sort, value: Expr)(val range: Range) extends Info
 
