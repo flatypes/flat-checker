@@ -1,11 +1,11 @@
-method parse(name: String): String
-  requires !name.contains(":")
-  ensures _ == name
+lang Parsed = r"[^:]*"
+
+method parse(name: String): Parsed
 {
   var colonIndex = name.indexOf(":");
   if (colonIndex < 0) {
     return name;
   } else {
-    return "null";
+    return "";
   }
 }

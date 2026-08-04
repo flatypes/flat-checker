@@ -73,6 +73,16 @@ class Prover extends LazyLogging:
             lemmas += inIndexSet(e, set)
           case _ => ()
 
+      // Algebraic properties for count
+      case e@SeqCount(SeqSlice(es, ei, ej), Const(s: String)) if s.length == 1 && goal.have(Lt(ei, ej)) =>
+        val c = s.head
+        // If `i < j`, then `s[i:j].count(c) == s[i+1:j].count(c) + (if s[i] == c then 1 else 0)`
+        goal.premises.collectFirst:
+          case Eq(SeqSelect(`es`, ek), Const(c: Char)) if goal.have(Eq(ek, ei)) =>
+            lemmas += Eq(e, Add(SeqCount(SeqSlice(es, Add(ei, 1), ej), Const(s)), 1))
+          case Ne(SeqSelect(`es`, ek), Const(c: Char)) if goal.have(Eq(ek, ei)) =>
+            lemmas += Eq(e, SeqCount(SeqSlice(es, Add(ei, 1), ej), Const(s)))
+
     lemmas.toList
 
   private def inNatSet(elem: Expr, set: CountingRE): Expr =

@@ -1,14 +1,14 @@
 lang Present = r"[0-9]+(jaj|jar|DIS)?"
 lang Future = r"[0-9]+(leS|waQ|nem| pId)?"
 
-method translateFuture(output: Present): Future
+method translateFuture(present: Present): Future
 {
-  var time = output;
-  if (output.indexOf("jaj") != -1) {
+  var time = present;
+  if (present.indexOf("jaj") != -1) {
     time = time.slice(0, time.length - 3) + "leS";
-  } else if (output.indexOf("jar") != -1) {
+  } else if (present.indexOf("jar") != -1) {
     time = time.slice(0, time.length - 3) + "waQ";
-  } else if (output.indexOf("DIS") != -1) {
+  } else if (present.indexOf("DIS") != -1) {
     time = time.slice(0, time.length - 3) + "nem";
   } else {
     time = time + " pId";

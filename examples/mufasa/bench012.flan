@@ -1,26 +1,25 @@
-lang Unreserved = r"[A-Za-z0-9\-._~]"
-lang PCTEncoded = r"%[0-9A-Fa-f][0-9A-Fa-f]"
-lang SubDelims = r"[!$&'()*+,;=]"
-lang Host = Unreserved* // (Unreserved | PCTEncoded | SubDelims)*
-lang Segment = (Unreserved | PCTEncoded | SubDelims | "@")*
-lang URL = "https://" Host ("/" Segment)+
-lang HostLine = "" | "www" Host ".it\n"
+lang Scheme = r"[A-Za-z][A-Za-z0-9+\-.]*"
+lang RegNameChar = r"[A-Za-z0-9\-._~]|%[0-9A-Fa-f][0-9A-Fa-f]|[!$&'()*+,;=]"
+lang IPLiteral = '[' r"[0-9A-Fa-f:.]+" ']'
+lang URL = Scheme "://" (RegNameChar* | IPLiteral) '/' (RegNameChar | ':' | '@' | '/')*
+lang ValidDomain = "www" RegNameChar* ".it"
+lang ParsedDomain = (ValidDomain '\n')?
 
-method parseHost(url: URL): HostLine
+method parseHost(url: URL): ParsedDomain
 {
   var input = url.trim();
   if (!input.startsWith("https://")) {
-    assert false;
+    return "";
   }
 
   input = input.substring(8, input.length);
   if (input.charAt(0) == '[') {
-    assert false;
+    return "";
   }
 
   var index = input.indexOf(":");
   if (index != -1) {
-    assert false;
+    return "";
   }
 
   index = input.indexOf("/");
@@ -44,16 +43,14 @@ method isValidDomain(input: String): Bool
   return false;
 }
 
-lang URLLines = (URL ("\n" URL)*)?
-lang HostLines = ("www" Host ".it\n")*
+lang Lines = (URL '\n')* URL?
+lang ParsedDomains = (ValidDomain '\n')*
 
-method parse(input: URLLines): HostLines
+method parse(lines: Lines): ParsedDomains
 {
-  var domains = "";
-  var s = input;
+  var s: Lines = lines;
+  var domains: ParsedDomains = "";
   while (s.length > 0)
-    invariant s ∈ URLLines
-    invariant domains ∈ HostLines
   {
     var index = s.indexOf("\n");
     var sub: String;

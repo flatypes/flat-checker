@@ -66,6 +66,8 @@ object CharSet:
 given SymbolSet[CharSet] with
   def empty: CharSet = CharSet.empty
 
+  def full: CharSet = CharSet.full
+
   type Symbol = Char
 
   def singleton(c: Char): CharSet = CharSet(c)

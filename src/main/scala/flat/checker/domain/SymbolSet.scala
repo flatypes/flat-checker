@@ -5,6 +5,8 @@ trait SymbolSet[A]:
 
   def empty: A
 
+  def full: A
+
   type Symbol
   type Word = List[Symbol]
 

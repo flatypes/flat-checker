@@ -1,35 +1,42 @@
-method parseHost(input: String): Map[String, String]?
+lang Scheme = r"[A-Za-z][A-Za-z0-9+\-.]*"
+lang RegNameChar = r"[A-Za-z0-9\-._~]|%[0-9A-Fa-f][0-9A-Fa-f]|[!$&'()*+,;=]"
+lang URL = Scheme "://" RegNameChar*
+lang Domain = r"([a-z0-9\-._~]|%[0-9a-f][0-9a-f]|[!$&'()*+,;=])*"
+
+method parseHost(url: URL): Domain
 {
-  input = input.trim();
-  input = input.toLowerCase();
-  var r: Map[String, String]?;
+  var input = url.trim();
+  input = input.toLower();
+  var r: String;
   if (!input.startsWith("https://")) {
-    r = null;
+    r = "";
   } else {
     input = input.substring(8, input.length);
     if (!input.startsWith("www.")) {
-      r = null;
+      r = "";
+    } else if (input.endsWith(".it")) {
+      var domain = input.substring(4, input.length - 3);
+      r = domain;
     } else {
-      if (input.endsWith(".it")) {
-        var domain = input.substring(4, input.length - 3);
-        r = Map("a" -> "https", "b" -> "www", "c" -> domain, "d" -> "it");
-      } else {
-        r = null;
-      }
+      r = "";
     }
   }
+
   return r;
 }
 
-method parseFirstDomain(s: String): Map[String, String]?
+lang Lines = (URL '\n')* URL?
+
+method parseFirstDomain(lines: Lines): Domain
 {
+  var s: Lines = lines;
   var stop = false;
-  var result: Map[String, String]?;
+  var result: Domain;
   while (!stop)
   {
     if (s.length == 0) {
       stop = true;
-      result = null;
+      result = "";
     } else {
       var index = s.indexOf("\n");
       var sub: String;
@@ -42,8 +49,8 @@ method parseFirstDomain(s: String): Map[String, String]?
       }
 
       result = parseHost(sub);
-      if (result != null) {
-          stop = true;
+      if (result != "") {
+        stop = true;
       }
     }
   }

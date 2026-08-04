@@ -1,6 +1,5 @@
-lang UpperCase = r"[A-Z][a-zA-Z0-9]*"
-lang MethodName = ("is" | "get")? UpperCase
-lang PropertyName = r"[a-z][a-zA-Z0-9]*"
+lang MethodName = ("is" | "get")? r"[A-Z][A-Za-z0-9_]*"
+lang PropertyName = r"[a-z][A-Za-z0-9_]*"
 
 method propertyName(methodName: MethodName): PropertyName
 {

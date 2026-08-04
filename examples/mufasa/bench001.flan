@@ -1,12 +1,12 @@
-method removeCurlies(input: String): String
-  ensures '{' !in _
+lang Removed = r"[^{]*"
+
+method removeCurlies(input: String): Removed
 {
-  var result = "";
+  var result: Removed = "";
   var skip = false;
   var i = 0;
   while (input.length > i + 1)
     invariant 0 <= i
-    invariant '{' !in result
   {
     var c = input.charAt(i);
     if (c == '{') {

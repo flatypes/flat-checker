@@ -101,6 +101,8 @@ enum RegEx[A] extends LazyLogging:
   def contains(using set: SymbolSet[A])(s: List[set.Symbol]): Boolean = deriv(s).nullable
 
 object RegEx:
+  def full[A](using set: SymbolSet[A]): RegEx[A] = Lit(set.full).star
+
   def symbol[A](using set: SymbolSet[A])(x: set.Symbol): RegEx[A] = Lit(set.singleton(x))
 
   def word[A](using set: SymbolSet[A])(xs: List[set.Symbol]): RegEx[A] =
@@ -119,6 +121,8 @@ given [A](using set: SymbolSet[A]): SymbolSet[RegEx[A]] with
   import RegEx.*
 
   def empty: RegEx[A] = Zero()
+
+  def full: RegEx[A] = RegEx.full
 
   type Symbol = List[set.Symbol]
 

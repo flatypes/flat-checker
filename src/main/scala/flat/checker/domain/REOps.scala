@@ -38,6 +38,16 @@ object REOps extends LazyLogging:
       require(0 <= i)
       r.reverse.absDrop(i).first
 
+    def absAt(index: Index): A = index match
+      case Left(i) => r.absAt(i)
+      case Right(i) => r.absAtRight(i)
+      case First(w, k) =>
+        if 0 <= k && k < w.length then set.singleton(w(k).asInstanceOf[set.Symbol])
+        else r.dropIndexOf(w.asInstanceOf[List[set.Symbol]]).absAt(k)
+      case UnknownIndex =>
+        logger.warn(s"Cannot get character at unknown index for ${r.pp}")
+        r.alphabet
+
     /** Abstract operation for `s.take(n)`. */
     def absTake(n: Int): RegEx[A] =
       require(n >= 0)
@@ -191,22 +201,25 @@ object REOps extends LazyLogging:
       case List(x) => r.filterNotContain1(x)
       case _ => r.filterNotContain2(t)
 
-    private def filterNotContain1(x: set.Symbol): RegEx[A] = r match
-      case Zero() | One() => r
-      case Lit(d) => symbolSet(d - x)
-      case Plus(r1, r2) => r1.filterNotContain1(x) + r2.filterNotContain1(x)
-      case Comp(r1, r2) => r1.filterNotContain1(x) * r2.filterNotContain1(x)
-      case Star(r1) => r1.filterNotContain1(x).star
+    private def filterNotContain1(x: set.Symbol): RegEx[A] =
+      val a = r.alphabet
+      if !a.contains(x) then r
+      else r match
+        case Zero() | One() => r
+        case Lit(d) => symbolSet(d - x)
+        case Plus(r1, r2) => r1.filterNotContain1(x) + r2.filterNotContain1(x)
+        case Comp(r1, r2) => r1.filterNotContain1(x) * r2.filterNotContain1(x)
+        case Star(r1) => r1.filterNotContain1(x).star
 
     private def filterNotContain2(t: List[set.Symbol]): RegEx[A] =
       require(t.length >= 2)
-      r match
-        case Zero() | One() | Lit(_) => r
+      val a = r.alphabet
+      if t.exists(!a.contains(_)) then r
+      else if r.findAny(t.head).forall(_._2.deriv(t.tail).isEmpty) then r
+      else r match
         case Plus(r1, r2) => r1.filterNotContain2(t) + r2.filterNotContain2(t)
         case Comp(r1, r2) if !r1.alphabet.contains(t.head) => r1 * r2.filterNotContain2(t)
-        case _ =>
-          val alphabet = r.alphabet
-          if t.forall(alphabet.contains) then NotContainSolver(t).solve(r) else r
+        case _ => NotContainSolver(t).solve(r)
 
   private class CountSolver[A](using set: SymbolSet[A])(t: List[set.Symbol]) extends LinearSolver[A, Set[Int]]:
     require(t.nonEmpty)
@@ -232,12 +245,11 @@ object REOps extends LazyLogging:
     override protected def build(r: InputRE): (OutputRE, List[(OutputRE, InputRE)]) =
       val x = t.head
       val a = r.first
-      val b = a - x
       // notContain(r) = REOne (if r is nullable)
       //               + x * notContain(r1) (where r1 = r.deriv(x) ∩ {s | s not start with t1})
       //               + (r.first - x) * notContain(r.deriv([^x]))
       (if r.nullable then One() else Zero(),
         (if a.contains(x) then List((symbol(x), r.deriv(x).filterNotStartWith(t.tail))) else Nil) ++
-          (if b.nonEmpty then List((Lit(b), r.deriv(a => (a - x).nonEmpty))) else Nil))
+          (for (a, r1) <- r.absSplitAt1; if (a - x).nonEmpty yield (symbolSet(a - x), r1)))
 
   given Conversion[String, List[Char]] = _.toList

@@ -23,10 +23,16 @@ class Inferer(goal: Goal) extends LazyLogging:
   def infer(expr: Expr): Type = expr match
     case Const(s: String) => TStr(RegEx.word(s.toList))
     case Var(x) =>
-      goal.premises.reverseIterator.collectFirst { case StringInLang(Var(`x`), r) => TStr(narrow(expr, r)) }
-        .getOrElse:
-          logger.warn(s"Cannot infer ${expr.show}")
-          TStr(RegEx.Lit(CharSet.full))
+      val r = goal.premises.reverseIterator
+        .collectFirst { case StringInLang(Var(`x`), r) => r }
+        .getOrElse(RegEx.full)
+      TStr(narrow(expr, r))
+
+    // Char Operations
+    case CharToString(e) =>
+      infer(e) match
+        case TChar(a) => TStr(RegEx.symbolSet(a))
+        case _ => throw new Exception("Expected a char type for CharToString")
 
     // Seq Operations
     case SeqConcat(e1, e2) =>
@@ -39,10 +45,10 @@ class Inferer(goal: Goal) extends LazyLogging:
         case TStr(r) => TNat(r.absLength)
         case TStrSeq(r) => TNat(r.absLength)
         case _ => throw new Exception("Expected a sequence type for SeqLength")
-    case SeqSelect(e, Const(i: Int)) =>
-      infer(e) match
-        case TStr(r) => TChar(r.absAt(i))
-        case TStrSeq(r) => TStr(r.absAt(i))
+    case SeqSelect(e, ei) =>
+      (infer(e), inferIndex(ei, e)) match
+        case (TStr(r), index) => TChar(narrow(expr, r.absAt(index)))
+        case (TStrSeq(r), index) => TStr(r.absAt(index))
         case _ => throw new Exception("Expected a sequence type for SeqAt")
     case SeqSlice(e, ei, ej) =>
       (infer(e), inferIndex(ei, e), inferIndex(ej, e)) match
@@ -101,7 +107,9 @@ class Inferer(goal: Goal) extends LazyLogging:
     case Sub(SeqLength(`seq`), Const(i: Int)) if 0 <= i => Right(i)
     case SeqIndexOf(`seq`, Const(s: String), Const(0)) => First(s.toList)
     case Add(SeqIndexOf(`seq`, Const(s: String), Const(0)), Const(i: Int)) => First(s.toList, i)
-    case _ => throw new Exception(s"Cannot infer index ${idx.show} for ${seq.show}")
+    case _ =>
+      logger.warn(s"Cannot infer index ${idx.show} for ${seq.show}")
+      UnknownIndex
 
   private def narrow(e: Expr, r: StrRE): StrRE =
     var r1 = r
@@ -131,5 +139,21 @@ class Inferer(goal: Goal) extends LazyLogging:
     case Lt(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(0)) => Some(r.filterNotContain(t.toList))
     // emptiness
     case Lt(Const(0), SeqLength(`e`)) => Some(r.filterNonEmpty)
-    case Ne(Const(0), SeqLength(`e`)) => Some(r.filterNonEmpty)
+    case Ne(SeqLength(`e`), Const(0)) => Some(r.filterNonEmpty)
+    case _ => None
+
+  private def narrow(e: Expr, a: CharSet): CharSet =
+    var a1 = a
+    for
+      premise <- goal.premises
+      a2 <- narrowBy(e, a1, premise)
+    do
+      logger.debug("Narrow {}: from {} to {} by {}", e.show, a1.toString, a2.toString, premise.show)
+      a1 = a2
+    a1
+
+  private def narrowBy(e: Expr, a: CharSet, premise: Expr): Option[CharSet] = premise match
+    // equality
+    case Eq(`e`, Const(c: Char)) => Some(if a.contains(c) then CharSet(c) else CharSet.empty)
+    case Ne(`e`, Const(c: Char)) => Some(a - c)
     case _ => None

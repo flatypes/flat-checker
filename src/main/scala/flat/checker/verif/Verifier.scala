@@ -99,8 +99,12 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
   private def branch(cond: Expr, state: State, contTrue: State => Unit, contFalse: State => Unit): Unit =
     if check(cond, state) then
       val (v, st) = eval(cond, state)
-      contTrue(st.add(v))
-      contFalse(st.add(Not(v)))
+      v.simplify(using st.ctx.vars) match
+        case Const(true) => contTrue(st)
+        case Const(false) => contFalse(st)
+        case _ =>
+          contTrue(st.add(v))
+          contFalse(st.add(Not(v)))
     else
       contTrue(state)
       contFalse(state)
