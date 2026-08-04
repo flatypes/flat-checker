@@ -18,6 +18,18 @@ object StrREOps:
 
     def absIndexOfStr(s: String): IndexSet = REOps.absIndexOf(r)(s.toList)
 
+    def absReplace(s1: String, s2: String): StrRE = s1.length match
+      case 0 => throw IllegalArgumentException("Replacement string cannot be empty")
+      case 1 => r.absReplace(s1.head, s2)
+      case _ => throw UnsupportedOperationException("Replacement string is not a single character")
+
+    def absReplace(c: Char, s: String): StrRE = r match
+      case Zero() | One() => r
+      case Lit(a) => if a.contains(c) then word(s.toList) + symbolSet(a - c) else r
+      case Plus(r1, r2) => r1.absReplace(c, s) + r2.absReplace(c, s)
+      case Comp(r1, r2) => r1.absReplace(c, s) * r2.absReplace(c, s)
+      case Star(r1) => r1.absReplace(c, s).star
+
     def absCountStr(s: String): CountingRE = REOps.absCount(r)(s.toList)
 
     def absSplitStr(s: String): RegEx[StrRE] = REOps.absSplit(r)(s.toList)

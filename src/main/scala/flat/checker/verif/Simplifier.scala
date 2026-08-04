@@ -197,6 +197,10 @@ object Simplifier:
       case SeqForall(e, ep) => SeqForall(e.simplify, ep.simplify)(expr.range)
 
       // String-specific
+      case StrReplace(e, e1, e2) =>
+        (e.simplify, e1.simplify, e2.simplify) match
+          case (Const(s: String), Const(s1: String), Const(s2: String)) => Const(s.replace(s1, s2))(expr.range)
+          case (e, e1, e2) => StrReplace(e, e1, e2)(expr.range)
       case StringSplit(e, ex) =>
         (e.simplify, ex.simplify) match
           case (Const(s: String), Const(t: String)) => SeqLit(s.split(t).toList.map(Const(_)))(stringSort, expr.range)

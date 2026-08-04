@@ -1,0 +1,18 @@
+lang Safe = r"([^&<>\"']|&[A-Za-z]+;|&#x[0-9A-Fa-f]+;)*"
+
+/**
+  * Replace special characters "&", "<" and ">" to HTML-safe sequences.
+  * If the optional flag quote is true (the default), the quotation mark
+  * characters, both double quote (") and single quote (') characters are also
+  * translated.
+  */
+method escape(input: String): Safe
+{
+  var s = input;
+  s = s.replace("&", "&amp;");
+  s = s.replace("<", "&lt;");
+  s = s.replace(">", "&gt;");
+  s = s.replace('"', "&quot;");
+  s = s.replace("'", "&#x27;");
+  return s;
+}

@@ -160,6 +160,7 @@ object Show:
       case SeqForall(e, ep) => showMemberApply(e, "forall", ep)
 
       // String
+      case StrReplace(e, e1, e2) => showMemberApply(e, "replace", e1, e2)
       case StringSplit(e, et) => showMemberApply(e, "split", et)
       case StringTrim(e) => showMemberApply(e, "trim")
       case StringToLower(e) => showMemberApply(e, "toLower")

@@ -1,7 +1,6 @@
 package flat.checker.flan
 
 import flat.checker.domain.StrRE
-import flat.regex.RegEx
 import org.eclipse.lsp4j.{Position, Range}
 
 object tpd:
@@ -294,6 +293,11 @@ object tpd:
       case _ => throw IllegalArgumentException("SeqForall must have exactly 2 subtrees")
 
   // String-specific operations
+  final case class StrReplace(str: Expr, target: Expr, replacement: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): StrReplace = subtrees match
+      case List(e, et, er) => StrReplace(e, et, er)(range)
+      case _ => throw IllegalArgumentException("StrReplace must have exactly 3 subtrees")
+
   final case class StringSplit(str: Expr, sep: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StringSplit = subtrees match
       case List(e, et) => StringSplit(e, et)(range)

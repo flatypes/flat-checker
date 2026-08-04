@@ -108,8 +108,11 @@ object builtin:
   private def accessStringSpecificMember(name: String): List[Member] = name match
     case "charAt" => List(Member(int -> char, { case List(s, i) => SeqSelect(s, i) }))
     case "substring" => List(
-      Member((int) -> str, { case List(s, i) => SeqSlice(s, i) }),
+      Member(int -> str, { case List(s, i) => SeqSlice(s, i) }),
       Member((int, int) -> str, { case List(s, i, j) => SeqSlice(s, i, j) }))
+    case "replace" => List(
+      Member((char, str) -> str, { case List(s, c, s1) => StrReplace(s, CharToString(c)(c.range), s1) }),
+      Member((str, str) -> str, { case List(s, t1, t2) => StrReplace(s, t1, t2) }))
     case "split" => List(Member(str -> SeqSort(str), { case List(s, t) => StringSplit(s, t) }))
     case "trim" => List(Member(() -> str, { case List(s) => StringTrim(s) }))
     case "toLower" => List(Member(() -> str, { case List(s) => StringToLower(s) }))

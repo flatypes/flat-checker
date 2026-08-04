@@ -88,6 +88,10 @@ class Inferer(goal: Goal) extends LazyLogging:
         case _ => throw new Exception("Expected a sequence type for SeqReverse")
 
     // String-specific
+    case StrReplace(e, Const(s1: String), Const(s2: String)) =>
+      infer(e) match
+        case TStr(r) => TStr(narrow(expr, r.absReplace(s1, s2)))
+        case _ => throw new Exception("Expected a string type for StrReplace")
     case StringToLower(e) =>
       infer(e) match
         case TStr(r) => TStr(narrow(expr, r.absMap(_.map(_.toLower))))
