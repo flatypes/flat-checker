@@ -39,7 +39,7 @@ final case class CharSet(pos: Boolean, chars: Set[Char]):
     if pos then new CharSet(true, chars - c) else new CharSet(false, chars + c)
 
   def representative: Char =
-    if pos then chars.min else (chars.min - 1).toChar
+    if pos then chars.min else (Char.MinValue to Char.MaxValue).find(c => !chars.contains(c)).get
 
   def toFinSet(alphabet: Set[Char]): Set[Char] =
     if pos then chars else alphabet -- chars

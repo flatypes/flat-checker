@@ -1,10 +1,11 @@
+lang Res = r"People: \{.*"
+
 method toString(names: Seq[String])
 {
-  var res = "People: {";
+  var res: Res = "People: {";
   var i = 0;
   while (i < names.length)
     invariant 0 <= i && i <= |names|
-    invariant res.startsWith("People: {")
   {
     res += names[i];
     if (i != names.length - 1) {

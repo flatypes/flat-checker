@@ -18,11 +18,8 @@ class Prover extends LazyLogging:
         val inferer = Inferer(goal)
         inferer.infer(e) match
           case TStr(r1) =>
-            if RESub.check(r1, r) then
-              true
-            else
-              logger.debug("{} inferred: {}", e.show, r1.pp)
-              false
+            logger.debug("Inferred: {} ∈ {}", e.show, r1.pp)
+            RESub.check(r1, r)
           case _ => ???
       case _ =>
         val solver = SMTSolver(using goal.sorts)

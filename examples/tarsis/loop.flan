@@ -1,8 +1,9 @@
+lang Res = r"Repeat: .*"
+
 method loop(value: String)
 {
-  var res = "Repeat: ";
+  var res: Res = "Repeat: ";
   while *
-    invariant res.startsWith("Repeat: ")
   {
     res = res + value + "!";
   }

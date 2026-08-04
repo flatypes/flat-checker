@@ -6,6 +6,7 @@ import flat.checker.domain.Prettifier.pp
 import flat.checker.domain.REOps.*
 import flat.checker.domain.StrREOps.*
 import flat.checker.domain.{*, given}
+import flat.checker.flan.*
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
 
@@ -23,10 +24,13 @@ class Inferer(goal: Goal) extends LazyLogging:
   def infer(expr: Expr): Type = expr match
     case Const(s: String) => TStr(RegEx.word(s.toList))
     case Var(x) =>
-      val r = goal.premises.reverseIterator
-        .collectFirst { case StringInLang(Var(`x`), r) => r }
-        .getOrElse(RegEx.full)
-      TStr(narrow(expr, r))
+      goal.premises.reverseIterator
+        .collectFirst { case StringInLang(Var(`x`), r) => TStr(narrow(expr, r)) }
+        .getOrElse:
+          goal.sorts(x) match
+            case SeqSort(CharSort) => TStr(narrow(expr, RegEx.full))
+            case SeqSort(SeqSort(CharSort)) => TStrSeq(RegEx.Lit(RegEx.full).star)
+            case _ => throw new Exception(s"Cannot infer type for ${expr.show}")
 
     // Char Operations
     case CharToString(e) =>
@@ -39,7 +43,7 @@ class Inferer(goal: Goal) extends LazyLogging:
       (infer(e1), infer(e2)) match
         case (TStr(r1), TStr(r2)) => TStr(narrow(expr, r1 * r2))
         case (TStrSeq(r1), TStrSeq(r2)) => TStrSeq(r1 * r2)
-        case _ => throw new Exception("Expected two sequence types for SeqConcat")
+        case _ => throw new Exception(s"Sort Error: ${expr.show}")
     case SeqLength(e) =>
       infer(e) match
         case TStr(r) => TNat(r.absLength)
@@ -48,7 +52,7 @@ class Inferer(goal: Goal) extends LazyLogging:
     case SeqSelect(e, ei) =>
       (infer(e), inferIndex(ei, e)) match
         case (TStr(r), index) => TChar(narrow(expr, r.absAt(index)))
-        case (TStrSeq(r), index) => TStr(r.absAt(index))
+        case (TStrSeq(r), index) => TStr(narrow(expr, r.absAt(index)))
         case _ => throw new Exception("Expected a sequence type for SeqAt")
     case SeqSlice(e, ei, ej) =>
       (infer(e), inferIndex(ei, e), inferIndex(ej, e)) match
