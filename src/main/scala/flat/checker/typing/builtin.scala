@@ -1,5 +1,6 @@
 package flat.checker.typing
 
+import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.flan.tpd.*
 import flat.checker.flan.{BoolSort as bool, CharSort as char, IntSort as int, stringSort as str, *}
 import org.eclipse.lsp4j.Range
@@ -58,7 +59,7 @@ object builtin:
     case ">>" => List(Member(int -> int, { case List(n1, n2) => BitShR(n1, n2) }))
     // conversion
     case "toChar" => List(Member(() -> char, { case List(n) => CharFromInt(n) }))
-    case "toString" => List(Member(() -> str, { case List(n) => StringFromInt(n) }))
+    case "toString" => List(Member(() -> str, { case List(n) => StrFromInt(n) }))
     case _ => Nil
 
   private def accessCharMember(name: String): List[Member] = name match

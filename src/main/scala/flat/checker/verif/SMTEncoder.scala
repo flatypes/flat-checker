@@ -132,7 +132,7 @@ class SMTEncoder(using vars: Map[String, Sort]):
     case StringToLower(e) => tm.mkTerm(STRING_TO_LOWER, encodeExpr(e))
     case StringToUpper(e) => tm.mkTerm(STRING_TO_UPPER, encodeExpr(e))
     case StringToInt(e) => tm.mkTerm(STRING_TO_INT, encodeExpr(e))
-    case StringFromInt(e) => tm.mkTerm(STRING_FROM_INT, encodeExpr(e))
+    case StrFromInt(e, _) => tm.mkTerm(STRING_FROM_INT, encodeExpr(e))
 
     // Set
     case e@SetLit(es) => mkSet(encodeSort(e.elemSort), es.map(encodeExpr))

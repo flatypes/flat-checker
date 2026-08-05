@@ -166,7 +166,7 @@ object Show:
       case StringToLower(e) => showMemberApply(e, "toLower")
       case StringToUpper(e) => showMemberApply(e, "toUpper")
       case StringToInt(e) => showMemberApply(e, "toInt")
-      case StringFromInt(e) => showMemberApply(e, "toString")
+      case StrFromInt(e, _) => showMemberApply(e, "toString")
 
       // Set
       case SetLit(es) => es.map(showExpr(_)).mkString("{", ", ", "}")

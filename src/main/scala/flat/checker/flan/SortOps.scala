@@ -71,7 +71,7 @@ object SortOps:
         case SeqReverse(e) => e.sort
         // String
         case _: StringSplit => SeqSort(stringSort)
-        case _: StringTrim | StringToLower | StringToUpper | StringFromInt => stringSort
+        case _: StringTrim | StringToLower | StringToUpper | StrFromInt => stringSort
         case _: StringToInt => IntSort
         // Set
         case s: SetLit => SetSort(s.elemSort)

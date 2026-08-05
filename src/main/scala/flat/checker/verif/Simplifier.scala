@@ -221,10 +221,10 @@ object Simplifier:
         e.simplify match
           case Const(s: String) => Const(s.toInt)(expr.range)
           case e => StringToInt(e)(expr.range)
-      case StringFromInt(e) =>
+      case StrFromInt(e, fmt) =>
         e.simplify match
           case Const(i: Int) => Const(i.toString)(expr.range)
-          case e => StringFromInt(e)(expr.range)
+          case e => StrFromInt(e, fmt)(expr.range)
 
       // Set
       case s@SetLit(e) => SetLit(e.map(_.simplify))(s.elemSort, s.range)

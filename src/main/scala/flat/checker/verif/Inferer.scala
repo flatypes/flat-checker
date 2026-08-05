@@ -104,6 +104,13 @@ class Inferer(goal: Goal) extends LazyLogging:
       infer(e) match
         case TStr(r) => TStr(narrow(expr, r.absTrim))
         case _ => throw new Exception("Expected a string type for StringTrim")
+    case StrFromInt(e, fmt) =>
+      val solver = LPSolver(goal.premises)
+      solver.solve(e) match
+        case (Some(min), Some(max)) =>
+          TStr(narrow(expr, absFromInt(min, max, fmt)))
+        case _ =>
+          throw new Exception(s"Cannot infer string from int for ${expr.show}: value unbounded")
 
     case other =>
       throw new Exception(s"Type inference not implemented for expression: $other")

@@ -1,6 +1,7 @@
 package flat.checker.typing
 
 import flat.checker.Reporter
+import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{RegEx, StrRE, given}
 import flat.checker.flan.*
 import flat.checker.flan.SortOps.*
@@ -8,6 +9,7 @@ import flat.checker.flan.tpd.*
 import org.eclipse.lsp4j.{Position, Range}
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class Typer(using reporter: Reporter):
   def normalize(node: untpd.Type)(using ctx: Ctx): NormType = node match
@@ -212,6 +214,10 @@ class Typer(using reporter: Reporter):
                   reporter.reportNoMatchingOverload(m.range, m.name, receiverSort, ms.map(_.funSort), argSorts)
                   (NoSort, NoExpr)
 
+    case untpd.Apply(untpd.TermName("format"), untpd.Const(s: String) :: es) =>
+      val expr = checkStrFormat(s, es, node.range)
+      (stringSort, expr)
+
     case untpd.Apply(e, es) =>
       val (sort, fun) = infer(e)
       sort match
@@ -234,6 +240,51 @@ class Typer(using reporter: Reporter):
     else if argNodes.length > funSort.arity then
       reporter.reportTooManyArgs(range, funSort)
     argNodes.zip(funSort.argSorts).map(check)
+
+  private def checkStrFormat(fmt: String, args: List[untpd.Expr], range: Range)(using ctx: Ctx, vs: VarStore): Expr =
+    val parts = ListBuffer.empty[Expr]
+    var i = 0
+    var k = 0
+    while i < fmt.length do
+      if fmt.drop(i).startsWith("%%") then
+        parts += Const("%")
+        i += 2
+      else if fmt(i) == '%' then
+        parseFormatter(fmt.drop(i + 1), range) match
+          case Some((f, n)) if k < args.length =>
+            val e = check(args(k), IntSort)
+            parts += StrFromInt(e, f)
+            i += 1 + n
+            k += 1
+          case _ =>
+            i = fmt.length
+      else
+        val s = fmt.drop(i).takeWhile(_ != '%')
+        parts += Const(s)
+        i += s.length
+
+    if parts.isEmpty then Const("") else parts.reduce(SeqConcat(_, _)(range))
+
+  private def parseFormatter(f: String, range: Range): Option[(NumStrFormat, Int)] =
+    // flag: 0 for zero-padded
+    val zeroPadded = f.startsWith("0")
+    var i = 0
+    if zeroPadded then
+      i += 1
+    // width
+    val width = f.drop(i).takeWhile(_.isDigit)
+    i += width.length
+    if zeroPadded && width.isEmpty then
+      reporter.reportSyntaxError("no width specified for zero-padded format", range)
+      return None
+    // conversion
+    if !Set('d', 'o', 'x', 'X').contains(f(i)) then
+      reporter.reportSyntaxError(s"invalid conversion specifier '${f(i)}'", range)
+      return None
+    val conv = f(i)
+    val formatter = NumStrFormat(zeroPadded = zeroPadded, width = if width.isEmpty then 0 else width.toInt,
+      conv = conv)
+    Some(formatter, i + 1)
 
   def check(node: untpd.Expr, expected: Sort)(using ctx: Ctx, vs: VarStore): Expr =
     (node, expected) match

@@ -1,6 +1,7 @@
 package flat.checker.flan
 
 import flat.checker.domain.StrRE
+import flat.checker.domain.StrREOps.NumStrFormat
 import org.eclipse.lsp4j.{Position, Range}
 
 object tpd:
@@ -323,9 +324,10 @@ object tpd:
       case List(e) => StringToInt(e)(range)
       case _ => throw IllegalArgumentException("StringToInt must have exactly 1 subtree")
 
-  final case class StringFromInt(int: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StringFromInt = subtrees match
-      case List(e) => StringFromInt(e)(range)
+  final case class StrFromInt(int: Expr, fmt: NumStrFormat = NumStrFormat())
+                             (val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): StrFromInt = subtrees match
+      case List(e) => StrFromInt(e, fmt)(range)
       case _ => throw IllegalArgumentException("StringFromInt must have exactly 1 subtree")
 
   // Set Operations
