@@ -1,0 +1,107 @@
+/* Construct a time from a string in one of the ISO 8601 formats. */
+method timeFromISOFormat(timeStr: str): Time
+{
+  var s = timeStr;
+  if s.startsWith("T") {
+    s = s[1:];
+  }
+
+  return parseISOFormatTime(s);
+}
+
+method parseISOFormatTime(timeStr: str) returns ()
+{
+  if |timeStr| < 2 {
+    abort "Isoformat time too short";
+  }
+
+  var tzPos = timeStr.indexOf('-') + 1;
+  if tzPos == 0 {
+    tzPos = timeStr.indexOf('+') + 1;
+  }
+  if tzPos == 0 {
+    tzPos = timeStr.indexOf('Z') + 1;
+  }
+  time = tzPos > 0 ? timeStr[:tzPos - 1] : timeStr;
+
+  hh, mm, ss, us = parse_hh_mm_ss_ff(time);
+  if hh == 24 {
+    if mm == 0 && ss == 0 && us == 0 {
+      hh = 0;
+    } else {
+      abort "Invalid time";
+    }
+  }
+
+  tzi = None
+  if tzPos == |timeStr| && timeStr[|timeStr| - 1] == 'Z' {
+    tzi = timezoneUtc;
+  } else if tzPos > 0 {
+    tzi = parse_tz_offset(timeStr[tzPos - 1:]);
+  }
+}
+
+method _parse_hh_mm_ss_ff(tstr: str) returns (int, int, int, int)
+{
+  var len_str = |tstr|;
+
+  var time_comps = [0, 0, 0, 0];
+  var pos = 0;
+  var comp = 0;
+  var has_sep: bool;
+  while comp < 3
+  {
+    if (len_str - pos) < 2 {
+      abort "Incomplete time component";
+    }
+
+    time_comps[comp] = tstr[pos:pos+2].toInt;
+
+    pos += 2;
+    next_char = tstr[pos:pos+1];
+
+    if comp == 0 {
+      has_sep = next_char == ':';
+    }
+
+    if !next_char || comp >= 2 {
+      break;
+    }
+
+    if has_sep && next_char != ':' {
+      abort "Invalid time separator";
+    }
+
+    pos += has_sep;
+    comp += 1;
+  }
+
+  if pos < len_str {
+    if tstr[pos] !in ".," {
+      abort "Invalid microsecond separator";
+    } else {
+      pos += 1;
+      if !tstr[pos:].forall(_is_ascii_digit) {
+        abort "Non-digit values in fraction";
+      }
+
+      var len_remainder = len_str - pos;
+
+      if len_remainder >= 6 {
+        to_parse = 6;
+      } else {
+        to_parse = len_remainder;
+      }
+
+      time_comps[3] = tstr[pos:(pos+to_parse)].toInt;
+      if to_parse < 6 {
+        time_comps[3] *= _FRACTION_CORRECTION[to_parse-1];
+      }
+    }
+  }
+
+  return (time_comps[0], time_comps[1], time_comps[2], time_comps[3]);
+}
+
+def _is_ascii_digit(c: str): bool = c in "0123456789"
+

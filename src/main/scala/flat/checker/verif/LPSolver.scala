@@ -32,7 +32,6 @@ class LPSolver(constraints: List[Expr]):
       case e => m += lookup(e) -> -1.0
     val rel = op match
       case "==" => Relationship.EQ
-      case "!=" => throw IllegalArgumentException(s"LPSolver does not support '!=' constraint: $e1 != $e2")
       case "<=" => Relationship.LEQ
       case "<" => const -= 1; Relationship.LEQ
     LinearConstraint(mkCoefficients(m.toMap), rel, const)
@@ -45,7 +44,6 @@ class LPSolver(constraints: List[Expr]):
   def solve(goal: Expr): (Option[Int], Option[Int]) =
     val linearConstraints = constraints.collect:
       case Eq(e1, e2) => encodeLinearConstraint("==", e1, e2)
-      case Ne(e1, e2) => encodeLinearConstraint("!=", e1, e2)
       case Le(e1, e2) => encodeLinearConstraint("<=", e1, e2)
       case Lt(e1, e2) => encodeLinearConstraint("<", e1, e2)
 

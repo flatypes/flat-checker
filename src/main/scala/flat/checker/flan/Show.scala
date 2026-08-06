@@ -45,7 +45,7 @@ object Show extends LazyLogging:
 
   private def getLevel(expr: Expr): Int = expr match
     case _: Negate | _: Not | _: BitNot => LEVEL_PREFIX
-    case _: Mul => LEVEL_MUL
+    case _: Mul | _: Div | _: Mod => LEVEL_MUL
     case _: Add | _: Sub | _: SeqConcat | _: SetDiff => LEVEL_ADD
     case _: Eq | _: Ne | _: Le | _: Lt | _: Subset => LEVEL_REL
     case _: BitXor | _: BitShL | _: BitShR => LEVEL_BIT
@@ -92,6 +92,8 @@ object Show extends LazyLogging:
       case Add(e1, e2) => showInfix("+", LEVEL_ADD, ASSOC_LEFT, e1, e2)
       case Sub(e1, e2) => showInfix("-", LEVEL_ADD, ASSOC_LEFT, e1, e2)
       case Mul(e1, e2) => showInfix("*", LEVEL_MUL, ASSOC_LEFT, e1, e2)
+      case Div(e1, e2) => showInfix("/", LEVEL_MUL, ASSOC_LEFT, e1, e2)
+      case Mod(e1, e2) => showInfix("%", LEVEL_MUL, ASSOC_LEFT, e1, e2)
       case Le(e1, e2) => showInfix("≤", LEVEL_REL, ASSOC_NONE, e1, e2)
       case Lt(e1, e2) => showInfix("<", LEVEL_REL, ASSOC_NONE, e1, e2)
 

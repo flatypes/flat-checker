@@ -53,7 +53,7 @@ exprOrNondet
   ;
 
 augAssignOp
-  : '+=' | '-=' | '*=' | '&=' | '|=' | '^='
+  : '+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^='
   ;
 
 ifBranch
@@ -86,8 +86,8 @@ expr
   | expr '[' expr ']'                     #select
   | expr '[' range ']'                    #slice
   | expr '[' expr '=' expr ']'            #update
-  | op=(NOT | '-' | '~') expr           #prefixExpr
-  | expr op='*' expr                      #infixExpr
+  | op=(NOT | '-' | '~') expr             #prefixExpr
+  | expr op=('*' | '/' | '%') expr        #infixExpr
   | expr op=('+' | '-') expr              #infixExpr
   | expr op=('<<' | '>>') expr            #infixExpr
   | expr op='&' expr                      #infixExpr

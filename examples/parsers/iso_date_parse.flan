@@ -1,16 +1,18 @@
 lang Year = r"[0-9]{4}"
 lang Month = r"0[1-9]|1[0-2]"
 lang Day = r"0[1-9]|[12][0-9]|3[01]"
+lang CalendarDate = Year Month Day | Year '-' Month '-' Day
+
 lang Week = r"W(0[1-9]|[1-4][0-9]|5[0-3])"
-lang WeekDay = r"[1-7]"
-lang Date = Year Month Day | Year '-' Month '-' Day
-          | Year Week WeekDay? | Year '-' Week ('-' WeekDay)?
+lang Weekday = r"[1-7]"
+lang WeekDate = Year Week Weekday? | Year '-' Week ('-' Weekday)?
+lang Date = CalendarDate | WeekDate
 
 /* Construct a date from a string in ISO 8601 format. */
-method dateFromISOFormat(dateStr: Date) returns (year: int, month: int, day: int)
-  ensures 0 <= year && year <= 9999
-  ensures 1 <= month && month <= 12
-  ensures 1 <= day && day <= 31
+method dateFromISOFormat(dateStr: Date) returns (y: int, m: int, d: int)
+  ensures 0 <= y && y <= 9999
+  ensures 1 <= m && m <= 12
+  ensures 1 <= d && d <= 31
 {
   if !dateStr.isAscii {
     abort "Argument must be an ASCII str";
@@ -64,9 +66,10 @@ method parseISOFormatDate(dateStr: Date) returns (year: int, month: int, day: in
   }
 }
 
-method isoWeekToGregorian(year: int, weekno: int, dayno: int) returns (year: int, month: int, day: int)
-  ensures 0 <= year && year <= 9999
-  ensures 1 <= month && month <= 12
-  ensures 1 <= day && day <= 31
-
-
+method isoWeekToGregorian(year: int, week: int, day: int) returns (y: int, m: int, d: int)
+  requires 0 <= year && year <= 9999
+  requires 1 <= week && week <= 53
+  requires 1 <= day && day <= 7
+  ensures 0 <= y && y <= 9999
+  ensures 1 <= m && m <= 12
+  ensures 1 <= d && d <= 31

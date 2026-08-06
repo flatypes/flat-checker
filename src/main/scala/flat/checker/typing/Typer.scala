@@ -256,6 +256,10 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       if fmt.drop(i).startsWith("%%") then
         parts += Const("%")
         i += 2
+      else if fmt.drop(i).startsWith("%s") then
+        parts += check(args(k), stringSort)
+        k += 1
+        i += 2
       else if fmt(i) == '%' then
         parseFormatter(fmt.drop(i + 1), range) match
           case Some((f, n)) if k < args.length =>

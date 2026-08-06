@@ -108,10 +108,11 @@ class Inferer(goal: Goal) extends LazyLogging:
     case StrFromInt(e, fmt) =>
       val solver = LPSolver(goal.premises)
       solver.solve(e) match
-        case (Some(min), Some(max)) =>
+        case (Some(min), Some(max)) if 0 <= min =>
           TStr(narrow(expr, absFromInt(min, max, fmt)))
         case _ =>
-          throw new Exception(s"Cannot infer string from int for ${expr.show}: value unbounded")
+          val r1 = RegEx.Lit(CharSet.from(fmt.digits))
+          TStr(narrow(expr, r1.plus))
     case StringToInt(e) =>
       infer(e) match
         case TStr(r) => TNum(r.absToInt())
@@ -121,6 +122,11 @@ class Inferer(goal: Goal) extends LazyLogging:
       infer(e) match
         case TStr(r) => TBool(r.absIsAscii)
         case _ => throw new Exception("Expected a string type for StrIsAscii")
+
+    case Ite(_, e1, e2) =>
+      (infer(e1), infer(e2)) match
+        case (TStr(r1), TStr(r2)) => TStr(narrow(expr, r1 | r2))
+        case _ => throw new Exception(s"Type inference not implemented for Ite with types: ${infer(e1)} and ${infer(e2)}")
 
     case other =>
       throw new Exception(s"Type inference not implemented for expression: $other")

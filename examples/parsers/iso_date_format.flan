@@ -3,7 +3,7 @@ lang Month = r"0[1-9]|1[0-2]"
 lang Day = r"0[1-9]|[12][0-9]|3[01]"
 lang Date = Year '-' Month '-' Day
 
-method format_date(year: Int, month: Int, day: Int): Date
+method formatISODate(year: Int, month: Int, day: Int): Date
   requires 0 <= year && year <= 9999
   requires 1 <= month && month <= 12
   requires 1 <= day && day <= 31

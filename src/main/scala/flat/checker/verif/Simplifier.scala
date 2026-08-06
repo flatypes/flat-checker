@@ -96,6 +96,16 @@ object Simplifier extends LazyLogging:
           case (e, Const(1)) => e
           case (Const(0), _) | (_, Const(0)) => Const(0)(expr.range)
           case (e1, e2) => Mul(e1, e2)(expr.range)
+      case Div(e1, e2) =>
+        (e1.simplify, e2.simplify) match
+          case (Const(i1: Int), Const(i2: Int)) if i2 != 0 => Const(i1 / i2)(expr.range)
+          case (e, Const(1)) => e
+          case (e1, e2) => Div(e1, e2)(expr.range)
+      case Mod(e1, e2) =>
+        (e1.simplify, e2.simplify) match
+          case (Const(i1: Int), Const(i2: Int)) if i2 != 0 => Const(i1 % i2)(expr.range)
+          case (e, Const(1)) => Const(0)(expr.range)
+          case (e1, e2) => Mod(e1, e2)(expr.range)
 
       // Int relational
       case Le(e1, e2) =>
