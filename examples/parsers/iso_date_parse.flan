@@ -1,0 +1,72 @@
+lang Year = r"[0-9]{4}"
+lang Month = r"0[1-9]|1[0-2]"
+lang Day = r"0[1-9]|[12][0-9]|3[01]"
+lang Week = r"W(0[1-9]|[1-4][0-9]|5[0-3])"
+lang WeekDay = r"[1-7]"
+lang Date = Year Month Day | Year '-' Month '-' Day
+          | Year Week WeekDay? | Year '-' Week ('-' WeekDay)?
+
+/* Construct a date from a string in ISO 8601 format. */
+method dateFromISOFormat(dateStr: Date) returns (year: int, month: int, day: int)
+  ensures 0 <= year && year <= 9999
+  ensures 1 <= month && month <= 12
+  ensures 1 <= day && day <= 31
+{
+  if !dateStr.isAscii {
+    abort "Argument must be an ASCII str";
+  }
+
+  if |dateStr| !in {7, 8, 10} {
+    abort "Invalid isoformat string";
+  }
+
+  return parseISOFormatDate(dateStr);
+}
+
+method parseISOFormatDate(dateStr: Date) returns (year: int, month: int, day: int)
+  ensures 0 <= year && year <= 9999
+  ensures 1 <= month && month <= 12
+  ensures 1 <= day && day <= 31
+{
+  // It is assumed that this is an ASCII-only string of lengths 7, 8 or 10
+  assert |dateStr| in {7, 8, 10};
+  year = dateStr[0:4].toInt;
+  var hasSep = dateStr[4] == '-';
+
+  var pos = 4 + (hasSep ? 1 : 0);
+  if (dateStr[pos:pos + 1] == "W") {
+    // YYYY-?Www-?D?
+    pos += 1;
+    var weekno = dateStr[pos:pos + 2].toInt;
+    pos += 2;
+
+    var dayno = 1;
+    if pos < |dateStr| {
+      if (dateStr[pos:pos + 1] == "-") != hasSep {
+        abort "Inconsistent use of dash separator";
+      }
+
+      pos += (hasSep ? 1 : 0);
+      dayno = dateStr[pos:pos + 1].toInt;
+    }
+
+    return isoWeekToGregorian(year, weekno, dayno);
+
+  } else {
+    month = dateStr[pos:pos + 2].toInt;
+    pos += 2;
+    if (dateStr[pos:pos + 1] == "-") != hasSep {
+      abort "Inconsistent use of dash separator";
+    }
+
+    pos += (hasSep ? 1 : 0);
+    day = dateStr[pos:pos + 2].toInt;
+  }
+}
+
+method isoWeekToGregorian(year: int, weekno: int, dayno: int) returns (year: int, month: int, day: int)
+  ensures 0 <= year && year <= 9999
+  ensures 1 <= month && month <= 12
+  ensures 1 <= day && day <= 31
+
+

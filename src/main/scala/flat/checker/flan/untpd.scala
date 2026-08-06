@@ -15,7 +15,7 @@ object untpd:
 
   final case class ConstDef(ident: Ident, value: Expr) extends TopDef
 
-  final case class MethodDef(ident: Ident, params: List[Param], returnType: Option[Type],
+  final case class MethodDef(ident: Ident, params: List[Param], returnParams: List[Param],
                              requires: List[Expr], ensures: List[Expr], body: Option[List[Stmt]])
                             (val endRange: Range) extends TopDef
 
@@ -44,6 +44,8 @@ object untpd:
 
   final case class Continue()(val range: Range) extends Stmt
 
+  final case class Abort(expr: Expr) extends Stmt
+
   final case class Assume(expr: Expr) extends Stmt
 
   final case class Assert(expr: Expr) extends Stmt
@@ -51,23 +53,33 @@ object untpd:
   // Types
   trait Type
 
+  @deprecated
   case object NullType extends Type
 
+  @deprecated
   case object BoolType extends Type
 
+  @deprecated
   case object IntType extends Type
 
+  @deprecated
   case object CharType extends Type
 
+  @deprecated
   final case class SeqType(elemType: Type) extends Type
 
+  @deprecated
   val stringType = SeqType(CharType)
 
+  @deprecated
   final case class SetType(elemType: Type) extends Type
 
+  @deprecated
   final case class MapType(keyType: Type, valueType: Type) extends Type
 
   final case class TypeName(name: String)(val range: Range) extends Type
+
+  final case class GenericType(constr: String, args: List[Type])(val range: Range) extends Type
 
   final case class TupleType(elemTypes: List[Type]) extends Type:
     def arity: Int = elemTypes.length

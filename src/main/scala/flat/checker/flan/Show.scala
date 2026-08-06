@@ -1,10 +1,10 @@
 package flat.checker.flan
 
+import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.Prettifier.pp
 import flat.checker.flan.tpd.*
-import flat.regex.RegEx
 
-object Show:
+object Show extends LazyLogging:
   // Types and sorts
   extension (sort: Sort)
     def show: String = sort match
@@ -29,40 +29,6 @@ object Show:
   extension (varDecl: VarDecl)
     def show: String = s"${varDecl.name}: ${varDecl.typ.show}"
 
-  // Regular Expressions
-
-  import RegEx.*
-
-  private def showRegEx(regEx: RegEx): String = regEx match
-    case RENone => "∅"
-    case RENull => "ε"
-    case RELit(cs) =>
-      if cs.isEmpty then "∅"
-      else if cs.isSingleton then cs.head.toString
-      else if cs.isFull then "."
-      else
-        val (ranges, pos) = cs.toSMT
-        val ss = ranges.map:
-          case c: Char => c.toString
-          case (c1, c2) => s"$c1-$c2"
-        "[" + (if pos then "" else "^") + ss.mkString + "]"
-    case REConcat(r1, r2) =>
-      val s1 = if r1.isInstanceOf[REUnion] then "(" + showRegEx(r1) + ")" else showRegEx(r1)
-      val s2 = if r2.isInstanceOf[REUnion] then "(" + showRegEx(r2) + ")" else showRegEx(r2)
-      s1 + s2
-    case REUnion(r1, r2) => // right associative
-      val s1 = if r1.isInstanceOf[REUnion] then "(" + showRegEx(r1) + ")" else showRegEx(r1)
-      val s2 = showRegEx(r2)
-      s"$s1|$s2"
-    case REStar(r) =>
-      val s = showRegEx(r)
-      if s.length == 1 then s + "*" else "(" + s + ")" + "*"
-
-  extension (regEx: RegEx)
-    def show: String =
-      val s = showRegEx(regEx)
-      if s.length > 80 then s.take(80) + "..." else s
-
   // Expressions
   val LEVEL_TIGHTER = 0
   val LEVEL_PREFIX = 10
@@ -78,17 +44,17 @@ object Show:
   val LEVEL_LOOSER = 100
 
   private def getLevel(expr: Expr): Int = expr match
-    case _: Negate | Not | BitNot => LEVEL_PREFIX
+    case _: Negate | _: Not | _: BitNot => LEVEL_PREFIX
     case _: Mul => LEVEL_MUL
-    case _: Add | Sub | SeqConcat | SetDiff => LEVEL_ADD
-    case _: Eq | Ne | Le | Lt | Subset => LEVEL_REL
-    case _: BitXor | BitShL | BitShR => LEVEL_BIT
-    case _: BitAnd | SetInter => LEVEL_BIT_AND
-    case _: BitOr | SetUnion => LEVEL_BIT_OR
+    case _: Add | _: Sub | _: SeqConcat | _: SetDiff => LEVEL_ADD
+    case _: Eq | _: Ne | _: Le | _: Lt | _: Subset => LEVEL_REL
+    case _: BitXor | _: BitShL | _: BitShR => LEVEL_BIT
+    case _: BitAnd | _: SetInter => LEVEL_BIT_AND
+    case _: BitOr | _: SetUnion => LEVEL_BIT_OR
     case _: And => LEVEL_AND
     case _: Or => LEVEL_OR
     case _: Implies => LEVEL_ARROW
-    case _: Lambda | Ite => LEVEL_LOOSER
+    case _: Ite => LEVEL_LOOSER
     case _ => LEVEL_TIGHTER
 
   val ASSOC_NONE = 0
@@ -113,7 +79,7 @@ object Show:
       // Universal
       case Eq(e1, e2) => showInfix("==", LEVEL_REL, ASSOC_NONE, e1, e2)
       case Ne(e1, e2) => showInfix("≠", LEVEL_REL, ASSOC_NONE, e1, e2)
-      case Ite(e, e1, e2) => s"if ${showExpr(e)} then ${showExpr(e1)} else ${showExpr(e2)}"
+      case Ite(e, e1, e2) => s"${showExpr(e)} ? ${showExpr(e1)} : ${showExpr(e2)}"
 
       // Bool
       case And(e1, e2) => showInfix("∧", LEVEL_AND, ASSOC_RIGHT, e1, e2)
@@ -167,6 +133,7 @@ object Show:
       case StringToUpper(e) => showMemberApply(e, "toUpper")
       case StringToInt(e) => showMemberApply(e, "toInt")
       case StrFromInt(e, _) => showMemberApply(e, "toString")
+      case StrIsAscii(e) => showMemberApply(e, "isAscii")
 
       // Set
       case SetLit(es) => es.map(showExpr(_)).mkString("{", ", ", "}")

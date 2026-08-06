@@ -119,6 +119,7 @@ object builtin:
     case "toLower" => List(Member(() -> str, { case List(s) => StringToLower(s) }))
     case "toUpper" => List(Member(() -> str, { case List(s) => StringToUpper(s) }))
     case "toInt" => List(Member(() -> int, { case List(s) => StringToInt(s) }))
+    case "isAscii" => List(Member(() -> bool, { case List(s) => StrIsAscii(s) }))
     case _ => Nil
 
   private def accessSetMember(t: Sort, name: String): List[Member] = name match

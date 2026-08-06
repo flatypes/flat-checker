@@ -1,12 +1,13 @@
 package flat.checker.typing
 
+import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
 import flat.checker.flan.*
 import flat.checker.flan.tpd.*
 
 import scala.collection.mutable.ListBuffer
 
-class Checker(using reporter: Reporter):
+class Checker(using reporter: Reporter) extends LazyLogging:
   private val typer = Typer()
 
   def checkProgram(tree: untpd.Program): Program =
@@ -36,12 +37,10 @@ class Checker(using reporter: Reporter):
       val (sort, value) = typer.infer(e)(using ctx, VarStore())
       ConstInfo(sort, value)(id.range)
 
-    case untpd.MethodDef(id, ps, rt, _, _, _) =>
-      val params = typer.inferParamList(ps)(using ctx)
-      val returnType: NormType = rt match
-        case Some(t) => typer.normalize(t)(using ctx)
-        case None => unitSort
-      MethodInfo(params, returnType)(id.range)
+    case untpd.MethodDef(id, ps1, ps2, _, _, _) =>
+      val params = typer.inferParamList(ps1)(using ctx)
+      val returnParams = typer.inferParamList(ps2)(using ctx)
+      MethodInfo(params, returnParams)(id.range)
 
   private def checkMethod(node: untpd.MethodDef, globalCtx: GlobalCtx): MethodDef =
     val name = node.ident.name
@@ -53,14 +52,15 @@ class Checker(using reporter: Reporter):
       val index = vs.add(d.name, d.typ)
       ctx = ctx.define(d.name, VarInfo(d.typ, index, isVal = true)(p.ident.range))
     val requires = node.requires.map(typer.check(_, BoolSort)(using ctx, vs))
-    // load return variable and check postconditions
-    val index = vs.add("_", info.returnType)
-    ctx = ctx.define("_", VarInfo(info.returnType, index)(node.ident.range))
+    // load return variables and check postconditions
+    for (p, d) <- node.returnParams zip info.returnParams do
+      val index = vs.add(d.name, d.typ)
+      ctx = ctx.define(d.name, VarInfo(d.typ, index)(p.ident.range))
     val ensures = node.ensures.map(typer.check(_, BoolSort)(using ctx, vs))
     // check body
     val body = node.body.map(checkBlock(_, ctx)(using vs))
     val locals = vs.toList.drop(info.params.length + 1) // exclude parameters and return variable
-    MethodDef(name, info.params, VarDecl("_", info.returnType), requires, ensures, locals, body)(
+    MethodDef(name, info.params, info.returnParams, requires, ensures, locals, body)(
       node.endRange)
 
   private def declareVar(ident: untpd.Ident, normType: NormType, ctx: LocalCtx)(using vs: VarStore): LocalCtx =
@@ -126,17 +126,21 @@ class Checker(using reporter: Reporter):
         val (_, value) = typer.infer(e)(using ctx)
         body += ExprStmt(value)
 
-      case ret@untpd.Return(rhs) =>
-        (ctx.info.returnSort, rhs) match
-          case (`unitSort`, None) =>
-          case (`unitSort`, Some(e)) =>
-            typer.infer(e)(using ctx)
-          // no assignment as this return value is discarded
-          case (s, Some(e)) =>
-            val value = typer.check(e, s)(using ctx)
-            body += Assign("_", value)
-          case (_, None) =>
-            reporter.reportMissingReturnValue(ret.range)
+      case ret@untpd.Return(None) =>
+        body += Return()(ret.range)
+      case ret@untpd.Return(Some(untpd.TupleExpr(es))) if es.length == ctx.info.returnParams.length =>
+        for (e, p) <- es zip ctx.info.returnParams do
+          val value = typer.check(e, p.typ.sort)(using ctx)
+          body += Assign(p.name, value)
+        body += Return()(ret.range)
+      case ret@untpd.Return(Some(e)) =>
+        val value = typer.check(e, ctx.info.returnSort)(using ctx)
+        ctx.info.returnParams match
+          case List(p) =>
+            body += Assign(p.name, value)
+          case ps =>
+            for (p, i) <- ps.zipWithIndex do
+              body += Assign(p.name, TupleSelect(i, value)(e.range))
         body += Return()(ret.range)
 
       case untpd.If(g, b1, b2) =>
@@ -168,6 +172,9 @@ class Checker(using reporter: Reporter):
       case untpd.Assert(e) =>
         val expr = typer.check(e, BoolSort)(using ctx)
         body += Assert(expr)
+      case untpd.Abort(e) =>
+        val (_, expr) = typer.infer(e)(using ctx)
+        body += Abort(expr)
 
     body.toList
 

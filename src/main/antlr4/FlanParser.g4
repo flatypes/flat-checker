@@ -8,7 +8,8 @@ program
 
 // Top-level definitions
 topDef
-  : 'method' IDENT paramList (':' type)? requiresSpec* ensuresSpec* block?    #methodDef
+  : 'method' IDENT paramList (':' type | 'returns' paramList)?
+      requiresSpec* ensuresSpec* block?                                       #methodDef
   | 'const' IDENT '=' expr                                                    #constDef
   | 'type' IDENT '=' type                                                     #typeDef
   | 'lang' IDENT '=' lang                                                     #langDef
@@ -41,6 +42,7 @@ stmt
   | 'while' guard invariantSpec* block                  #while
   | 'break' ';'                                         #break
   | 'continue' ';'                                      #continue
+  | 'abort' expr ';'                                    #abort
   | 'assume' expr ';'                                   #assume
   | 'assert' expr ';'                                   #assert
   ;
@@ -84,7 +86,7 @@ expr
   | expr '[' expr ']'                     #select
   | expr '[' range ']'                    #slice
   | expr '[' expr '=' expr ']'            #update
-  | op=('!' | '-' | '~') expr             #prefixExpr
+  | op=(NOT | '-' | '~') expr           #prefixExpr
   | expr op='*' expr                      #infixExpr
   | expr op=('+' | '-') expr              #infixExpr
   | expr op=('<<' | '>>') expr            #infixExpr
@@ -93,8 +95,8 @@ expr
   | expr op='|' expr                      #infixExpr
   | expr op=relOp expr                    #relExpr
   | expr '∈' lang                         #inLang
-  | <assoc=right> expr op='&&' expr       #infixExpr
-  | <assoc=right> expr op='||' expr       #infixExpr
+  | <assoc=right> expr op=AND expr        #infixExpr
+  | <assoc=right> expr op=OR expr         #infixExpr
   | <assoc=right> expr op='==>' expr      #infixExpr
   | expr '?' expr ':' expr                #iteExpr
   ;
@@ -120,22 +122,14 @@ range
   ;
 
 relOp
-  : '==' | '!=' | '<' | '<=' | '>' | '>=' | 'in' | '!' 'in'
+  : '==' | '!=' | '<' | '<=' | '>' | '>=' | 'in' | NOT 'in'
   ;
 
 // Types
 type
-  : NULL                              #nullType
-  | BOOL                              #boolType
-  | INT                               #intType
-  | CHAR                              #charType
-  | STRING                            #stringType
-  | SEQ '[' type ']'                  #seqType
-  | SET '[' type ']'                  #setType
-  | MAP '[' type ',' type ']'         #mapType
-  | IDENT                             #typeName
+  : IDENT                             #typeName
+  | IDENT '[' type (',' type)* ']'    #genericType
   | '(' (type (',' type)*)? ')'       #parenType
-  | type '?'                          #optType
   | <assoc=right> type '|' type       #unionType
   | paramList '->' type               #funType
   | <assoc=right> type '->' type      #funType

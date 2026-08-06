@@ -1,5 +1,6 @@
 package flat.checker.verif
 
+import com.typesafe.scalalogging.LazyLogging
 import flat.checker.flan.*
 import flat.checker.flan.tpd.*
 import io.github.cvc5
@@ -8,7 +9,7 @@ import io.github.cvc5.{Kind, Term, TermManager}
 
 import scala.collection.mutable
 
-class SMTEncoder(using vars: Map[String, Sort]):
+class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
   val tm: TermManager = TermManager()
 
   private val strCount = tm.mkConst((str, str) -> int, "str.count")
@@ -133,6 +134,7 @@ class SMTEncoder(using vars: Map[String, Sort]):
     case StringToUpper(e) => tm.mkTerm(STRING_TO_UPPER, encodeExpr(e))
     case StringToInt(e) => tm.mkTerm(STRING_TO_INT, encodeExpr(e))
     case StrFromInt(e, _) => tm.mkTerm(STRING_FROM_INT, encodeExpr(e))
+    case StrIsAscii(e) => encodeUninterpreted(expr, BoolSort)
 
     // Set
     case e@SetLit(es) => mkSet(encodeSort(e.elemSort), es.map(encodeExpr))
@@ -233,8 +235,9 @@ class SMTEncoder(using vars: Map[String, Sort]):
     tm.mkTerm(APPLY_UF, (func +: args).toArray)
 
   private inline def mkSet(elemSort: cvc5.Sort, elems: List[cvc5.Term]): cvc5.Term =
-    val emptySet = tm.mkEmptySet(elemSort)
-    tm.mkTerm(SET_INSERT, (elems :+ emptySet).toArray)
+    val emptySet = tm.mkEmptySet(tm.mkSetSort(elemSort))
+    if elems.isEmpty then emptySet
+    else tm.mkTerm(SET_INSERT, (elems :+ emptySet).toArray)
 
   private inline def mkArray(arraySort: cvc5.Sort, keys: List[cvc5.Term], values: List[cvc5.Term]): cvc5.Term =
     val emptyArray = tm.mkConst(arraySort)

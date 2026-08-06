@@ -221,6 +221,53 @@ object REOps extends LazyLogging:
         case Comp(r1, r2) if !r1.alphabet.contains(t.head) => r1 * r2.filterNotContain2(t)
         case _ => NotContainSolver(t).solve(r)
 
+    private def filterElemAt(i: Int, f: A => A): RegEx[A] =
+      if i == 0 then
+        sum(for (a, r1) <- r.absSplitAt1; b = f(a); if b.nonEmpty yield Lit(b) * r1)
+      else
+        sum(for (a, r1) <- r.absSplitAt1; r2 = r1.filterElemAt(i - 1, f); if r2.nonEmpty yield Lit(a) * r2)
+
+    def filterElemAtEq(i: Int, x: set.Symbol): RegEx[A] =
+      filterElemAt(i, a => if a.contains(x) then set.singleton(x) else set.empty)
+
+    def filterElemAtNe(i: Int, x: set.Symbol): RegEx[A] =
+      filterElemAt(i, a => a - x)
+
+    def filterLengthLe(n: Int): RegEx[A] =
+      require(0 <= n)
+      val rLen = r.absLength
+      if rLen.min > n then Zero()
+      else r match
+        case Zero() | One() | Lit(_) => r
+        case Plus(r1, r2) => r1.filterLengthLe(n) + r2.filterLengthLe(n)
+        case Comp(r1, r2) =>
+          (r1.constLength, r2.constLength) match
+            case (Some(l1), _) => r1 * r2.filterLengthLe(n - l1)
+            case (_, Some(l2)) => r1.filterLengthLe(n - l2) * r2
+            case _ => r
+        case Star(_) => if n == 0 then One() else r
+
+    def filterLengthGe(n: Int): RegEx[A] =
+      require(0 <= n)
+      val rLen = r.absLength
+      if rLen.isFinite && rLen.toFinSet.max < n then Zero()
+      else r match
+        case Zero() | One() | Lit(_) => r
+        case Plus(r1, r2) => r1.filterLengthGe(n) + r2.filterLengthGe(n)
+        case Comp(r1, r2) =>
+          (r1.constLength, r2.constLength) match
+            case (Some(l1), _) => r1 * r2.filterLengthGe(n - l1)
+            case (_, Some(l2)) => r1.filterLengthGe(n - l2) * r2
+            case _ => r
+        case Star(r1) => if 1 <= n then r1.plus else r
+
+    private def constLength: Option[Int] =
+      val r1 = r.absLength
+      if r1.isFinite then
+        val ns = r1.toFinSet
+        if ns.size == 1 then Some(ns.head) else None
+      else None
+
   private class CountSolver[A](using set: SymbolSet[A])(t: List[set.Symbol]) extends LinearSolver[A, Set[Int]]:
     require(t.nonEmpty)
 

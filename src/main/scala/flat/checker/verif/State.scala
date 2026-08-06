@@ -4,13 +4,16 @@ import flat.checker.flan.*
 import flat.checker.flan.tpd.{Expr, NormType, VarDecl}
 import flat.checker.verif.Simplifier.{simplify, toCNF}
 
-final case class MethodInfo(params: List[VarDecl], returns: VarDecl, requires: List[Expr], ensures: List[Expr],
+final case class MethodInfo(params: List[VarDecl], returns: List[VarDecl],
+                            requires: List[Expr], ensures: List[Expr],
                             locals: List[VarDecl] = Nil):
   def paramNames: List[String] = params.map(_.name)
 
-  def localNames: List[String] = locals.map(_.name)
+  def returnNames: List[String] = returns.map(_.name)
 
-  def types: Map[String, NormType] = Map.from(for p <- params ++ List(returns) ++ locals yield p.name -> p.typ)
+  def names: List[String] = params.map(_.name) ++ returns.map(_.name) ++ locals.map(_.name)
+
+  def types: Map[String, NormType] = Map.from(for p <- params ++ returns ++ locals yield p.name -> p.typ)
 
 final case class VarInfo(typ: Sort, value: Expr)
 

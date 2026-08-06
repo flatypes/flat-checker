@@ -55,6 +55,47 @@ object StrREOps extends LazyLogging:
 
     def absTrim: StrRE = r.absTrimLeft.absTrimRight
 
+    def absIsAscii: BoolSet =
+      if r.alphabet.subsetOf(CharSet.from(0.toChar to 0x7F.toChar)) then BoolSet.True
+      else BoolSet.Full
+
+    def absToInt(radix: Int = 10): NatRange =
+      val minStr = r.minNumStr(radix)
+      val maxStr = r.maxNumStr(radix)
+      NatRange(Integer.parseInt(minStr, radix), maxStr.map(s => Integer.parseInt(s, radix)))
+
+    private def minNumStr(radix: Int): String = r match
+      case Lit(CharSet(true, cs)) => cs.map(_.toUpper).min.toString
+      case Plus(r1, r2) =>
+        val s1 = r1.minNumStr(radix)
+        val s2 = r2.minNumStr(radix)
+        if Integer.parseInt(s1, radix) < Integer.parseInt(s2, radix) then s1 else s2
+      case Comp(r1, r2) => r1.minNumStr(radix) + r2.minNumStr(radix)
+      case _ => ""
+
+    private def maxNumStr(radix: Int): Option[String] = r match
+      case Zero() | One() => Some("")
+      case Lit(CharSet(true, cs)) => Some(cs.map(_.toUpper).max.toString)
+      case Plus(r1, r2) =>
+        for s1 <- r1.maxNumStr(radix); s2 <- r2.maxNumStr(radix) yield
+          if Integer.parseInt(s1) > Integer.parseInt(s2) then s1 else s2
+      case Comp(r1, r2) => for s1 <- r1.maxNumStr(radix); s2 <- r2.maxNumStr(radix) yield s1 + s2
+      case Star(_) => None
+
+    def isFiniteLang: Boolean = r match
+      case Zero() | One() | Lit(CharSet(true, _)) => true
+      case Plus(r1, r2) => r1.isFiniteLang && r2.isFiniteLang
+      case Comp(r1, r2) => r1.isFiniteLang && r2.isFiniteLang
+      case _ => false
+
+    def getLang: Set[String] = r match
+      case Zero() => Set.empty
+      case One() => Set("")
+      case Lit(CharSet(true, cs)) => cs.map(_.toString)
+      case Plus(r1, r2) => r1.getLang ++ r2.getLang
+      case Comp(r1, r2) => for s1 <- r1.getLang; s2 <- r2.getLang yield s1 + s2
+      case _ => throw UnsupportedOperationException("Cannot convert infinite StrRE to finite set")
+
   final case class NumStrFormat(zeroPadded: Boolean = false,
                                 width: Int = 0,
                                 conv: Char = 'd'):

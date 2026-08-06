@@ -8,6 +8,8 @@ import flat.checker.flan.tpd.*
 import flat.checker.verif.Simplifier.simplify
 import org.eclipse.lsp4j.Range
 
+import scala.collection.mutable.ListBuffer
+
 class Verifier(using reporter: Reporter) extends LazyLogging:
   def verify(program: Program): Unit =
     val methodInfos = Map.from(for node <- program.body yield
@@ -21,14 +23,13 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
         val state = State(methods = methodInfos, currentMethod = node.name)
         val m = methodInfos(node.name)
         val onReturn: (Range, State) => Unit = (r, st) => assert(m.ensures, st, _ => PostNotProvedError(r))
-        havoc(m.paramNames, state, st1 =>
+        havoc(m.names, state, st1 =>
           assume(m.requires, st1, st2 =>
-            havoc(m.localNames, st2, st3 =>
-              execBody(body, st3, onReturn(node.endRange, _))
-                (using Handlers(
-                  onReturn = onReturn,
-                  onBreak = (_, _) => throw RuntimeException("break outside of loop"),
-                  onContinue = (_, _) => throw RuntimeException("continue outside of loop"))))))
+            execBody(body, st2, onReturn(node.endRange, _))
+              (using Handlers(
+                onReturn = onReturn,
+                onBreak = (_, _) => throw RuntimeException("break outside of loop"),
+                onContinue = (_, _) => throw RuntimeException("continue outside of loop")))))
 
   private case class Handlers(onReturn: (Range, State) => Unit,
                               onBreak: (Range, State) => Unit,
@@ -49,6 +50,9 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       check(e, state)
       cont(state)
     case If(e, List(Assert(eb@Const(false))), Nil) =>
+      assert(Not(e), state, AssertNotProvedError(eb.range))
+      cont(state)
+    case If(e, List(Abort(eb)), Nil) =>
       assert(Not(e), state, AssertNotProvedError(eb.range))
       cont(state)
     case If(e, b1, b2) =>
@@ -75,6 +79,8 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
     case Assert(e) =>
       assert(e, state, AssertNotProvedError(e.range))
       cont(state)
+    case Abort(msg) =>
+      assert(Const(false), state, AssertNotProvedError(msg.range))
 
   private def update(name: String, expr: Expr, state: State, cont: State => Unit): Unit =
     if check(expr, state) then
@@ -185,16 +191,22 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       val (vs, st1) = eval(es, state)
       var st = st1
       m.ensures match
-        case List(Eq(Var("_"), e)) if e.collect { case Var("_") => () }.isEmpty =>
+        case List(Eq(Var(y), e)) if m.returnNames == List(y) && e.collect { case Var(y) => () }.isEmpty =>
           (e.subst(m.paramNames, vs), st)
         case _ =>
-          val (y, st1) = st.fresh(f, m.returns.typ.sort)
-          st = st1
-          val v: Expr = Var(y)
-          for e <- m.returns.typ.reft do
-            st = st.add(e.subst("_", v))
+          val ys = ListBuffer.empty[String]
+          for p <- m.returns do
+            val (y, st1) = st.fresh(p.name, p.typ.sort)
+            ys += y
+            st = st1
+            for e <- p.typ.reft do
+              st = st.add(e.subst("_", Var(y)))
+          val rvs: List[Expr] = ys.toList.map(Var(_))
           for e <- m.ensures do
-            st = st.add(e.subst("_" :: m.paramNames, v :: vs))
+            st = st.add(e.subst(m.paramNames ++ m.returnNames, vs ++ rvs))
+          val v: Expr = rvs match
+            case List(rv) => rv
+            case _ => TupleExpr(rvs)
           (v, st)
     case _ =>
       val (vs, st) = eval(expr.subtrees, state)
@@ -211,11 +223,13 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
   private inline def prove(value: Expr, ctx: PrfCtx, err: => VerifError): Boolean =
     val goal = Goal(ctx.premises, value.simplify(using ctx.vars))(using ctx.vars)
+    logger.debug("")
+    logger.debug("Goal:\n{}", showTask(ctx, goal.conclusion))
     if prover.prove(goal) then
-      logger.trace("Proved:\n{}", showTask(ctx, goal.conclusion))
+      logger.debug("PROVED")
       true
     else
-      logger.debug("FAILED:\n{}", showTask(ctx, goal.conclusion))
+      logger.warn("❌ FAILED")
       reporter.report(err)
       false
 
@@ -230,4 +244,4 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
   private def showTask(ctx: PrfCtx, value: Expr): String =
     val lines = for e <- ctx.premises yield s"  ${e.show}\n"
-    lines.mkString + s" ⇒ ${value.show}\n"
+    lines.mkString + s" ⇒ ${value.show}"

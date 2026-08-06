@@ -1,5 +1,6 @@
 package flat.checker.typing
 
+import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{RegEx, StrRE, given}
@@ -11,12 +12,8 @@ import org.eclipse.lsp4j.{Position, Range}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class Typer(using reporter: Reporter):
+class Typer(using reporter: Reporter) extends LazyLogging:
   def normalize(node: untpd.Type)(using ctx: Ctx): NormType = node match
-    case untpd.NullType => NullSort
-    case untpd.BoolType => BoolSort
-    case untpd.IntType => IntSort
-    case untpd.CharType => CharSort
     case t@untpd.TypeName(x) =>
       ctx.lookup(x) match
         case Some(TypeInfo(typ)) => typ
@@ -25,24 +22,34 @@ class Typer(using reporter: Reporter):
           reporter.reportNotType(t.range, x)
           NoSort
         case None =>
-          reporter.reportNameUndefined(t.range)
-          NoSort
+          x match
+            case "int" | "Int" => IntSort
+            case "bool" | "Bool" => BoolSort
+            case "char" | "Char" => CharSort
+            case "str" | "String" => stringSort
+            case "null" | "Null" => NullSort
+            case _ =>
+              reporter.reportNameUndefined(t.range)
+              NoSort
 
-    // Collection types
-    case untpd.SeqType(t) =>
+    // Generic types
+    case untpd.GenericType("list" | "Seq", List(t)) =>
       val typ = normalize(t)
       val sort = SeqSort(typ.sort)
       NormType(sort, typ.reft.map(p => mkLambda(sort, SeqForall(_, p)()))) // _.forall(p)
-    case untpd.SetType(t) =>
+    case untpd.GenericType("set" | "Set", List(t)) =>
       val typ = normalize(t)
       val sort = SetSort(typ.sort)
       NormType(sort, typ.reft.map(p => mkLambda(sort, SetForall(_, p)()))) // _.forall(p)
-    case untpd.MapType(tk, tv) =>
+    case untpd.GenericType("dict" | "Map", List(tk, tv)) =>
       val keyType = normalize(tk)
       val valueType = normalize(tv)
       val sort = MapSort(keyType.sort, valueType.sort)
       val pairPred = extractTuplePred(mkTupleSort(keyType.sort, valueType.sort), List(keyType.reft, valueType.reft))
       NormType(sort, pairPred.map(p => mkLambda(sort, m => SetForall(MapItems(m)(), p)()))) // _.items.forall(p)
+    case n@untpd.GenericType(constr, _) =>
+      reporter.reportNameUndefined(n.range)
+      NoSort
 
     // Compound types
     case untpd.TupleType(ts) =>

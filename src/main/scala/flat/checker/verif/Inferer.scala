@@ -14,6 +14,7 @@ enum Type:
   case TBool(dom: BoolSet)
   case TNat(dom: CountingRE)
   case TIndex(dom: IndexSet)
+  case TNum(dom: NatRange)
   case TChar(dom: CharSet)
   case TStr(dom: StrRE)
   case TStrSeq(dom: RegEx[StrRE])
@@ -111,6 +112,15 @@ class Inferer(goal: Goal) extends LazyLogging:
           TStr(narrow(expr, absFromInt(min, max, fmt)))
         case _ =>
           throw new Exception(s"Cannot infer string from int for ${expr.show}: value unbounded")
+    case StringToInt(e) =>
+      infer(e) match
+        case TStr(r) => TNum(r.absToInt())
+        case _ => throw new Exception("Expected a string type for StringToInt")
+
+    case StrIsAscii(e) =>
+      infer(e) match
+        case TStr(r) => TBool(r.absIsAscii)
+        case _ => throw new Exception("Expected a string type for StrIsAscii")
 
     case other =>
       throw new Exception(s"Type inference not implemented for expression: $other")
@@ -155,6 +165,19 @@ class Inferer(goal: Goal) extends LazyLogging:
     // emptiness
     case Lt(Const(0), SeqLength(`e`)) => Some(r.filterNonEmpty)
     case Ne(SeqLength(`e`), Const(0)) => Some(r.filterNonEmpty)
+    // charAt
+    case Eq(SeqSelect(`e`, Const(i: Int)), Const(c: Char)) => Some(r.filterElemAtEq(i, c))
+    case Eq(SeqSlice(`e`, Const(i: Int), Const(j: Int)), Const(s: String)) if j == i + 1 && s.length == 1 =>
+      Some(r.filterElemAtEq(i, s.head))
+    case Ne(SeqSelect(`e`, Const(i: Int)), Const(c: Char)) => Some(r.filterElemAtNe(i, c))
+    case Ne(SeqSlice(`e`, Const(i: Int), Const(j: Int)), Const(s: String)) if j == i + 1 && s.length == 1 =>
+      Some(r.filterElemAtNe(i, s.head))
+    // Length
+    case Le(SeqLength(`e`), Const(n: Int)) if 0 <= n => Some(r.filterLengthLe(n))
+    case Lt(SeqLength(`e`), Const(n: Int)) if 1 <= n => Some(r.filterLengthLe(n - 1))
+    case Le(Const(n: Int), SeqLength(`e`)) if 0 <= n => Some(r.filterLengthGe(n))
+    case Lt(Const(n: Int), SeqLength(`e`)) if -1 <= n => Some(r.filterLengthGe(n + 1))
+    case Eq(SeqLength(`e`), Const(n: Int)) if 0 <= n => Some(r.filterLengthLe(n).filterLengthGe(n))
     case _ => None
 
   private def narrow(e: Expr, a: CharSet): CharSet =

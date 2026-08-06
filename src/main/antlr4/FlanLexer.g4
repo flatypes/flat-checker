@@ -5,6 +5,7 @@ TYPE: 'type';
 LANG: 'lang';
 CONST: 'const';
 METHOD: 'method';
+RETURNS: 'returns';
 REQUIRES: 'requires';
 ENSURES: 'ensures';
 VAR: 'var';
@@ -17,18 +18,12 @@ WHILE: 'while';
 INVARIANT: 'invariant';
 BREAK: 'break';
 CONTINUE: 'continue';
+ABORT: 'abort';
 FOR: 'for';
 NULL: 'null';
 TRUE: 'true';
 FALSE: 'false';
 LAMBDA: 'lambda';
-BOOL: 'Bool';
-INT: 'Int';
-CHAR: 'Char';
-STRING: 'String';
-SEQ: 'Seq';
-SET: 'Set';
-MAP: 'Map';
 
 // Delimiters
 OPEN_PAREN: '(';
@@ -48,9 +43,9 @@ DOT: '.';
 QUESTION: '?';
 
 // Operators
-AND: '&&';
-OR: '||';
-NOT: '!';
+AND: 'and' | '&&';
+OR: 'or' | '||';
+NOT: 'not' | '!';
 IMPLIES: '==>';
 PLUS: '+';
 MINUS: '-';

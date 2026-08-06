@@ -1,12 +1,13 @@
 package flat.checker.verif
 
+import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.given
 import flat.checker.flan.*
 import flat.checker.flan.SortOps.sort
 import flat.checker.flan.Subst.subst
 import flat.checker.flan.tpd.*
 
-object Simplifier:
+object Simplifier extends LazyLogging:
   extension (expr: Expr)
     private def isConst: Boolean = expr match
       case Const(_) => true
@@ -225,9 +226,14 @@ object Simplifier:
         e.simplify match
           case Const(i: Int) => Const(i.toString)(expr.range)
           case e => StrFromInt(e, fmt)(expr.range)
+      case StrIsAscii(e) =>
+        e.simplify match
+          case Const(s: String) => Const(s.forall(_.toInt <= 0x7F))(expr.range)
+          case e => StrIsAscii(e)(expr.range)
 
       // Set
-      case s@SetLit(e) => SetLit(e.map(_.simplify))(s.elemSort, s.range)
+      case s@SetLit(es) =>
+        SetLit(es.map(_.simplify))(s.elemSort, s.range)
       case SetSize(e) =>
         e.simplify match
           case s@SetLit(es) => Const(es.size)(expr.range)

@@ -44,13 +44,16 @@ class Parser(using reporter: Reporter):
   private object TopDefVisitor extends FlanParserBaseVisitor[TopDef]:
     override def visitMethodDef(node: FlanParser.MethodDefContext): TopDef =
       val ident = toIdent(node.IDENT)
-      val params = toParamList(node.paramList)
-      val returnType = Option(node.`type`).map(_.accept(TypeVisitor))
+      val params = toParamList(node.paramList(0))
+      val returnParams =
+        if node.paramList.size() == 2 then toParamList(node.paramList(1))
+        else if node.`type` != null then List(Param(Ident("_")(getRange(node.COLON)), node.`type`.accept(TypeVisitor)))
+        else Nil
       val requires = node.requiresSpec.asScala.toList.map(_.expr.accept(ExprVisitor))
       val ensures = node.ensuresSpec.asScala.toList.map(_.expr.accept(ExprVisitor))
       val body = Option(node.block).map(StmtVisitor.toStmtList)
       val endRange = if node.block != null then getRange(node.block.CLOSE_CURLY) else null
-      MethodDef(ident, params, returnType, requires, ensures, body)(endRange)
+      MethodDef(ident, params, returnParams, requires, ensures, body)(endRange)
 
     def toParamList(node: FlanParser.ParamListContext): List[Param] = node.param.asScala.toList.map(toParam)
 
@@ -132,6 +135,10 @@ class Parser(using reporter: Reporter):
 
     override def visitContinue(node: FlanParser.ContinueContext): Stmt =
       Continue()(getRange(node.CONTINUE))
+
+    override def visitAbort(node: FlanParser.AbortContext): Stmt =
+      val expr = node.expr.accept(ExprVisitor)
+      Abort(expr)
 
     override def visitAssume(node: FlanParser.AssumeContext): Stmt =
       val cond = node.expr.accept(ExprVisitor)
@@ -254,39 +261,17 @@ class Parser(using reporter: Reporter):
       throw NotImplementedError(s"ExprVisitor.visit${node.getClass.getSimpleName}")
 
   private object TypeVisitor extends FlanParserBaseVisitor[Type]:
-    override def visitNullType(node: FlanParser.NullTypeContext): Type = NullType
-
-    override def visitBoolType(node: FlanParser.BoolTypeContext): Type = BoolType
-
-    override def visitIntType(node: FlanParser.IntTypeContext): Type = IntType
-
-    override def visitCharType(node: FlanParser.CharTypeContext): Type = CharType
-
-    override def visitStringType(node: FlanParser.StringTypeContext): Type = stringType
-
-    override def visitSeqType(node: FlanParser.SeqTypeContext): Type =
-      val elemType = node.`type`.accept(this)
-      SeqType(elemType)
-
-    override def visitSetType(node: FlanParser.SetTypeContext): Type =
-      val elemType = node.`type`.accept(this)
-      SetType(elemType)
-
-    override def visitMapType(node: FlanParser.MapTypeContext): Type =
-      val keyType = node.`type`(0).accept(this)
-      val valueType = node.`type`(1).accept(this)
-      MapType(keyType, valueType)
-
     override def visitTypeName(node: FlanParser.TypeNameContext): Type =
       TypeName(node.IDENT.getText)(getRange(node))
+
+    override def visitGenericType(node: FlanParser.GenericTypeContext): Type =
+      val name = node.IDENT.getText
+      val typeArgs = node.`type`.asScala.toList.map(_.accept(this))
+      GenericType(name, typeArgs)(getRange(node))
 
     override def visitParenType(node: FlanParser.ParenTypeContext): Type =
       val types = node.`type`.asScala.toList.map(_.accept(this))
       if types.length == 1 then types.head else TupleType(types)
-
-    override def visitOptType(node: FlanParser.OptTypeContext): Type =
-      val elemType = node.`type`.accept(this)
-      UnionType(elemType, NullType)
 
     override def visitUnionType(node: FlanParser.UnionTypeContext): Type =
       val left = node.`type`(0).accept(this)

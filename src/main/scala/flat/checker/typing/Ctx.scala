@@ -3,7 +3,7 @@ package flat.checker.typing
 import flat.checker.*
 import flat.checker.domain.StrRE
 import flat.checker.flan.tpd.*
-import flat.checker.flan.{FunSort, Sort}
+import flat.checker.flan.{FunSort, Sort, TupleSort}
 import org.eclipse.lsp4j.Range
 
 import scala.collection.mutable.ListBuffer
@@ -19,8 +19,11 @@ final case class ConstInfo(sort: Sort, value: Expr)(val range: Range) extends In
 
 final case class ParamInfo(name: String, typ: Sort)(val range: Range)
 
-final case class MethodInfo(params: List[VarDecl], returnType: NormType)(val range: Range) extends Info:
-  def returnSort: Sort = returnType.sort
+final case class MethodInfo(params: List[VarDecl], returnParams: List[VarDecl])(val range: Range) extends Info:
+  def returnSort: Sort =
+    returnParams.map(_.typ.sort) match
+      case List(s) => s
+      case ss => TupleSort(ss)
 
   def funSort: FunSort = FunSort(params.map(_.typ.sort), returnSort)
 

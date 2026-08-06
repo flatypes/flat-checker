@@ -7,7 +7,7 @@ import org.eclipse.lsp4j.{Position, Range}
 object tpd:
   final case class Program(body: List[MethodDef])
 
-  final case class MethodDef(name: String, params: List[VarDecl], returns: VarDecl,
+  final case class MethodDef(name: String, params: List[VarDecl], returns: List[VarDecl],
                              requires: List[Expr], ensures: List[Expr],
                              locals: List[VarDecl], body: Option[List[Stmt]])
                             (val endRange: Range)
@@ -37,6 +37,8 @@ object tpd:
 
   final case class Assert(cond: Expr) extends Stmt
 
+  final case class Abort(cond: Expr) extends Stmt
+
   // Types
   final case class NormType(sort: Sort, reft: Option[Expr])
 
@@ -46,7 +48,11 @@ object tpd:
   sealed trait Expr extends Product:
     val range: Range
 
-    def subtrees: List[Expr] = productIterator.collect { case e: Expr => e }.toList
+    def subtrees: List[Expr] =
+      productIterator.toList.flatMap:
+        case e: Expr => List(e)
+        case (e: Expr) :: es => e :: es.map(_.asInstanceOf[Expr])
+        case _ => Nil
 
     def collect[T](pf: PartialFunction[Expr, T]): List[T] =
       if pf.isDefinedAt(this) then List(pf(this)) else subtrees.flatMap(_.collect(pf))
@@ -106,7 +112,7 @@ object tpd:
 
   final case class Ite(cond: Expr, thenValue: Expr, elseValue: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Ite = subtrees match
-      case List(e, e1, e2) => Ite(e2, e1, e2)(range)
+      case List(e, e1, e2) => Ite(e, e1, e2)(range)
       case _ => throw IllegalArgumentException("Ite must have exactly 3 subtrees")
 
   // Boolean operations
@@ -329,6 +335,11 @@ object tpd:
     override def rebuild(subtrees: List[Expr]): StrFromInt = subtrees match
       case List(e) => StrFromInt(e, fmt)(range)
       case _ => throw IllegalArgumentException("StringFromInt must have exactly 1 subtree")
+
+  final case class StrIsAscii(str: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): StrIsAscii = subtrees match
+      case List(e) => StrIsAscii(e)(range)
+      case _ => throw IllegalArgumentException("StrIsAscii must have exactly 1 subtree")
 
   // Set Operations
   final case class SetLit(elems: List[Expr])(val elemSort: Sort, val range: Range = noRange) extends Expr:

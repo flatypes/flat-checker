@@ -77,26 +77,9 @@ object CLI extends LazyLogging:
       Console.err.println(OParser.usage(parser))
       System.exit(1)
 
-    if args.head == "extract" then
-      // subcommand: extract
-      OParser.parse(extractParser, args.tail, ExtractConfig()) match
-        case Some(config) =>
-          Driver.runExtract(using config)
-          return
-        case _ =>
-          System.exit(1)
-
-    if args.head == "flan" then
-      // wip: flan file
-      runFlan(args.drop(1).toSeq.map(Path.of(_).toAbsolutePath).map(os.Path(_)))
-      return
-
     // normal command
-    OParser.parse(parser, args, Config()) match
-      case Some(config) =>
-        Driver.run(using config)
-      case _ =>
-        System.exit(1)
+    // wip: flan file
+    runFlan(args.toSeq.map(Path.of(_).toAbsolutePath).map(os.Path(_)))
 
   private def runFlan(inputs: Seq[os.Path]): Unit =
     val paths = inputs.flatMap(collectFlan)
