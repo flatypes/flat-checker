@@ -3,6 +3,7 @@ package flat.checker.verif
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
 import flat.checker.flan.Show.show
+import flat.checker.flan.SortOps.sort
 import flat.checker.flan.Subst.*
 import flat.checker.flan.tpd.*
 import flat.checker.verif.Simplifier.simplify
@@ -49,16 +50,17 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
     case ExprStmt(e) =>
       check(e, state)
       cont(state)
-    case If(e, List(Assert(eb@Const(false))), Nil) =>
+    case If(e, List(Assert(eb@Const(false))), b) =>
       assert(Not(e), state, AssertNotProvedError(eb.range))
-      cont(state)
-    case If(e, List(Abort(eb)), Nil) =>
+      execBody(b, state, cont)
+    case If(e, List(Abort(eb)), b) =>
       assert(Not(e), state, AssertNotProvedError(eb.range))
-      cont(state)
+      execBody(b, state, cont)
     case If(e, b1, b2) =>
       branch(e, state,
         execBody(b1, _, cont),
         execBody(b2, _, cont))
+
     case s@While(e, eis, b) =>
       assert(eis, state, InvNotProvedOnEntryError(_))
       val onExit: State => Unit = assert(eis, _, InvNotMaintainedError(_))
@@ -68,12 +70,26 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
             execBody(b, _, onExit)
               (using handlers.copy(onBreak = (_, st) => cont(st), onContinue = (_, st) => onExit(st))),
             cont)))
+
+    case s@For(x, SeqLit(es), eis, b) if es.length < 5 =>
+      execFor(x, es, b, state, cont)
+    case s@For(x, e, eis, b) =>
+      assert(eis, state, InvNotProvedOnEntryError(_))
+      val ex: Expr = SeqContains(e, SeqLit(List(Var(x)))(x.sort(using state.ctx.vars)))
+      val onExit: State => Unit = assert(eis, _, InvNotMaintainedError(_))
+      havoc(collectModifiedVars(b), state, st1 =>
+        assume(ex :: eis, st1, st2 =>
+          execBody(b, st2, onExit)
+            (using handlers.copy(onBreak = (_, st) => cont(st), onContinue = (_, st) => onExit(st))))
+        cont(st1))
+
     case brk@Break() =>
       handlers.onBreak(brk.range, state)
     case cont@Continue() =>
       handlers.onContinue(cont.range, state)
     case ret@Return() =>
       handlers.onReturn(ret.range, state)
+
     case Assume(e) =>
       assume(e, state, cont)
     case Assert(e) =>
@@ -81,6 +97,16 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       cont(state)
     case Abort(msg) =>
       assert(Const(false), state, AssertNotProvedError(msg.range))
+
+  private def execFor(name: String, values: List[Expr], body: List[Stmt], state: State, cont: State => Unit)
+                     (using handlers: Handlers): Unit = values match
+    case Nil => cont(state)
+    case v :: vs =>
+      logger.debug("Unrolling for-loop {} = {}", name, v.show)
+      val onExit = (st: State) => execFor(name, vs, body, st, cont)
+      update(name, v, state, st1 =>
+        execBody(body, st1, onExit)
+          (using handlers.copy(onBreak = (_, st) => cont(st), onContinue = (_, st) => onExit(st))))
 
   private def update(name: String, expr: Expr, state: State, cont: State => Unit): Unit =
     if check(expr, state) then
@@ -191,7 +217,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       val (vs, st1) = eval(es, state)
       var st = st1
       m.ensures match
-        case List(Eq(Var(y), e)) if m.returnNames == List(y) && e.collect { case Var(y) => () }.isEmpty =>
+        case List(Eq(Var(y), e)) if m.returnNames == List(y) && e.collect { case Var(`y`) => () }.isEmpty =>
           (e.subst(m.paramNames, vs), st)
         case _ =>
           val ys = ListBuffer.empty[String]

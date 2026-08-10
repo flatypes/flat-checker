@@ -37,50 +37,64 @@ object StrREOps extends LazyLogging:
 
     def absSplitStr(s: String): RegEx[StrRE] = REOps.absSplit(r)(s.toList)
 
-    def absTrimLeft: StrRE = r match
+    def absTrimLeft(chars: String = " \n\r\t"): StrRE = r match
       case Zero() => Zero()
       case One() => One()
       case Lit(a) =>
-        val b = a - ' ' - '\n' - '\r' - '\t'
+        val b = a -- chars
         if b.isEmpty then One() else Lit(b)
-      case Plus(r1, r2) => r1.absTrimLeft + r2.absTrimLeft
+      case Plus(r1, r2) => r1.absTrimLeft(chars) + r2.absTrimLeft(chars)
       case Comp(r1, r2) =>
-        val trimmed1 = r1.absTrimLeft
-        if trimmed1 == One() then r2.absTrimLeft else trimmed1 * r2
+        val trimmed1 = r1.absTrimLeft(chars)
+        if trimmed1 == One() then r2.absTrimLeft(chars) else trimmed1 * r2
       case Star(r1) =>
-        val trimmed = r1.absTrimLeft
+        val trimmed = r1.absTrimLeft(chars)
         if trimmed == One() then One() else trimmed.star
 
-    def absTrimRight: StrRE = r.reverse.absTrimLeft.reverse
+    def absTrimRight(chars: String = " \n\r\t"): StrRE = r.reverse.absTrimLeft(chars).reverse
 
-    def absTrim: StrRE = r.absTrimLeft.absTrimRight
+    def absTrim(chars: String = " \n\r\t"): StrRE = r.absTrimLeft(chars).absTrimRight(chars)
 
     def absIsAscii: BoolSet =
       if r.alphabet.subsetOf(CharSet.from(0.toChar to 0x7F.toChar)) then BoolSet.True
       else BoolSet.Full
 
     def absToInt(radix: Int = 10): NatRange =
-      val minStr = r.minNumStr(radix)
-      val maxStr = r.maxNumStr(radix)
-      NatRange(Integer.parseInt(minStr, radix), maxStr.map(s => Integer.parseInt(s, radix)))
+      val r1 = r.absTrimLeft("0")
+      val s1 = r1.shortestMin
+      val n1 = if s1.isEmpty then 0 else Integer.parseInt(s1, radix)
+      val s2 = r1.longestMax
+      val n2 =
+        if s2.contains("∞") then None
+        else if s2.isEmpty then Some(0)
+        else Some(Integer.parseInt(s2, radix))
+      NatRange(n1, n2)
 
-    private def minNumStr(radix: Int): String = r match
+    private def shortestMin: String = r match
+      case Zero() | One() | Star(_) => ""
       case Lit(CharSet(true, cs)) => cs.map(_.toUpper).min.toString
+      case Lit(CharSet(false, cs)) => throw IllegalArgumentException("not valid digit character set")
       case Plus(r1, r2) =>
-        val s1 = r1.minNumStr(radix)
-        val s2 = r2.minNumStr(radix)
-        if Integer.parseInt(s1, radix) < Integer.parseInt(s2, radix) then s1 else s2
-      case Comp(r1, r2) => r1.minNumStr(radix) + r2.minNumStr(radix)
-      case _ => ""
+        val s1 = r1.shortestMin
+        val s2 = r2.shortestMin
+        if s1.length < s2.length then s1
+        else if s2.length < s1.length then s2
+        else List(s1, s2).min
+      case Comp(r1, r2) => r1.shortestMin + r2.shortestMin
 
-    private def maxNumStr(radix: Int): Option[String] = r match
-      case Zero() | One() => Some("")
-      case Lit(CharSet(true, cs)) => Some(cs.map(_.toUpper).max.toString)
+    private def longestMax: String = r match
+      case Zero() | One() => ""
+      case Lit(CharSet(true, cs)) => cs.map(_.toUpper).max.toString
+      case Lit(CharSet(false, cs)) => throw IllegalArgumentException("not valid digit character set")
       case Plus(r1, r2) =>
-        for s1 <- r1.maxNumStr(radix); s2 <- r2.maxNumStr(radix) yield
-          if Integer.parseInt(s1) > Integer.parseInt(s2) then s1 else s2
-      case Comp(r1, r2) => for s1 <- r1.maxNumStr(radix); s2 <- r2.maxNumStr(radix) yield s1 + s2
-      case Star(_) => None
+        val s1 = r1.longestMax
+        val s2 = r2.longestMax
+        if s1.contains("∞") || s2.contains("∞") then "∞"
+        else if s1.length > s2.length then s1
+        else if s2.length > s1.length then s2
+        else List(s1, s2).max
+      case Comp(r1, r2) => r1.longestMax + r2.longestMax
+      case Star(_) => "∞"
 
     def isFiniteLang: Boolean = r match
       case Zero() | One() | Lit(CharSet(true, _)) => true

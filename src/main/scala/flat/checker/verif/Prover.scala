@@ -5,8 +5,9 @@ import flat.checker.domain.*
 import flat.checker.domain.Prettifier.pp
 import flat.checker.domain.StrREOps.*
 import flat.checker.flan.Show.show
-import flat.checker.flan.Sort
+import flat.checker.flan.SortOps.sort
 import flat.checker.flan.tpd.*
+import flat.checker.flan.{Sort, strListSort, stringSort}
 import flat.checker.verif.Simplifier.simplify
 import flat.checker.verif.Type.*
 
@@ -15,6 +16,42 @@ import scala.collection.mutable.ListBuffer
 
 class Prover extends LazyLogging:
   def prove(goal: Goal): Boolean =
+    goal.conclusion.collectFirst { case Ite(e, _, _) => e } match
+      case Some(e) =>
+        val (ps1, ps2) = goal.premises.map(caseIf(e, _)(using goal.sorts)).unzip
+        val (c1, c2) = caseIf(e, goal.conclusion)(using goal.sorts)
+        val goal1 = Goal(ps1 :+ e, c1)(using goal.sorts)
+        logger.debug("Case if: {}", e.show)
+        logger.debug("Subgoal 1:\n{}", showGoal(goal1))
+        if prove(goal1) then
+          val goal2 = Goal(ps2 :+ Not(e).simplify(using goal.sorts), c2)(using goal.sorts)
+          logger.debug("Subgoal 2:\n{}", showGoal(goal2))
+          prove(goal2)
+        else
+          logger.warn("❌ Subgoal 1 FAILED")
+          false
+      case None =>
+        if prove1(goal) then
+          true
+        else
+          val i = goal.premises.indexWhere(_.isInstanceOf[Or])
+          if i >= 0 then
+            val Or(e1, e2) = goal.premises(i).asInstanceOf[Or]
+            logger.debug("Case left: {}", e1.show)
+            val goal1 = Goal(goal.premises.updated(i, e1), goal.conclusion)(using goal.sorts)
+            logger.debug("Subgoal 1:\n{}", showGoal(goal1))
+            if prove1(goal1) then
+              val goal2 = Goal(goal.premises.updated(i, e2), goal.conclusion)(using goal.sorts)
+              logger.debug("Case right: {}", e2.show)
+              logger.debug("Subgoal 2:\n{}", showGoal(goal2))
+              prove1(goal2)
+            else
+              logger.warn("❌ Subgoal 1 FAILED")
+              false
+          else
+            false
+
+  def prove1(goal: Goal): Boolean =
     goal.conclusion match
       // refinement type checking
       case StringInLang(e, r) =>
@@ -25,33 +62,18 @@ class Prover extends LazyLogging:
             RESub.check(r1, r)
           case _ => ???
       case _ =>
-        goal.conclusion.collectFirst { case Ite(e, _, _) => e } match
-          case Some(e) =>
-            val (ps1, ps2) = goal.premises.map(caseIf(e, _)(using goal.sorts)).unzip
-            val (c1, c2) = caseIf(e, goal.conclusion)(using goal.sorts)
-            val goal1 = Goal(ps1 :+ e, c1)(using goal.sorts)
-            logger.debug("Case if: {}", e.show)
-            logger.debug("Subgoal 1:\n{}", showGoal(goal1))
-            if prove(goal1) then
-              val goal2 = Goal(ps2 :+ Not(e).simplify(using goal.sorts), c2)(using goal.sorts)
-              logger.debug("Subgoal 2:\n{}", showGoal(goal2))
-              prove(goal2)
-            else
-              logger.warn("❌ Subgoal 1 FAILED")
-              false
-          case None =>
-            val solver = SMTSolver(using goal.sorts)
-            goal.premises.foreach(solver.add)
-            if solver.prove(goal.conclusion) then
-              true
-            else
-              val lemmas = synthesizeLemmas(goal)
-              if lemmas.nonEmpty then
-                logger.debug(s"Lemmas: ${lemmas.map(_.show).mkString(", ")}")
-                lemmas.foreach(solver.add)
-                solver.prove(goal.conclusion)
-              else
-                false
+        val solver = SMTSolver(using goal.sorts)
+        goal.premises.foreach(solver.add)
+        if solver.prove(goal.conclusion) then
+          true
+        else
+          val lemmas = synthesizeLemmas(goal)
+          if lemmas.nonEmpty then
+            logger.debug(s"Lemmas: ${lemmas.map(_.show).mkString(", ")}")
+            lemmas.foreach(solver.add)
+            solver.prove(goal.conclusion)
+          else
+            false
 
   private def caseIf(cond: Expr, expr: Expr)(using sorts: Map[String, Sort]): (Expr, Expr) =
     val e1 = expr.transform:
@@ -62,46 +84,50 @@ class Prover extends LazyLogging:
       case `cond` => Const(false)
     (e1.simplify, e2.simplify)
 
+  private inline def isStrOrStrList(e: Expr)(using sorts: Map[String, Sort]): Boolean =
+    val s = e.sort
+    s == stringSort || s == strListSort
+
   private def synthesizeLemmas(goal: Goal): List[Expr] =
     val inferer = Inferer(goal)
     val lemmas = ListBuffer.empty[Expr]
     goal.conclusion.collect:
-      case e: SeqLength =>
+      case e@SeqLength(es) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TNat(set) =>
             lemmas += inNatSet(e, set)
           case _ => ()
-      case e: SeqSelect =>
+      case e@SeqSelect(es, _) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TChar(set) =>
             lemmas += inCharSet(e, set)
           case _ => ()
-      case e: SeqSlice =>
+      case e@SeqSlice(es, _, _) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TStr(r) =>
             lemmas += inRegEx(e, r)
           case _ => ()
-      case e@SeqStartsWith(_, _) =>
+      case e@SeqStartsWith(es, _) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
           case _ => ()
-      case e@SeqEndsWith(_, _) =>
+      case e@SeqEndsWith(es, _) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
           case _ => ()
-      case e@SeqContains(_, _) =>
+      case e@SeqContains(es, _) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
           case _ => ()
-      case e@SeqIndexOf(_, Const(_: String), Const(0)) =>
+      case e@SeqIndexOf(es, _, Const(0)) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TIndex(set) =>
             lemmas += inIndexSet(e, set)
           case _ => ()
-      case e@StrIsAscii(_) =>
+      case e: StrIsAscii =>
         inferer.infer(e) match
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)

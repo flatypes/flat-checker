@@ -3,6 +3,7 @@ package flat.checker.typing
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
 import flat.checker.flan.*
+import flat.checker.flan.SortOps.:<:
 import flat.checker.flan.tpd.*
 
 import scala.collection.mutable.ListBuffer
@@ -103,8 +104,8 @@ class Checker(using reporter: Reporter) extends LazyLogging:
       case untpd.VarStmt(id, None, _) =>
         reporter.reportMissingTypeAnnot(id.range)
 
-      case untpd.Assign(id, rhs) =>
-        ctx.lookup(id.name) match
+      case untpd.Assign(lhs@untpd.TargetName(name), rhs) =>
+        ctx.lookup(name) match
           case Some(VarInfo(typ, index, false)) =>
             rhs match
               case e: untpd.Expr =>
@@ -118,9 +119,13 @@ class Checker(using reporter: Reporter) extends LazyLogging:
               case nd: untpd.Nondet =>
             result match
               case Some(_) =>
-                reporter.reportNotAssignable(id.range)
+                reporter.reportNotAssignable(lhs.range)
               case None =>
-                reporter.reportNameUndefined(id.range)
+                reporter.reportNameUndefined(lhs.range)
+
+      case untpd.Assign(t, e: untpd.Expr) =>
+        val (sort, value) = typer.infer(e)(using ctx)
+        assign(t, value, sort, body)(using ctx, vs)
 
       case untpd.ExprStmt(e) =>
         val (_, value) = typer.infer(e)(using ctx)
@@ -155,6 +160,18 @@ class Checker(using reporter: Reporter) extends LazyLogging:
         val loopBody = checkBlock(b, narrow(cond, ctx).enterLoop)
         body += While(cond, invariants, loopBody)
 
+      case untpd.For(id, e, is, b) =>
+        val (iterSort, iter) = typer.infer(e)(using ctx)
+        iterSort match
+          case SeqSort(elemSort) =>
+            val index = vs.add(id.name, elemSort)
+            val loopCtx = ctx.define(id.name, VarInfo(elemSort, index)(id.range)).enterLoop
+            val invariants = is.map(typer.check(_, BoolSort)(using loopCtx))
+            val loopBody = checkBlock(b, loopCtx)
+            body += For(vs.getName(index), iter, invariants, loopBody)
+          case _ =>
+            reporter.reportTypeMismatch(e.range, "list", iterSort)
+
       case node: untpd.Break =>
         if ctx.inLoop then
           body += Break()(node.range)
@@ -177,6 +194,24 @@ class Checker(using reporter: Reporter) extends LazyLogging:
         body += Abort(expr)
 
     body.toList
+
+  private def assign(target: untpd.Target, value: Expr, sort: Sort, body: ListBuffer[Stmt])
+                    (using ctx: Ctx, vs: VarStore): Unit =
+    (target, sort) match
+      case (untpd.TargetName(x), _) =>
+        ctx.lookup(x) match
+          case Some(VarInfo(NormType(expected, _), index, false)) =>
+            if sort :<: expected then
+              body += Assign(vs.getName(index), value)
+            else
+              reporter.reportTypeMismatch(target.range, expected, sort)
+          case _ =>
+            reporter.reportNotAssignable(target.range)
+        body += Assign(x, value)
+      case (untpd.TupleTarget(ts), TupleSort(ss)) if ts.length == ss.length =>
+        for (t, i) <- ts.zipWithIndex yield
+          val elem = TupleSelect(i, value)(value.range)
+          assign(t, elem, ss(i), body)
 
   private def checkGuard(guard: untpd.Expr | untpd.Nondet, ctx: LocalCtx)(using va: VarStore): Expr = guard match
     case e: untpd.Expr =>

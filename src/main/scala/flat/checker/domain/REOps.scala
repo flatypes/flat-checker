@@ -6,6 +6,8 @@ import flat.checker.domain.Prettifier.pp
 import flat.checker.domain.RegEx.*
 
 import scala.annotation.tailrec
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 object REOps extends LazyLogging:
   extension [A](r: RegEx[A])(using set: SymbolSet[A])
@@ -233,33 +235,11 @@ object REOps extends LazyLogging:
     def filterElemAtNe(i: Int, x: set.Symbol): RegEx[A] =
       filterElemAt(i, a => a - x)
 
-    def filterLengthLe(n: Int): RegEx[A] =
-      require(0 <= n)
-      val rLen = r.absLength
-      if rLen.min > n then Zero()
-      else r match
-        case Zero() | One() | Lit(_) => r
-        case Plus(r1, r2) => r1.filterLengthLe(n) + r2.filterLengthLe(n)
-        case Comp(r1, r2) =>
-          (r1.constLength, r2.constLength) match
-            case (Some(l1), _) => r1 * r2.filterLengthLe(n - l1)
-            case (_, Some(l2)) => r1.filterLengthLe(n - l2) * r2
-            case _ => r
-        case Star(_) => if n == 0 then One() else r
+    def filterElemAtIn(i: Int, xs: List[set.Symbol]): RegEx[A] =
+      filterElemAt(i, a => a & xs)
 
-    def filterLengthGe(n: Int): RegEx[A] =
-      require(0 <= n)
-      val rLen = r.absLength
-      if rLen.isFinite && rLen.toFinSet.max < n then Zero()
-      else r match
-        case Zero() | One() | Lit(_) => r
-        case Plus(r1, r2) => r1.filterLengthGe(n) + r2.filterLengthGe(n)
-        case Comp(r1, r2) =>
-          (r1.constLength, r2.constLength) match
-            case (Some(l1), _) => r1 * r2.filterLengthGe(n - l1)
-            case (_, Some(l2)) => r1.filterLengthGe(n - l2) * r2
-            case _ => r
-        case Star(r1) => if 1 <= n then r1.plus else r
+    def filterElemAtNotIn(i: Int, xs: List[set.Symbol]): RegEx[A] =
+      filterElemAt(i, a => a -- xs)
 
     private def constLength: Option[Int] =
       val r1 = r.absLength
@@ -267,6 +247,66 @@ object REOps extends LazyLogging:
         val ns = r1.toFinSet
         if ns.size == 1 then Some(ns.head) else None
       else None
+
+    def groupByLength(bound: Int): Map[Int, RegEx[A]] =
+      r.constLength match
+        case Some(k) => Map(k -> r)
+        case None => r match
+          case Zero() => Map.empty
+          case One() => Map(0 -> r)
+          case Lit(d) => if d.isEmpty then Map.empty else Map(1 -> r)
+          case Plus(r1, r2) =>
+            val m = mutable.Map.from(r1.groupByLength(bound))
+            for (k, rk) <- r2.groupByLength(bound) do
+              m(k) = m.getOrElse(k, Zero()) + rk
+            m.toMap
+          case Comp(r1, r2) =>
+            val m1 = r1.groupByLength(bound)
+            val m2 = r2.groupByLength(bound)
+            val m = mutable.Map.empty[Int, RegEx[A]]
+            // first part within bound
+            for (k1, r1) <- m1; if k1 <= bound do
+              for (k2, r2) <- m2 do
+                val k = (k1 + k2) min (bound + 1)
+                m(k) = m.getOrElse(k, Zero()) + (r1 * r2)
+            // first part out of bound
+            for r1 <- m1.get(bound + 1) do
+              m(bound + 1) = m.getOrElse(bound + 1, Zero()) + (r1 * r2)
+            m.toMap
+          case Star(r1) =>
+            val m1 = r1.groupByLength(bound)
+            val ms = ListBuffer.empty[mutable.Map[Int, RegEx[A]]]
+            for i <- 0 to bound do
+              val m = mutable.Map.empty[Int, RegEx[A]]
+              m(0) = One()
+              // first part within bound
+              for (k1, r1) <- m1; if k1 <= i do
+                for (k2, r2) <- ms(i - k1) do
+                  val k = (k1 + k2) min (i + 1)
+                  m(k) = m.getOrElse(k, Zero()) + (r1 * r2)
+              // first part out of bound
+              val rs = (for (k1, r1) <- m1; if k1 > i yield r1).toList
+              if rs.nonEmpty then
+                m(i + 1) = m.getOrElse(i + 1, Zero()) + (sum(rs) * r)
+              ms += m
+            ms(bound).toMap
+
+    def filterLengthEq(n: Int): RegEx[A] =
+      require(n >= 0)
+      val m = r.groupByLength(n)
+      m.get(n) match
+        case Some(rn) => rn
+        case None => Zero()
+
+    def filterLengthLe(n: Int): RegEx[A] =
+      require(n >= 0)
+      val m = r.groupByLength(n)
+      sum((for (k, rk) <- m; if k <= n yield rk).toList)
+
+    def filterLengthGe(n: Int): RegEx[A] =
+      require(n >= 0)
+      val m = r.groupByLength(n)
+      sum((for (k, rk) <- m; if k >= n yield rk).toList)
 
   private class CountSolver[A](using set: SymbolSet[A])(t: List[set.Symbol]) extends LinearSolver[A, Set[Int]]:
     require(t.nonEmpty)

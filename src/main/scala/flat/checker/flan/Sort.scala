@@ -14,6 +14,8 @@ final case class SeqSort(elemSort: Sort) extends Sort
 
 val stringSort = SeqSort(CharSort)
 
+val strListSort = SeqSort(stringSort)
+
 final case class SetSort(elemSort: Sort) extends Sort
 
 final case class MapSort(keySort: Sort, valueSort: Sort) extends Sort

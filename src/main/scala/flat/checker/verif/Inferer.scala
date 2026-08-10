@@ -67,6 +67,14 @@ class Inferer(goal: Goal) extends LazyLogging:
       (infer(e), et) match
         case (TStr(r), Const(s: String)) => TBool(r.absEndsWith(s.toList))
         case _ => throw new Exception("Expected a sequence type for SeqEndsWith")
+    case SeqContains(Const(s: String), e) =>
+      infer(e) match
+        case TStr(r) if r.isFiniteLang =>
+          val results = r.getLang.map(s.contains)
+          if results.forall(_ == true) then TBool(BoolSet.True)
+          else if results.forall(_ == false) then TBool(BoolSet.False)
+          else TBool(BoolSet.Full)
+        case _ => throw new Exception("Expected a sequence type for SeqContains")
     case SeqContains(e, et) =>
       (infer(e), et) match
         case (TStr(r), Const(s: String)) => TBool(r.absContains(s.toList))
@@ -103,7 +111,7 @@ class Inferer(goal: Goal) extends LazyLogging:
         case _ => throw new Exception("Expected a string type for StringToUpper")
     case StringTrim(e) =>
       infer(e) match
-        case TStr(r) => TStr(narrow(expr, r.absTrim))
+        case TStr(r) => TStr(narrow(expr, r.absTrim()))
         case _ => throw new Exception("Expected a string type for StringTrim")
     case StrFromInt(e, fmt) =>
       val solver = LPSolver(goal.premises)
@@ -136,8 +144,11 @@ class Inferer(goal: Goal) extends LazyLogging:
     case SeqLength(`seq`) => Right(0)
     case Add(SeqLength(`seq`), Const(i: Int)) if 0 <= i => Right(i)
     case Sub(SeqLength(`seq`), Const(i: Int)) if 0 <= i => Right(i)
+    case Add(Const(i: Int), Sub(SeqLength(`seq`), Const(j: Int))) if 0 <= i - j => Right(i - j)
     case SeqIndexOf(`seq`, Const(s: String), Const(0)) => First(s.toList)
     case Add(SeqIndexOf(`seq`, Const(s: String), Const(0)), Const(i: Int)) => First(s.toList, i)
+    case Sub(Add(SeqIndexOf(`seq`, Const(s: String), Const(0)), Const(i: Int)), Const(j: Int)) if 0 <= j =>
+      First(s.toList, i - j)
     case _ =>
       logger.warn(s"Cannot infer index ${idx.show} for ${seq.show}")
       UnknownIndex
@@ -161,13 +172,18 @@ class Inferer(goal: Goal) extends LazyLogging:
     // equality
     case Eq(`e`, Const(t: String)) => Some(r.filterEq(t.toList))
     case Ne(`e`, Const(t: String)) => Some(r.filterNe(t.toList))
-    // infix
+    // contains
     case SeqContains(`e`, Const(t: String)) => Some(r.filterContains(t.toList))
     case Ne(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(-1)) => Some(r.filterContains(t.toList))
     case Le(Const(0), SeqIndexOf(`e`, Const(t: String), Const(0))) => Some(r.filterContains(t.toList))
+    case Lt(Const(0), Add(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(1))) => Some(r.filterContains(t.toList))
+    case Ne(Add(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(1)), Const(0)) => Some(r.filterContains(t.toList))
+    // not contain
     case Not(SeqContains(`e`, Const(t: String))) => Some(r.filterNotContain(t.toList))
     case Eq(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(-1)) => Some(r.filterNotContain(t.toList))
     case Lt(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(0)) => Some(r.filterNotContain(t.toList))
+    case Eq(Add(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(1)), Const(0)) => Some(r.filterNotContain(t.toList))
+    case Le(Add(SeqIndexOf(`e`, Const(t: String), Const(0)), Const(1)), Const(0)) => Some(r.filterNotContain(t.toList))
     // emptiness
     case Lt(Const(0), SeqLength(`e`)) => Some(r.filterNonEmpty)
     case Ne(SeqLength(`e`), Const(0)) => Some(r.filterNonEmpty)
@@ -178,12 +194,17 @@ class Inferer(goal: Goal) extends LazyLogging:
     case Ne(SeqSelect(`e`, Const(i: Int)), Const(c: Char)) => Some(r.filterElemAtNe(i, c))
     case Ne(SeqSlice(`e`, Const(i: Int), Const(j: Int)), Const(s: String)) if j == i + 1 && s.length == 1 =>
       Some(r.filterElemAtNe(i, s.head))
+    case SeqContains(Const(s: String), CharToString(SeqSelect(`e`, Const(i: Int)))) =>
+      Some(r.filterElemAtIn(i, s.toList))
+    case Not(SeqContains(Const(s: String), CharToString(SeqSelect(`e`, Const(i: Int))))) =>
+      Some(r.filterElemAtNotIn(i, s.toList))
     // Length
     case Le(SeqLength(`e`), Const(n: Int)) if 0 <= n => Some(r.filterLengthLe(n))
     case Lt(SeqLength(`e`), Const(n: Int)) if 1 <= n => Some(r.filterLengthLe(n - 1))
     case Le(Const(n: Int), SeqLength(`e`)) if 0 <= n => Some(r.filterLengthGe(n))
     case Lt(Const(n: Int), SeqLength(`e`)) if -1 <= n => Some(r.filterLengthGe(n + 1))
-    case Eq(SeqLength(`e`), Const(n: Int)) if 0 <= n => Some(r.filterLengthLe(n).filterLengthGe(n))
+    case Eq(SeqLength(`e`), Const(n: Int)) if 0 <= n => Some(r.filterLengthEq(n))
+    case Ne(SeqSlice(`e`, Const(i: Int), Const(j: Int)), Const("")) if 0 <= i && i + 1 == j => Some(r.filterLengthGe(j))
     case _ => None
 
   private def narrow(e: Expr, a: CharSet): CharSet =

@@ -30,7 +30,14 @@ object untpd:
 
   final case class VarStmt(ident: Ident, typ: Option[Type], value: Expr | Nondet) extends Stmt
 
-  final case class Assign(ident: Ident, value: Expr | Nondet) extends Stmt
+  sealed trait Target:
+    val range: Range
+
+  final case class TargetName(name: String)(val range: Range) extends Target
+
+  final case class TupleTarget(elems: List[Target])(val range: Range) extends Target
+
+  final case class Assign(target: Target, value: Expr | Nondet) extends Stmt
 
   final case class ExprStmt(expr: Expr) extends Stmt
 
@@ -39,6 +46,8 @@ object untpd:
   final case class If(guard: Expr | Nondet, thenBody: List[Stmt], elseBody: List[Stmt]) extends Stmt
 
   final case class While(guard: Expr | Nondet, invariants: List[Expr], body: List[Stmt]) extends Stmt
+
+  final case class For(ident: Ident, iter: Expr, invariants: List[Expr], body: List[Stmt]) extends Stmt
 
   final case class Break()(val range: Range) extends Stmt
 

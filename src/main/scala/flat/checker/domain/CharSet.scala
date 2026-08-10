@@ -38,6 +38,9 @@ final case class CharSet(pos: Boolean, chars: Set[Char]):
   def -(c: Char): CharSet =
     if pos then new CharSet(true, chars - c) else new CharSet(false, chars + c)
 
+  def --(chars: String): CharSet =
+    if pos then new CharSet(true, this.chars -- chars.toSet) else new CharSet(false, this.chars ++ chars.toSet)
+
   def representative: Char =
     if pos then chars.min else (Char.MinValue to Char.MaxValue).find(c => !chars.contains(c)).get
 

@@ -27,6 +27,8 @@ object tpd:
 
   final case class While(cond: Expr, invariants: List[Expr], body: List[Stmt]) extends Stmt
 
+  final case class For(name: String, iter: Expr, invariants: List[Expr], body: List[Stmt]) extends Stmt
+
   final case class Break()(val range: Range) extends Stmt
 
   final case class Continue()(val range: Range) extends Stmt

@@ -72,7 +72,7 @@ object builtin:
 
   private def accessTupleMember(elemSorts: List[Sort], name: String): List[Member] = name match
     case _ if name.startsWith("_") =>
-      val selectors = elemSorts.indices.toList.map("_" + _)
+      val selectors = elemSorts.indices.toList.map(i => "_" + (i + 1))
       selectors.indexOf(name) match
         case -1 => Nil
         case i => List(Member(() -> elemSorts(i), { case List(t) => TupleSelect(i, t) }))
@@ -102,6 +102,7 @@ object builtin:
     case "count" => List(
       Member(t -> int, { case List(e, ex) => SeqCount(e, unitSeq(ex, t)) }),
       Member(SeqSort(t) -> int, { case List(e, et) => SeqCount(e, et) }))
+    case "forall" => List(Member((t -> bool) -> bool, { case List(s, p) => SeqForall(s, p) }))
     case _ => if t == char then accessStringSpecificMember(name) else Nil
 
   private def unitSeq(elem: Expr, elemSort: Sort): Expr = elemSort match

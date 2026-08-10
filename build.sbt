@@ -19,6 +19,7 @@ libraryDependencies += "org.apache.commons" % "commons-text" % "1.13.0"
 libraryDependencies += "org.apache.commons" % "commons-math" % "2.2"
 libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.11.4"
 libraryDependencies += "com.lihaoyi" %% "upickle" % "4.1.0"
+libraryDependencies += "com.lihaoyi" %% "fastparse" % "3.1.1"
 libraryDependencies += "com.github.scopt" %% "scopt" % "4.1.0"
 libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.5.18"
 libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5"
@@ -32,6 +33,7 @@ Antlr4 / antlr4Version := "4.13.0"
 Antlr4 / antlr4PackageName := Some("flat.antlr")
 Antlr4 / antlr4GenListener := false
 Antlr4 / antlr4GenVisitor := true
+Antlr4 / antlr4TreatWarningsAsErrors := true
 
 assembly / assemblyOutputPath := file("target/flat-checker.jar")
 assembly / assemblyMergeStrategy := {

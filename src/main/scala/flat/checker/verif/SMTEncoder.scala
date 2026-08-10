@@ -57,6 +57,8 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
     case Add(e1, e2) => tm.mkTerm(ADD, encodeExpr(e1), encodeExpr(e2))
     case Sub(e1, e2) => tm.mkTerm(SUB, encodeExpr(e1), encodeExpr(e2))
     case Mul(e1, e2) => tm.mkTerm(MULT, encodeExpr(e1), encodeExpr(e2))
+    case Div(e1, e2) => tm.mkTerm(INTS_DIVISION, encodeExpr(e1), encodeExpr(e2))
+    case Mod(e1, e2) => tm.mkTerm(INTS_MODULUS, encodeExpr(e1), encodeExpr(e2))
 
     // Int relational
     case Le(e1, e2) => tm.mkTerm(LEQ, encodeExpr(e1), encodeExpr(e2))
@@ -75,9 +77,7 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
           if elems.isEmpty then tm.mkString("")
           else tm.mkTerm(STRING_CONCAT, elems.toArray)
         case _ =>
-          val elemSort = encodeSort(e.elemSort)
-          if elems.isEmpty then tm.mkEmptySequence(elemSort)
-          else tm.mkTerm(SEQ_CONCAT, elems.map(tm.mkTerm(SEQ_UNIT, _)).toArray)
+          mkSeq(encodeSort(e.elemSort), elems)
     case SeqLength(e) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_LENGTH else SEQ_LENGTH, seq)
@@ -238,6 +238,12 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
     val emptySet = tm.mkEmptySet(tm.mkSetSort(elemSort))
     if elems.isEmpty then emptySet
     else tm.mkTerm(SET_INSERT, (elems :+ emptySet).toArray)
+
+  private inline def mkSeq(elemSort: cvc5.Sort, elems: List[cvc5.Term]): cvc5.Term =
+    val emptySeq = tm.mkEmptySequence(elemSort)
+    if elems.isEmpty then emptySeq
+    else if elems.size == 1 then tm.mkTerm(SEQ_UNIT, elems.head)
+    else tm.mkTerm(SEQ_CONCAT, elems.map(tm.mkTerm(SEQ_UNIT, _)).toArray)
 
   private inline def mkArray(arraySort: cvc5.Sort, keys: List[cvc5.Term], values: List[cvc5.Term]): cvc5.Term =
     val emptyArray = tm.mkConst(arraySort)

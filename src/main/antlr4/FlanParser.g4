@@ -34,12 +34,14 @@ ensuresSpec
 // Statements
 stmt
   : 'var' IDENT (':' type)? ('=' exprOrNondet)? ';'     #varStmt
-  | IDENT '=' exprOrNondet ';'                          #assign
+  | target '=' exprOrNondet ';'                         #assign
   | IDENT augAssignOp expr ';'                          #augAssign
+  | IDENT '[' expr ']' ('=' | augAssignOp) expr ';'     #updateAssign
   | expr ';'                                            #exprStmt
   | 'return' expr? ';'                                  #return
   | ifBranch ('else' ifBranch)* ('else' block)?         #if
   | 'while' guard invariantSpec* block                  #while
+  | 'for' IDENT 'in' expr invariantSpec* block          #for
   | 'break' ';'                                         #break
   | 'continue' ';'                                      #continue
   | 'abort' expr ';'                                    #abort
@@ -50,6 +52,11 @@ stmt
 exprOrNondet
   : expr
   | '*'
+  ;
+
+target
+  : IDENT                                     #targetName
+  | '(' target (',' target)+ ')'              #tupleTarget
   ;
 
 augAssignOp
@@ -85,7 +92,6 @@ expr
   | expr '(' exprList ')'                 #apply
   | expr '[' expr ']'                     #select
   | expr '[' range ']'                    #slice
-  | expr '[' expr '=' expr ']'            #update
   | op=(NOT | '-' | '~') expr             #prefixExpr
   | expr op=('*' | '/' | '%') expr        #infixExpr
   | expr op=('+' | '-') expr              #infixExpr

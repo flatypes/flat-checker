@@ -60,6 +60,8 @@ object Simplifier extends LazyLogging:
         e.simplify match
           case Const(b: Boolean) => Const(!b)(expr.range)
           case Not(e) => e
+          case And(e1, e2) => Or(Not(e1)(expr.range).simplify, Not(e2)(expr.range).simplify)(expr.range)
+          case Or(e1, e2) => And(Not(e1)(expr.range).simplify, Not(e2)(expr.range).simplify)(expr.range)
           case Eq(e1, e2) => Ne(e1, e2)(expr.range)
           case Ne(e1, e2) => Eq(e1, e2)(expr.range)
           case Le(e1, e2) => Lt(e2, e1)(expr.range)

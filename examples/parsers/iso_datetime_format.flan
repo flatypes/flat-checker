@@ -1,0 +1,55 @@
+// import from iso_date_format.flan
+lang Year = r"[0-9]{4}"
+lang Month = r"0[1-9]|1[0-2]"
+lang Day = r"0[1-9]|[12][0-9]|3[01]"
+lang Date = Year '-' Month '-' Day
+
+// import from iso_time_format.flan
+lang TimeSpec = "auto" | "hours" | "minutes" | "seconds" | "milliseconds" | "microseconds"
+
+lang Hour = r"[0-1][0-9]|2[0-3]"
+lang Minute = r"[0-5][0-9]"
+lang Second = r"[0-5][0-9]"
+lang Fraction = r"[0-9]+"
+lang RawTime = Hour (":" Minute (":" Second ("." Fraction)?)?)?
+
+lang TimeZone = ("+"|"-") RawTime
+lang Time = RawTime TimeZone
+
+const SECOND = 1000000
+const MINUTE = 60 * SECOND
+const HOUR = 60 * MINUTE
+
+lang DateTime = Date "T" Time
+
+method _format_time(hh: int, mm: int, ss: int, us: int, timespec: TimeSpec): RawTime
+  requires 0 <= hh && hh < 24
+  requires 0 <= mm && mm < 60
+  requires 0 <= ss && ss < 60
+  requires 0 <= us && us < 1000000
+
+method _format_offset(off: int): TimeZone
+  requires -24 * HOUR < off && off < 24 * HOUR
+
+// main
+method iso_format(year: int, month: int, day: int,
+                  hour: int, minute: int, second: int, microsecond: int, timespec: TimeSpec,
+                  utcoffset: int): DateTime
+  requires 1 <= year && year <= 9999
+  requires 1 <= month && month <= 12
+  requires 1 <= day && day <= 31
+  requires 0 <= hour && hour < 24
+  requires 0 <= minute && minute < 60
+  requires 0 <= second && second < 60
+  requires 0 <= microsecond && microsecond < 1000000
+  requires -24 * HOUR < utcoffset && utcoffset < 24 * HOUR
+{
+  var s = format("%04d-%02d-%02dT", year, month, day) +
+          _format_time(hour, minute, second, microsecond, timespec);
+
+  // TODO: utcoffset could be null
+  var tz = _format_offset(utcoffset);
+  s += tz;
+
+  return s;
+}

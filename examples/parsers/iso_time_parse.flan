@@ -1,55 +1,104 @@
-/* Construct a time from a string in one of the ISO 8601 formats. */
-method timeFromISOFormat(timeStr: str): Time
+lang Hour = r"[0-1][0-9]|2[0-3]"
+lang Minute = r"[0-5][0-9]"
+lang Second = r"[0-5][0-9]"
+lang Fraction = r"[0-9]+"
+lang RawTime = Hour (":" Minute (":" Second ("." Fraction)?)?)?
+             | Hour (Minute (Second (("."|",") Fraction)?)?)?
+
+lang TimeZone = ("+"|"-") RawTime
+lang Time = RawTime TimeZone
+
+// Time difference in seconds
+const SECOND = 1000000
+const MINUTE = 60 * SECOND
+const HOUR = 60 * MINUTE
+
+method from_iso_format(time_string: Time)
+  returns (hour: int, minute: int, second: int, microsecond: int, utcoffset: int)
+  ensures 0 <= hour && hour < 24
+  ensures 0 <= minute && minute < 60
+  ensures 0 <= second && second < 60
+  ensures 0 <= microsecond && microsecond < 1000000
+  ensures -24*HOUR <= utcoffset && utcoffset <= 24*HOUR
 {
-  var s = timeStr;
-  if s.startsWith("T") {
-    s = s[1:];
+  var s = time_string;
+  if time_string.startsWith("T") {
+    s = time_string[1:];
   }
 
-  return parseISOFormatTime(s);
+  return _parse_iso_format_time(s);
 }
 
-method parseISOFormatTime(timeStr: str) returns ()
+method _parse_iso_format_time(tstr: Time)
+  returns (hour: int, minute: int, second: int, microsecond: int, utcoffset: int)
+  ensures 0 <= hour && hour < 24
+  ensures 0 <= minute && minute < 60
+  ensures 0 <= second && second < 60
+  ensures 0 <= microsecond && microsecond < 1000000
+  ensures -24*HOUR <= utcoffset && utcoffset <= 24*HOUR
 {
-  if |timeStr| < 2 {
+  var len_str = |tstr|;
+  if len_str < 2 {
     abort "Isoformat time too short";
   }
 
-  var tzPos = timeStr.indexOf('-') + 1;
-  if tzPos == 0 {
-    tzPos = timeStr.indexOf('+') + 1;
+  var tz_pos = tstr.indexOf('-') + 1;
+  if tz_pos == 0 {
+    tz_pos = tstr.indexOf('+') + 1;
   }
-  if tzPos == 0 {
-    tzPos = timeStr.indexOf('Z') + 1;
+  if tz_pos == 0 {
+    tz_pos = tstr.indexOf('Z') + 1;
   }
-  time = tzPos > 0 ? timeStr[:tzPos - 1] : timeStr;
+  var time_str = tz_pos > 0 ? tstr[:tz_pos - 1] : tstr;
 
-  hh, mm, ss, us = parse_hh_mm_ss_ff(time);
-  if hh == 24 {
-    if mm == 0 && ss == 0 && us == 0 {
-      hh = 0;
-    } else {
-      abort "Invalid time";
+  (hour, minute, second, microsecond) = _parse_hh_mm_ss_ff(time_str);
+
+  utcoffset = 0;
+  if tz_pos == len_str && tstr[|tstr| - 1] == 'Z' {
+    utcoffset = 0;
+  } else if tz_pos > 0 {
+    var tz_str = tstr[tz_pos:];
+
+    // Valid time zone strings are:
+    // HH                  len: 2
+    // HHMM                len: 4
+    // HH:MM               len: 5
+    // HHMMSS              len: 6
+    // HHMMSS.f+           len: 7+
+    // HH:MM:SS            len: 8
+    // HH:MM:SS.f+         len: 10+
+
+    if |tz_str| in {0, 1, 3} || tstr[tz_pos - 1] == 'Z' {
+      abort "Malformed time zone string";
     }
-  }
 
-  tzi = None
-  if tzPos == |timeStr| && timeStr[|timeStr| - 1] == 'Z' {
-    tzi = timezoneUtc;
-  } else if tzPos > 0 {
-    tzi = parse_tz_offset(timeStr[tzPos - 1:]);
+    var tz_comps = _parse_hh_mm_ss_ff(tz_str);
+
+    if tz_comps._1 == 0 && tz_comps._2 == 0 && tz_comps._3 == 0 && tz_comps._4 == 0 {
+      utcoffset = 0;
+    } else {
+      var tz_sign = tstr[tz_pos - 1] == '-' ? -1 : 1;
+      var td = (tz_comps._1 * HOUR + tz_comps._2 * MINUTE + tz_comps._3 * SECOND + tz_comps._4);
+      utcoffset = tz_sign * td;
+    }
   }
 }
 
-method _parse_hh_mm_ss_ff(tstr: str) returns (int, int, int, int)
+const _FRACTION_CORRECTION = [100000, 10000, 1000, 100, 10]
+
+/* Parses things of the form HH[:?MM[:?SS[{.,}fff[fff]]]] */
+method _parse_hh_mm_ss_ff(tstr: RawTime) returns (hh: int, mm: int, ss: int, ff: int)
+  ensures 0 <= hh && hh < 24
+  ensures 0 <= mm && mm < 60
+  ensures 0 <= ss && ss < 60
+  ensures 0 <= ff && ff < 1000000
 {
   var len_str = |tstr|;
 
   var time_comps = [0, 0, 0, 0];
   var pos = 0;
-  var comp = 0;
   var has_sep: bool;
-  while comp < 3
+  for comp in [0, 1, 2]
   {
     if (len_str - pos) < 2 {
       abort "Incomplete time component";
@@ -58,22 +107,21 @@ method _parse_hh_mm_ss_ff(tstr: str) returns (int, int, int, int)
     time_comps[comp] = tstr[pos:pos+2].toInt;
 
     pos += 2;
-    next_char = tstr[pos:pos+1];
+    var next_char = tstr[pos:pos+1];
 
     if comp == 0 {
-      has_sep = next_char == ':';
+      has_sep = next_char == ":";
     }
 
-    if !next_char || comp >= 2 {
+    if next_char == "" || comp >= 2 {
       break;
     }
 
-    if has_sep && next_char != ':' {
+    if has_sep && next_char != ":" {
       abort "Invalid time separator";
     }
 
-    pos += has_sep;
-    comp += 1;
+    pos += has_sep ? 1 : 0;
   }
 
   if pos < len_str {
@@ -87,6 +135,7 @@ method _parse_hh_mm_ss_ff(tstr: str) returns (int, int, int, int)
 
       var len_remainder = len_str - pos;
 
+      var to_parse: int;
       if len_remainder >= 6 {
         to_parse = 6;
       } else {
@@ -95,7 +144,7 @@ method _parse_hh_mm_ss_ff(tstr: str) returns (int, int, int, int)
 
       time_comps[3] = tstr[pos:(pos+to_parse)].toInt;
       if to_parse < 6 {
-        time_comps[3] *= _FRACTION_CORRECTION[to_parse-1];
+        time_comps[3] *= _FRACTION_CORRECTION[to_parse - 1];
       }
     }
   }
@@ -103,5 +152,8 @@ method _parse_hh_mm_ss_ff(tstr: str) returns (int, int, int, int)
   return (time_comps[0], time_comps[1], time_comps[2], time_comps[3]);
 }
 
-def _is_ascii_digit(c: str): bool = c in "0123456789"
-
+method _is_ascii_digit(c: char): bool
+  ensures _ == (c in "0123456789")
+{
+  return c in "0123456789";
+}

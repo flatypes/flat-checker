@@ -9,64 +9,64 @@ lang WeekDate = Year Week Weekday? | Year '-' Week ('-' Weekday)?
 lang Date = CalendarDate | WeekDate
 
 /* Construct a date from a string in ISO 8601 format. */
-method dateFromISOFormat(dateStr: Date) returns (y: int, m: int, d: int)
-  ensures 0 <= y && y <= 9999
-  ensures 1 <= m && m <= 12
-  ensures 1 <= d && d <= 31
+method from_iso_format(date_string: Date) returns (year: int, month: int, day: int)
+  ensures 0 <= year && year <= 9999
+  ensures 1 <= month && month <= 12
+  ensures 1 <= day && day <= 31
 {
-  if !dateStr.isAscii {
+  if !date_string.isAscii {
     abort "Argument must be an ASCII str";
   }
 
-  if |dateStr| !in {7, 8, 10} {
+  if |date_string| !in {7, 8, 10} {
     abort "Invalid isoformat string";
   }
 
-  return parseISOFormatDate(dateStr);
+  return _parse_iso_format_date(date_string);
 }
 
-method parseISOFormatDate(dateStr: Date) returns (year: int, month: int, day: int)
+method _parse_iso_format_date(dstr: Date) returns (year: int, month: int, day: int)
   ensures 0 <= year && year <= 9999
   ensures 1 <= month && month <= 12
   ensures 1 <= day && day <= 31
 {
   // It is assumed that this is an ASCII-only string of lengths 7, 8 or 10
-  assert |dateStr| in {7, 8, 10};
-  year = dateStr[0:4].toInt;
-  var hasSep = dateStr[4] == '-';
+  assert |dstr| in {7, 8, 10};
+  year = dstr[0:4].toInt;
+  var has_sep = dstr[4] == '-';
 
-  var pos = 4 + (hasSep ? 1 : 0);
-  if (dateStr[pos:pos + 1] == "W") {
+  var pos = 4 + (has_sep ? 1 : 0);
+  if (dstr[pos:pos + 1] == "W") {
     // YYYY-?Www-?D?
     pos += 1;
-    var weekno = dateStr[pos:pos + 2].toInt;
+    var weekno = dstr[pos:pos + 2].toInt;
     pos += 2;
 
     var dayno = 1;
-    if pos < |dateStr| {
-      if (dateStr[pos:pos + 1] == "-") != hasSep {
+    if pos < |dstr| {
+      if (dstr[pos:pos + 1] == "-") != has_sep {
         abort "Inconsistent use of dash separator";
       }
 
-      pos += (hasSep ? 1 : 0);
-      dayno = dateStr[pos:pos + 1].toInt;
+      pos += (has_sep ? 1 : 0);
+      dayno = dstr[pos:pos + 1].toInt;
     }
 
-    return isoWeekToGregorian(year, weekno, dayno);
+    return _iso_week_to_gregorian(year, weekno, dayno);
 
   } else {
-    month = dateStr[pos:pos + 2].toInt;
+    month = dstr[pos:pos + 2].toInt;
     pos += 2;
-    if (dateStr[pos:pos + 1] == "-") != hasSep {
+    if (dstr[pos:pos + 1] == "-") != has_sep {
       abort "Inconsistent use of dash separator";
     }
 
-    pos += (hasSep ? 1 : 0);
-    day = dateStr[pos:pos + 2].toInt;
+    pos += (has_sep ? 1 : 0);
+    day = dstr[pos:pos + 2].toInt;
   }
 }
 
-method isoWeekToGregorian(year: int, week: int, day: int) returns (y: int, m: int, d: int)
+method _iso_week_to_gregorian(year: int, week: int, day: int) returns (y: int, m: int, d: int)
   requires 0 <= year && year <= 9999
   requires 1 <= week && week <= 53
   requires 1 <= day && day <= 7

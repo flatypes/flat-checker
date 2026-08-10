@@ -80,6 +80,17 @@ class Parser(using reporter: Reporter):
     override def visitChildren(node: RuleNode): TopDef =
       throw NotImplementedError(s"TopDefVisitor.visit${node.getClass.getSimpleName}")
 
+  private object TargetVisitor extends FlanParserBaseVisitor[Target]:
+    override def visitTargetName(node: FlanParser.TargetNameContext): Target =
+      TargetName(node.IDENT.getText)(getRange(node))
+
+    override def visitTupleTarget(node: FlanParser.TupleTargetContext): Target =
+      val elems = node.target.asScala.toList.map(_.accept(this))
+      TupleTarget(elems)(getRange(node))
+
+    override def visitChildren(node: RuleNode): Target =
+      throw NotImplementedError(s"TargetVisitor.visit${node.getClass.getSimpleName}")
+
   private object StmtVisitor extends FlanParserBaseVisitor[Stmt]:
     override def visitVarStmt(node: FlanParser.VarStmtContext): Stmt =
       val ident = toIdent(node.IDENT)
@@ -91,16 +102,30 @@ class Parser(using reporter: Reporter):
       if node.expr != null then node.expr.accept(ExprVisitor) else Nondet()(getRange(node))
 
     override def visitAssign(node: FlanParser.AssignContext): Stmt =
-      val ident = toIdent(node.IDENT)
+      val target = node.target.accept(TargetVisitor)
       val value = toExprOrNondet(node.exprOrNondet)
-      Assign(ident, value)
+      Assign(target, value)
 
     override def visitAugAssign(node: FlanParser.AugAssignContext): Stmt =
       val ident = toIdent(node.IDENT)
       val delta = node.expr.accept(ExprVisitor)
       val op = Ident(node.augAssignOp.getText.dropRight(1))(getRange(node.augAssignOp))
-      val value = mkApply(TermName(ident.name)(getRange(node.IDENT)), op, delta)(getRange(node))
-      Assign(ident, value)
+      val value = mkApply(TermName(ident.name)(ident.range), op, delta)(getRange(node))
+      Assign(TargetName(ident.name)(ident.range), value)
+
+    override def visitUpdateAssign(node: FlanParser.UpdateAssignContext): Stmt =
+      val ident = toIdent(node.IDENT)
+      val self = TermName(ident.name)(getRange(node.IDENT))
+      val index = node.expr(0).accept(ExprVisitor)
+      val delta = node.expr(1).accept(ExprVisitor)
+      val newValue =
+        if node.ASSIGN != null then delta
+        else
+          val oldValue = mkApply(self, Ident("select")(getRange(node.OPEN_SQUARE)), index)(getRange(node.OPEN_SQUARE))
+          val op = Ident(node.augAssignOp.getText.dropRight(1))(getRange(node.augAssignOp))
+          mkApply(oldValue, op, delta)(getRange(node))
+      val value = mkApply(self, Ident("update")(getRange(node.OPEN_SQUARE)), index, newValue)(getRange(node))
+      Assign(TargetName(ident.name)(ident.range), value)
 
     override def visitExprStmt(node: FlanParser.ExprStmtContext): Stmt =
       val expr = node.expr.accept(ExprVisitor)
@@ -129,6 +154,13 @@ class Parser(using reporter: Reporter):
       val invariants = node.invariantSpec.asScala.toList.map(_.expr.accept(ExprVisitor))
       val body = toStmtList(node.block)
       While(cond, invariants, body)
+
+    override def visitFor(node: FlanParser.ForContext): Stmt =
+      val ident = toIdent(node.IDENT)
+      val iter = node.expr.accept(ExprVisitor)
+      val invariants = node.invariantSpec.asScala.toList.map(_.expr.accept(ExprVisitor))
+      val body = toStmtList(node.block)
+      For(ident, iter, invariants, body)
 
     override def visitBreak(node: FlanParser.BreakContext): Stmt =
       Break()(getRange(node.BREAK))
@@ -218,13 +250,6 @@ class Parser(using reporter: Reporter):
       else
         val end = node.range.end.accept(this)
         mkApply(receiver, op, start, end)(getRange(node))
-
-    override def visitUpdate(node: FlanParser.UpdateContext): Expr =
-      val receiver = node.expr(0).accept(this)
-      val op = Ident("update")(getRange(node.OPEN_SQUARE))
-      val index = node.expr(1).accept(this)
-      val value = node.expr(2).accept(this)
-      mkApply(receiver, op, index, value)(getRange(node))
 
     override def visitPrefixExpr(node: FlanParser.PrefixExprContext): Expr =
       val operand = node.expr.accept(this)
