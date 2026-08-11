@@ -16,7 +16,7 @@ import scala.collection.mutable.ListBuffer
 
 class Prover extends LazyLogging:
   def prove(goal: Goal): Boolean =
-    goal.conclusion.collectFirst { case Ite(e, _, _) => e } match
+    collectIfCond(goal.conclusion) match
       case Some(e) =>
         val (ps1, ps2) = goal.premises.map(caseIf(e, _)(using goal.sorts)).unzip
         val (c1, c2) = caseIf(e, goal.conclusion)(using goal.sorts)
@@ -51,6 +51,10 @@ class Prover extends LazyLogging:
           else
             false
 
+  private def collectIfCond(expr: Expr): Option[Expr] =
+    expr.collectFirst:
+      case Ite(e, _, _) => collectIfCond(e).getOrElse(e)
+
   def prove1(goal: Goal): Boolean =
     goal.conclusion match
       // refinement type checking
@@ -59,8 +63,12 @@ class Prover extends LazyLogging:
         inferer.infer(e) match
           case TStr(r1) =>
             logger.debug("Inferred: {} ∈ {}", e.show, r1.pp)
-            RESub.check(r1, r)
+            r1 == r || RESub.check(r1, r)
           case _ => ???
+      case And(e1, e2) if e1.isInstanceOf[Or] | e2.isInstanceOf[Or] =>
+        prove1(Goal(goal.premises, e1)(using goal.sorts)) && prove1(Goal(goal.premises, e2)(using goal.sorts))
+      case Or(e1, e2) =>
+        prove1(Goal(goal.premises :+ Not(e1).simplify(using goal.sorts), e2)(using goal.sorts))
       case _ =>
         val solver = SMTSolver(using goal.sorts)
         goal.premises.foreach(solver.add)
@@ -92,6 +100,11 @@ class Prover extends LazyLogging:
     val inferer = Inferer(goal)
     val lemmas = ListBuffer.empty[Expr]
     goal.conclusion.collect:
+      case e: CharIn =>
+        inferer.infer(e) match
+          case TBool(set) =>
+            lemmas ++= inBoolSet(e, set)
+          case _ => ()
       case e@SeqLength(es) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TNat(set) =>

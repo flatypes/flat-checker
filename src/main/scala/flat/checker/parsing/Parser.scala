@@ -88,6 +88,10 @@ class Parser(using reporter: Reporter):
       val elems = node.target.asScala.toList.map(_.accept(this))
       TupleTarget(elems)(getRange(node))
 
+    override def visitListTarget(node: FlanParser.ListTargetContext): Target =
+      val elems = node.target.asScala.toList.map(_.accept(this))
+      ListTarget(elems)(getRange(node))
+
     override def visitChildren(node: RuleNode): Target =
       throw NotImplementedError(s"TargetVisitor.visit${node.getClass.getSimpleName}")
 
@@ -271,10 +275,11 @@ class Parser(using reporter: Reporter):
       else
         mkApply(left, Ident(node.relOp.getText)(getRange(node.relOp)), right)(getRange(node))
 
-    override def visitInLang(node: FlanParser.InLangContext): Expr =
+    override def visitLangMembership(node: FlanParser.LangMembershipContext): Expr =
       val str = node.expr.accept(this)
       val lang = node.lang.accept(LangVisitor)
-      InLang(str, lang)(getRange(node))
+      val e = InLang(str, lang)(getRange(node))
+      if node.NOT_IN_LANG != null then mkNot(e)(e.range, getRange(node.NOT_IN_LANG)) else e
 
     override def visitIteExpr(node: FlanParser.IteExprContext): Expr =
       val cond = node.expr(0).accept(this)

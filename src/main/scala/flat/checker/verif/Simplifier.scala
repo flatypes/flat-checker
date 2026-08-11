@@ -117,9 +117,14 @@ object Simplifier extends LazyLogging:
       case Lt(e1, e2) =>
         (e1.simplify, e2.simplify) match
           case (Const(i1: Int), Const(i2: Int)) => Const(i1 < i2)(expr.range)
+          case (SeqIndexOf(e1, _, _), SeqLength(e2)) if e1 == e2 => Const(true)(expr.range) // s.indexOf(t) < |s|
           case (e1, e2) => Lt(e1, e2)(expr.range)
 
       // Char
+      case CharIn(e, a) =>
+        e.simplify match
+          case Const(c: Char) => Const(a.contains(c))(expr.range)
+          case e => CharIn(e, a)(expr.range)
       case CharToInt(e) =>
         e.simplify match
           case Const(c: Char) => Const(c.toInt)(expr.range)
@@ -214,10 +219,15 @@ object Simplifier extends LazyLogging:
         (e.simplify, e1.simplify, e2.simplify) match
           case (Const(s: String), Const(s1: String), Const(s2: String)) => Const(s.replace(s1, s2))(expr.range)
           case (e, e1, e2) => StrReplace(e, e1, e2)(expr.range)
-      case StringSplit(e, ex) =>
+      case StringSplit(e, ex, None) =>
         (e.simplify, ex.simplify) match
           case (Const(s: String), Const(t: String)) => SeqLit(s.split(t).toList.map(Const(_)))(stringSort, expr.range)
           case (e, et) => StringSplit(e, et)(expr.range)
+      case StringSplit(e, ex, Some(em)) =>
+        (e.simplify, ex.simplify, em.simplify) match
+          case (Const(s: String), Const(t: String), Const(m: Int)) =>
+            SeqLit(s.split(t, m).toList.map(Const(_)))(stringSort, expr.range)
+          case (e, et, em) => StringSplit(e, et, Some(em))(expr.range)
       case StringTrim(e) =>
         e.simplify match
           case Const(s: String) => Const(s.trim)(expr.range)

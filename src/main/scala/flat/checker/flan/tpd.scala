@@ -1,7 +1,7 @@
 package flat.checker.flan
 
-import flat.checker.domain.StrRE
 import flat.checker.domain.StrREOps.NumStrFormat
+import flat.checker.domain.{CharSet, StrRE}
 import org.eclipse.lsp4j.{Position, Range}
 
 object tpd:
@@ -54,6 +54,7 @@ object tpd:
       productIterator.toList.flatMap:
         case e: Expr => List(e)
         case (e: Expr) :: es => e :: es.map(_.asInstanceOf[Expr])
+        case Some(e: Expr) => List(e)
         case _ => Nil
 
     def collect[T](pf: PartialFunction[Expr, T]): List[T] =
@@ -216,6 +217,11 @@ object tpd:
       case _ => throw IllegalArgumentException("BitShR must have exactly 2 subtrees")
 
   // Char operations
+  final case class CharIn(chr: Expr, a: CharSet)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): CharIn = subtrees match
+      case List(e) => CharIn(e, a)(range)
+      case _ => throw IllegalArgumentException("CharIn must have exactly 1 subtree")
+
   final case class CharToInt(chr: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): CharToInt = subtrees match
       case List(e) => CharToInt(e)(range)
@@ -263,11 +269,13 @@ object tpd:
       case List(e, ei, ex) => SeqUpdate(e, ei, ex)(range)
       case _ => throw IllegalArgumentException("SeqUpdate must have exactly 3 subtrees")
 
-  final case class SeqSlice(seq: Expr, start: Expr, end: Expr = NoExpr)(val range: Range = noRange) extends Expr:
+  final case class SeqSlice(seq: Expr, start: Expr, end: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): SeqSlice = subtrees match
-      case List(e, ei) => SeqSlice(e, ei)(range)
       case List(e, ei, ej) => SeqSlice(e, ei, ej)(range)
-      case _ => throw IllegalArgumentException("SeqSlice must have 2 or 3 subtrees")
+      case _ => throw IllegalArgumentException("SeqSlice must have 3 subtrees")
+
+  object SeqSlice:
+    def apply(seq: Expr, start: Expr)(range: Range): SeqSlice = SeqSlice(seq, start, SeqLength(seq))(range)
 
   final case class SeqConcat(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): SeqConcat = subtrees match
@@ -317,9 +325,10 @@ object tpd:
       case List(e, et, er) => StrReplace(e, et, er)(range)
       case _ => throw IllegalArgumentException("StrReplace must have exactly 3 subtrees")
 
-  final case class StringSplit(str: Expr, sep: Expr)(val range: Range = noRange) extends Expr:
+  final case class StringSplit(str: Expr, sep: Expr, max: Option[Expr] = None)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StringSplit = subtrees match
       case List(e, et) => StringSplit(e, et)(range)
+      case List(e, et, em) => StringSplit(e, et, Some(em))(range)
       case _ => throw IllegalArgumentException("StringSplit must have exactly 2 subtrees")
 
   final case class StringTrim(str: Expr)(val range: Range = noRange) extends Expr:

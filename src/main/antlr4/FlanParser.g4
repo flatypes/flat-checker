@@ -57,6 +57,7 @@ exprOrNondet
 target
   : IDENT                                     #targetName
   | '(' target (',' target)+ ')'              #tupleTarget
+  | '[' target (',' target)+ ']'              #listTarget
   ;
 
 augAssignOp
@@ -100,7 +101,7 @@ expr
   | expr op='^' expr                      #infixExpr
   | expr op='|' expr                      #infixExpr
   | expr op=relOp expr                    #relExpr
-  | expr '∈' lang                         #inLang
+  | expr ('∈' | '∉') lang                 #langMembership
   | <assoc=right> expr op=AND expr        #infixExpr
   | <assoc=right> expr op=OR expr         #infixExpr
   | <assoc=right> expr op='==>' expr      #infixExpr

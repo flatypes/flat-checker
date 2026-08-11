@@ -109,6 +109,7 @@ object Show extends LazyLogging:
       case CharToInt(e) => showMemberApply(e, "toInt")
       case CharFromInt(e) => showMemberApply(e, "toChar")
       case CharToString(e) => showMemberApply(e, "toString")
+      case CharIn(e, a) => s"${showExpr(e)} ∈ $a"
 
       // Seq
       case SeqLit(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
@@ -129,7 +130,8 @@ object Show extends LazyLogging:
 
       // String
       case StrReplace(e, e1, e2) => showMemberApply(e, "replace", e1, e2)
-      case StringSplit(e, et) => showMemberApply(e, "split", et)
+      case StringSplit(e, et, None) => showMemberApply(e, "split", et)
+      case StringSplit(e, et, Some(em)) => showMemberApply(e, "split", et, em)
       case StringTrim(e) => showMemberApply(e, "trim")
       case StringToLower(e) => showMemberApply(e, "toLower")
       case StringToUpper(e) => showMemberApply(e, "toUpper")

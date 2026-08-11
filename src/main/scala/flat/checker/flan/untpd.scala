@@ -37,6 +37,8 @@ object untpd:
 
   final case class TupleTarget(elems: List[Target])(val range: Range) extends Target
 
+  final case class ListTarget(elems: List[Target])(val range: Range) extends Target
+
   final case class Assign(target: Target, value: Expr | Nondet) extends Stmt
 
   final case class ExprStmt(expr: Expr) extends Stmt

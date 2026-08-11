@@ -65,6 +65,7 @@ GE: '>=';
 GT: '>';
 IN: 'in';
 IN_LANG: '∈';
+NOT_IN_LANG: '∉';
 SHL: '<<';
 SHR: '>>';
 BIT_AND: '&';

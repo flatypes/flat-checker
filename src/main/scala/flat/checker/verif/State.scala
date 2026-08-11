@@ -6,7 +6,7 @@ import flat.checker.verif.Simplifier.{simplify, toCNF}
 
 final case class MethodInfo(params: List[VarDecl], returns: List[VarDecl],
                             requires: List[Expr], ensures: List[Expr],
-                            locals: List[VarDecl] = Nil):
+                            locals: List[VarDecl]):
   def paramNames: List[String] = params.map(_.name)
 
   def returnNames: List[String] = returns.map(_.name)
@@ -28,6 +28,8 @@ final case class State(methods: Map[String, MethodInfo] = Map.empty,
                        freshCounts: Map[String, Int] = Map.empty,
                        ctx: PrfCtx = PrfCtx()):
   val types: Map[String, NormType] = methods(currentMethod).types
+
+  val sorts: Map[String, Sort] = types.map { (name, typ) => name -> typ.sort }
 
   def fresh(name: String, sort: Sort): (String, State) =
     val version = freshCounts.getOrElse(name, 0)

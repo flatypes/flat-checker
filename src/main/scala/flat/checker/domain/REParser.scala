@@ -37,20 +37,19 @@ object REParser:
     // term -> atom quantifier?
     private def term: Parser[StrRE] = atom >> parseQuantifier
 
-    // quantifier -> '*' | '+' | '?' | '{' (interval | int) '}'
+    // quantifier -> '*' | '+' | '?' | '{' int (',' int?)? '}'
     private def parseQuantifier(r: StrRE): Parser[StrRE] =
-      '*' ^^^ r.star | '+' ^^^ r.plus | '?' ^^^ r.opt | '{' ~> (int ^^ (r ^ _)) <~ '}' | success(r)
+      '*' ^^^ r.star | '+' ^^^ r.plus | '?' ^^^ r.opt | '{' ~> (int ^^ (r ^ _)) <~ '}' |
+        '{' ~> (((int <~ ',') ~ int.?) ^^ { case n1 ~ n2 => r.loop(n1, n2) }) <~ '}' | success(r)
 
     // Reserved characters in regex syntax
     private val syntaxChars: String = "^$\\.*+?()[]{}|"
 
     // atom -> char (EXCEPT syntaxChars) | '\' (charEscape | classEscape) | '.' | '[' classContents ']' | '(' expr ')'
-    //       | '{' rule '}'
     private def atom: Parser[StrRE] =
       acceptMatch("character", { case c if !syntaxChars.contains(c) => RegEx.symbol(c) }) |
         '\\' ~>! (charEscape ^^ RegEx.symbol) |
-        '.' ^^^ RegEx.Lit(CharSet.full) | '[' ~>! classContents <~ ']' | '(' ~>! expr <~ ')' |
-        '{' ~>! rule <~ '}'
+        '.' ^^^ RegEx.Lit(CharSet.full) | '[' ~>! classContents <~ ']' | '(' ~>! expr <~ ')'
 
     // classContents -> '^'? classContent*
     private def classContents: Parser[StrRE] =

@@ -6,6 +6,7 @@ import flat.checker.flan.Show.show
 import flat.checker.flan.SortOps.sort
 import flat.checker.flan.Subst.*
 import flat.checker.flan.tpd.*
+import flat.checker.flan.{SeqSort, stringSort}
 import flat.checker.verif.Simplifier.simplify
 import org.eclipse.lsp4j.Range
 
@@ -73,9 +74,14 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
     case s@For(x, SeqLit(es), eis, b) if es.length < 5 =>
       execFor(x, es, b, state, cont)
+    case s@For(x, Const(cs: String), eis, b) if cs.length < 5 =>
+      execFor(x, cs.toList.map(Const(_)()), b, state, cont)
     case s@For(x, e, eis, b) =>
       assert(eis, state, InvNotProvedOnEntryError(_))
-      val ex: Expr = SeqContains(e, SeqLit(List(Var(x)))(x.sort(using state.ctx.vars)))
+      val ex: Expr = e.sort(using state.sorts) match
+        case `stringSort` => SeqContains(e, CharToString(Var(x)))
+        case SeqSort(s) => SeqContains(e, SeqLit(List(Var(x)))(s))
+        case _ => throw RuntimeException(s"Expected a sequence type for For-loop, but got ${e.sort(using state.sorts)}")
       val onExit: State => Unit = assert(eis, _, InvNotMaintainedError(_))
       havoc(collectModifiedVars(b), state, st1 =>
         assume(ex :: eis, st1, st2 =>
@@ -114,8 +120,6 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
         assert(e.subst("_", expr), state, ReftNotProvedError(expr.range))
       val (v, st) = eval(expr, state)
       cont(st.copy(values = st.values + (name -> v)))
-    else
-      havoc(name, state, cont)
 
   private def havoc(name: String, state: State, cont: State => Unit): Unit =
     val typ = state.types(name)
@@ -218,25 +222,25 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       var st = st1
       m.ensures match
         case List(Eq(Var(y), e)) if m.returnNames == List(y) && e.collect { case Var(`y`) => () }.isEmpty =>
-          (e.subst(m.paramNames, vs), st)
+          (e.subst(m.paramNames, vs).simplify(using state.ctx.vars), st)
         case _ =>
-          val ys = ListBuffer.empty[String]
+          val rvs = ListBuffer.empty[Expr]
           for p <- m.returns do
-            val (y, st1) = st.fresh(p.name, p.typ.sort)
-            ys += y
+            val (y, st1) = st.fresh(f + "_" + p.name, p.typ.sort)
             st = st1
+            val value: Expr = Var(y)
+            rvs += value
             for e <- p.typ.reft do
-              st = st.add(e.subst("_", Var(y)))
-          val rvs: List[Expr] = ys.toList.map(Var(_))
+              st = st.add(e.subst("_", value))
           for e <- m.ensures do
             st = st.add(e.subst(m.paramNames ++ m.returnNames, vs ++ rvs))
-          val v: Expr = rvs match
-            case List(rv) => rv
-            case _ => TupleExpr(rvs)
+          val v: Expr = rvs.toList match
+            case List(e) => e
+            case es => TupleExpr(es)
           (v, st)
     case _ =>
       val (vs, st) = eval(expr.subtrees, state)
-      (expr.rebuild(vs), st)
+      (expr.rebuild(vs).simplify(using state.ctx.vars), st)
 
   private def eval(exprs: List[Expr], state: State): (List[Expr], State) = exprs match
     case Nil => (Nil, state)

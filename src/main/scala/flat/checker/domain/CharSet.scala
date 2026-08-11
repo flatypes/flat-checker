@@ -66,6 +66,14 @@ object CharSet:
 
   def from(it: Iterable[Char]): CharSet = new CharSet(true, Set.from(it))
 
+  // common character sets
+  val asciiLower: CharSet = from('a' to 'z')
+  val asciiUpper: CharSet = from('A' to 'Z')
+  val asciiLetter: CharSet = asciiLower | asciiUpper
+  val asciiDecimal: CharSet = from('0' to '9')
+  val asciiSpace: CharSet = from(" \t\n\r\f")
+  val ascii: CharSet = from(0.toChar to 127.toChar)
+
 given SymbolSet[CharSet] with
   def empty: CharSet = CharSet.empty
 

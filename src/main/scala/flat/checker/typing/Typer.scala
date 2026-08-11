@@ -91,8 +91,8 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     case untpd.LangPlus(l) => translate(l).plus
     case untpd.LangOpt(l) => translate(l).opt
     case untpd.LangPower(l, n) => translate(l) ^ n
-    case untpd.LangLoop(l, n1, Some(n2)) => ???
-    case untpd.LangLoop(l, n1, None) => ???
+    case untpd.LangLoop(l, n1, Some(n2)) => translate(l).loop(n1, Some(n2))
+    case untpd.LangLoop(l, n1, None) => translate(l).loop(n1, None)
     case untpd.LangConcat(l1, l2) => translate(l1) * translate(l2)
     case untpd.LangUnion(l1, l2) => translate(l1) + translate(l2)
 

@@ -1,5 +1,6 @@
 package flat.checker.typing
 
+import flat.checker.domain.CharSet
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.flan.tpd.*
 import flat.checker.flan.{BoolSort as bool, CharSort as char, IntSort as int, stringSort as str, *}
@@ -65,6 +66,13 @@ object builtin:
     case _ => Nil
 
   private def accessCharMember(name: String): List[Member] = name match
+    // test
+    case "isAsciiLower" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiLower) }))
+    case "isAsciiUpper" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiUpper) }))
+    case "isAsciiLetter" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiLetter) }))
+    case "isAsciiDecimal" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiDecimal) }))
+    case "isAsciiSpace" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiSpace) }))
+    case "isAscii" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.ascii) }))
     // conversion
     case "toInt" => List(Member(() -> int, { case List(c) => CharToInt(c) }))
     case "toString" => List(Member(() -> str, { case List(c) => CharToString(c) }))
@@ -117,7 +125,11 @@ object builtin:
     case "replace" => List(
       Member((char, str) -> str, { case List(s, c, s1) => StrReplace(s, CharToString(c)(c.range), s1) }),
       Member((str, str) -> str, { case List(s, t1, t2) => StrReplace(s, t1, t2) }))
-    case "split" => List(Member(str -> SeqSort(str), { case List(s, t) => StringSplit(s, t) }))
+    case "split" => List(
+      Member(char -> SeqSort(str), { case List(s, c) => StringSplit(s, CharToString(c)(c.range)) }),
+      Member(str -> SeqSort(str), { case List(s, t) => StringSplit(s, t) }),
+      Member((char, int) -> SeqSort(str), { case List(s, c, k) => StringSplit(s, CharToString(c)(c.range), Some(k)) }),
+      Member((str, int) -> SeqSort(str), { case List(s, t, k) => StringSplit(s, t, Some(k)) }))
     case "trim" => List(Member(() -> str, { case List(s) => StringTrim(s) }))
     case "toLower" => List(Member(() -> str, { case List(s) => StringToLower(s) }))
     case "toUpper" => List(Member(() -> str, { case List(s) => StringToUpper(s) }))

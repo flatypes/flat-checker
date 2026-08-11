@@ -51,7 +51,7 @@ object SortOps:
         case _: Eq | Ne => BoolSort
         case Ite(_, e1, e2) => e1.sort lub e2.sort
         // Bool
-        case _: And | Or | Not | Implies => BoolSort
+        case _: And | Or | Not | Implies | Eq | Ne => BoolSort
         // Int
         case _: Negate | Add | Sub | Mul => IntSort
         case _: Le | Lt => BoolSort

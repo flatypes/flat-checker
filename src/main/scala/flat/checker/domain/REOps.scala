@@ -127,6 +127,13 @@ object REOps extends LazyLogging:
       case Nil => throw IllegalArgumentException("absCount: t must be non-empty")
       case _ => CountSolver(t).solve(r)
 
+    def absSplit(t: List[set.Symbol], limit: Int): RegEx[RegEx[A]] =
+      require(limit >= 0)
+      if t.isEmpty || limit == 0 then Lit(r)
+      else
+        val rs = for (r1, r2) <- r.findFirst(t) yield Lit(r1) * r2.absSplit(t, limit - 1)
+        if rs.isEmpty then Lit(r) else sum(rs)
+
     /** Abstract operation for `s.split(t)`. */
     def absSplit(t: List[set.Symbol]): RegEx[RegEx[A]] = t match
       case Nil => Lit(r)
@@ -222,6 +229,11 @@ object REOps extends LazyLogging:
         case Plus(r1, r2) => r1.filterNotContain2(t) + r2.filterNotContain2(t)
         case Comp(r1, r2) if !r1.alphabet.contains(t.head) => r1 * r2.filterNotContain2(t)
         case _ => NotContainSolver(t).solve(r)
+
+    def filterIndexOfLt(x1: set.Symbol, x2: set.Symbol): RegEx[A] =
+      // Assume both character exist
+      sum(for (r1, r2) <- r.findAny(x1) yield
+        r1.filterNotContain1(x2) * symbol(x1) * r2.filterContains(List(x2)))
 
     private def filterElemAt(i: Int, f: A => A): RegEx[A] =
       if i == 0 then

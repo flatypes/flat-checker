@@ -196,22 +196,38 @@ class Checker(using reporter: Reporter) extends LazyLogging:
     body.toList
 
   private def assign(target: untpd.Target, value: Expr, sort: Sort, body: ListBuffer[Stmt])
-                    (using ctx: Ctx, vs: VarStore): Unit =
-    (target, sort) match
-      case (untpd.TargetName(x), _) =>
-        ctx.lookup(x) match
-          case Some(VarInfo(NormType(expected, _), index, false)) =>
-            if sort :<: expected then
-              body += Assign(vs.getName(index), value)
-            else
-              reporter.reportTypeMismatch(target.range, expected, sort)
-          case _ =>
-            reporter.reportNotAssignable(target.range)
-        body += Assign(x, value)
-      case (untpd.TupleTarget(ts), TupleSort(ss)) if ts.length == ss.length =>
+                    (using ctx: Ctx, vs: VarStore): Unit = target match
+    case untpd.TargetName(x) =>
+      ctx.lookup(x) match
+        case Some(VarInfo(NormType(expected, _), index, false)) =>
+          if sort :<: expected then
+            body += Assign(vs.getName(index), value)
+          else
+            reporter.reportTypeMismatch(target.range, expected, sort)
+        case _ =>
+          reporter.reportNotAssignable(target.range)
+      body += Assign(x, value)
+    case untpd.TupleTarget(ts) => sort match
+      case TupleSort(ss) if ts.length == ss.length =>
+        val fresh = vs.add("tuple", sort)
+        body += Assign(vs.getName(fresh), value)
+        val tuple = Var(vs.getName(fresh))(value.range)
         for (t, i) <- ts.zipWithIndex yield
-          val elem = TupleSelect(i, value)(value.range)
+          val elem = TupleSelect(i, tuple)(value.range)
           assign(t, elem, ss(i), body)
+      case _ =>
+        reporter.reportTypeMismatch(target.range, "tuple", sort)
+    case untpd.ListTarget(ts) => sort match
+      case SeqSort(s) =>
+        val fresh = vs.add("list", SeqSort(s))
+        body += Assign(vs.getName(fresh), value)
+        val list = Var(vs.getName(fresh))(value.range)
+        body += Assert(Eq(SeqLength(list)(value.range), Const(ts.length))(value.range))
+        for (t, i) <- ts.zipWithIndex yield
+          val elem = SeqSelect(list, Const(i))(value.range)
+          assign(t, elem, s, body)
+      case _ =>
+        reporter.reportTypeMismatch(target.range, "list", sort)
 
   private def checkGuard(guard: untpd.Expr | untpd.Nondet, ctx: LocalCtx)(using va: VarStore): Expr = guard match
     case e: untpd.Expr =>

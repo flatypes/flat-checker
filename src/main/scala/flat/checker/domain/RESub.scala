@@ -16,8 +16,8 @@ object RESub extends LazyLogging:
 
     queue.enqueue((r1, r2))
     while queue.nonEmpty do
-      if queue.size > 100 then
-        throw RuntimeException("queue size exceeded 100")
+      if queue.size > 1000 then
+        throw RuntimeException("queue size exceeded 1000")
 
       val (r1, r2) = queue.dequeue()
       if r1.nullable && !r2.nullable then

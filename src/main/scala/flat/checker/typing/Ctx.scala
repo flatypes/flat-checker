@@ -6,6 +6,7 @@ import flat.checker.flan.tpd.*
 import flat.checker.flan.{FunSort, Sort, TupleSort}
 import org.eclipse.lsp4j.Range
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 sealed trait Info:
@@ -82,10 +83,18 @@ final case class LocalCtx(global: GlobalCtx,
   def enterLoop: LocalCtx = copy(scopeStack = Map.empty :: scopeStack, loopLevel = loopLevel + 1)
 
 final class VarStore:
+  private val counts = mutable.Map.empty[String, Int]
   private val buf = ListBuffer.empty[VarDecl]
 
   def add(name: String, typ: NormType): Int =
-    buf += VarDecl(name, typ)
+    counts.get(name) match
+      case Some(n) =>
+        val newName = s"${name}_$n"
+        counts(name) = n + 1
+        buf += VarDecl(newName, typ)
+      case None =>
+        counts(name) = 1
+        buf += VarDecl(name, typ)
     buf.length - 1
 
   def getName(index: Int): String = buf(index).name

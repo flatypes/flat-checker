@@ -1,6 +1,7 @@
 package flat.checker.domain
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.domain.Prettifier.pp
 import flat.checker.domain.RegEx.*
 
 import scala.collection.mutable.ListBuffer
@@ -20,6 +21,13 @@ object StrREOps extends LazyLogging:
     def absContainsStr(s: String): BoolSet = REOps.absContains(r)(s.toList)
 
     def absIndexOfStr(s: String): IndexSet = REOps.absIndexOf(r)(s.toList)
+
+    def forallIndexOfLt(c1: Char, c2: Char): Boolean =
+      val r1 = REOps.takeIndexOf(r)(List(c1))
+      logger.debug("forallIndexOfLt: r1 = {}", r1.pp)
+      val r2 = REOps.filterContains(r1)(List(c2))
+      logger.debug("forallIndexOfLt: r2 = {}", r2.pp)
+      r2.isEmpty
 
     def absReplace(s1: String, s2: String): StrRE = s1.length match
       case 0 => throw IllegalArgumentException("Replacement string cannot be empty")

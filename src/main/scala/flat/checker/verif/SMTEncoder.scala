@@ -2,6 +2,7 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.flan.*
+import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
 import io.github.cvc5
 import io.github.cvc5.Kind.*
@@ -65,6 +66,7 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
     case Lt(e1, e2) => tm.mkTerm(LT, encodeExpr(e1), encodeExpr(e2))
 
     // Char
+    case CharIn(cat, e) => encodeUninterpreted(expr, BoolSort)
     case CharToInt(e) => tm.mkTerm(STRING_TO_CODE, encodeExpr(e))
     case CharFromInt(e) => tm.mkTerm(STRING_FROM_CODE, encodeExpr(e))
     case CharToString(e) => encodeExpr(e)

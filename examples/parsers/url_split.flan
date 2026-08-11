@@ -1,0 +1,134 @@
+// IPv4
+lang DecOctet = r"[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5]"
+lang IPv4Address = DecOctet "." DecOctet "." DecOctet "." DecOctet
+
+// IPv6
+lang H16 = r"[0-9a-fA-F]{1,4}"
+lang LS32 = (H16 ":" H16) | IPv4Address
+lang IPv6Address =                            (H16 ":"){6} LS32
+                 |                       "::" (H16 ":"){5} LS32
+                 |                  H16? "::" (H16 ":"){4} LS32
+                 | ((H16 ":"){0,1} H16)? "::" (H16 ":"){3} LS32
+                 | ((H16 ":"){0,2} H16)? "::" (H16 ":"){2} LS32
+                 | ((H16 ":"){0,3} H16)? "::"  H16 ":"     LS32
+                 | ((H16 ":"){0,4} H16)? "::"              LS32
+                 | ((H16 ":"){0,5} H16)? "::"              H16
+                 | ((H16 ":"){0,6} H16)? "::"
+
+lang HexDigit = r"[0-9a-fA-F]"
+lang Char = r"[a-zA-Z0-9\-._~!$&'()*+,;=]" // unreserved | sub-delims
+lang IPvFuture = "v" HexDigit+ "." (Char | ":")+
+lang IPLiteral = "[" (IPv6Address | IPvFuture) "]"
+
+lang Scheme = r"[a-zA-Z][a-zA-Z0-9+\-.]*"
+
+lang PctEncoded = "%" HexDigit HexDigit
+lang UserInfo = (Char | PctEncoded | ":")*
+lang RegName = (Char | PctEncoded)*
+lang Host = IPLiteral | IPv4Address | RegName
+lang Port = r"[0-9]*"
+lang NetLoc = (UserInfo "@")? Host (":" Port)?
+
+lang PChar = Char | PctEncoded | ":" | "@"
+lang RelPath = PChar+ ("/" PChar*)*
+lang AbsPath = "/" RelPath?
+lang Path = AbsPath | RelPath | ""
+
+lang Query = (PChar | "/" | "?")*
+lang Fragment = (PChar | "/" | "?")*
+
+lang HierPart = "//" NetLoc AbsPath? | Path
+lang URL = Scheme ":" HierPart ("?" Query)? ("#" Fragment)?
+
+const scheme_chars = "abcdefghijklmnopqrstuvwxyz" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "0123456789" + "+-."
+
+// TODO: very slow
+method url_split(url: URL) returns (scheme: Scheme, netloc: NetLoc, path: Path, query: Query, fragment: Fragment)
+{
+  netloc = "";
+  query = "";
+  fragment = "";
+  var s = url;
+  var i = s.indexOf(':');
+  assert i > 0 && s[0].isAsciiLetter;
+  for c in s[:i] {
+    if c !in scheme_chars {
+      abort "Invalid scheme";
+    }
+  }
+  (scheme, s) = (s[:i].toLower(), s[i+1:]);
+  if s[:2] == "//" {
+    (netloc, s) = _split_netloc(s[2:]);
+    if (('[' in netloc && ']' !in netloc) || (']' in netloc && '[' !in netloc)) {
+      abort "Invalid IPv6 URL";
+    }
+    if '[' in netloc && ']' in netloc {
+      _check_bracketed_netloc(netloc);
+    }
+  }
+  if '#' in s {
+    [s, fragment] = s.split('#', 1);
+  }
+  if '?' in s {
+    [s, query] = s.split('?', 1);
+  }
+  path = s;
+}
+
+lang AbsURL = AbsPath? ("?" Query)? ("#" Fragment)?
+lang NetURL = NetLoc AbsURL
+
+method _split_netloc(url: NetURL) returns (netloc: NetLoc, rest: AbsURL)
+{
+  var delim = |url|;
+  for c in "/?#" {
+    var wdelim = url.indexOf(c);
+    if wdelim >= 0 {
+      delim = wdelim < delim ? wdelim : delim;
+    }
+  }
+  return (url[:delim], url[delim:]);
+}
+
+lang BracketedNetLoc = (UserInfo "@")? IPLiteral (":" Port)?
+
+method _check_bracketed_netloc(netloc: BracketedNetLoc)
+{
+  var i = netloc.indexOf('@');
+  var hostname_and_port = i >= 0 ? netloc[i+1:] : netloc;
+  i = hostname_and_port.indexOf('[');
+  var hostname: str;
+  if i >= 0 {
+    var before_bracket = hostname_and_port[:i];
+    var bracketed = hostname_and_port[i+1:];
+    // No data is allowed before a bracket
+    if before_bracket != "" {
+      abort "Invalid IPv6 URL";
+    }
+    i = bracketed.indexOf(']');
+    hostname = bracketed[:i];
+    var port = bracketed[i+1:];
+    // No data is allowed after the bracket but before the port delimiter
+    if port != "" && !port.startsWith(":") {
+      abort "Invalid IPv6 URL";
+    }
+  } else {
+    // NOTE: this branch is impossible
+    i = hostname_and_port.indexOf(':');
+    hostname = i >= 0 ? hostname_and_port[:i] : hostname_and_port;
+  }
+  _check_bracketed_host(hostname);
+}
+
+lang BracketedHost = IPv6Address | IPvFuture
+
+method _check_bracketed_host(hostname: BracketedHost)
+{
+  if hostname.startsWith("v") {
+    if hostname ∉ r"v[a-fA-F0-9]+\..+" {
+      abort "IPvFuture address is invalid";
+    }
+  } else {
+    // parse ipv6
+  }
+}
