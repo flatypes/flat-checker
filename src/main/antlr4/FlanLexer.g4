@@ -1,6 +1,8 @@
 lexer grammar FlanLexer;
 
 // Keywords
+FROM: 'from';
+IMPORT: 'import';
 TYPE: 'type';
 LANG: 'lang';
 CONST: 'const';

@@ -20,7 +20,7 @@ given Ordering[Range] with
 trait Reportable:
   def diagnostic: Diagnostic
 
-class Reporter(source: Source):
+class Reporter(val source: Source):
   private val buffer = ListBuffer.empty[Diagnostic]
 
   def hasError: Boolean = buffer.exists(_.getSeverity == Error)

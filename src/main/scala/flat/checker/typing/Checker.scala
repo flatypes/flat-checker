@@ -10,38 +10,14 @@ import scala.collection.mutable.ListBuffer
 
 class Checker(using reporter: Reporter) extends LazyLogging:
   private val typer = Typer()
+  private val resolver = Resolver()
 
-  def checkProgram(tree: untpd.Program): Program =
-    var ctx = GlobalCtx()
-    for node <- tree.body do
-      val info = resolveInfo(node, ctx)
-      ctx.lookup(node.ident.name) match
-        case None =>
-          ctx = ctx.define(node.ident.name, info)
-        case Some(conflict) =>
-          reporter.reportNameRedefined(node.ident.range, conflict.range)
-    val body = tree.body.flatMap:
+  def checkProgram(module: untpd.Program): Program =
+    val ctx = resolver.resolve(module)
+    val body = module.body.flatMap:
       case node: untpd.MethodDef => Some(checkMethod(node, ctx))
       case _ => None
     Program(body)
-
-  private def resolveInfo(node: untpd.TopDef, ctx: GlobalCtx): Info = node match
-    case untpd.TypeDef(id, t) =>
-      val value = typer.normalize(t)(using ctx)
-      TypeInfo(value)(id.range)
-
-    case untpd.LangDef(id, l) =>
-      val regEx = typer.translate(l)(using ctx)
-      LangInfo(regEx)(id.range)
-
-    case untpd.ConstDef(id, e) =>
-      val (sort, value) = typer.infer(e)(using ctx, VarStore())
-      ConstInfo(sort, value)(id.range)
-
-    case untpd.MethodDef(id, ps1, ps2, _, _, _) =>
-      val params = typer.inferParamList(ps1)(using ctx)
-      val returnParams = typer.inferParamList(ps2)(using ctx)
-      MethodInfo(params, returnParams)(id.range)
 
   private def checkMethod(node: untpd.MethodDef, globalCtx: GlobalCtx): MethodDef =
     val name = node.ident.name

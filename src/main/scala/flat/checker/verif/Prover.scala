@@ -151,6 +151,17 @@ class Prover extends LazyLogging:
             lemmas += inNatRange(e, range)
           case _ => ()
 
+      case e@Eq(_, Const(_: String)) =>
+        inferer.infer(e) match
+          case TBool(set) =>
+            lemmas ++= inBoolSet(e, set)
+          case _ => ()
+      case e@Ne(_, Const(_: String)) =>
+        inferer.infer(e) match
+          case TBool(set) =>
+            lemmas ++= inBoolSet(e, set)
+          case _ => ()
+
       // Algebraic properties for count
       case e@SeqCount(SeqSlice(es, ei, ej), Const(s: String)) if s.length == 1 && goal.have(Lt(ei, ej)) =>
         val c = s.head

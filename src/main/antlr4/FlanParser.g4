@@ -3,7 +3,12 @@ parser grammar FlanParser;
 options { tokenVocab=FlanLexer; }
 
 program
-  : topDef* EOF
+  : importClause* topDef* EOF
+  ;
+
+
+importClause
+  : 'from' IDENT 'import' IDENT (',' IDENT)* ';'?
   ;
 
 // Top-level definitions

@@ -1,0 +1,15 @@
+from url_split import Scheme, NetLoc, Path, Query, Fragment, URL
+
+method url_unsplit(scheme: Scheme, netloc: NetLoc, path: Path, query: Query, fragment: Fragment): URL
+{
+  var url = path;
+  if url != "" && url[:1] != "/" {
+    url = "/" + url;
+  }
+  url = "//" + netloc + url;
+  assert scheme != "";
+  url = scheme + ":" + url;
+  url = url + '?' + query;
+  url = url + '#' + fragment;
+  return url;
+}

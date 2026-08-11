@@ -26,8 +26,8 @@ class Parser(using reporter: Reporter):
     parser.addErrorListener(ErrorListener())
     // Process the parse tree
     val tree = parser.program
-    if reporter.hasError then Program(Nil)
-    else Program(tree.topDef.asScala.toList.map(_.accept(TopDefVisitor)))
+    if reporter.hasError then Program(Nil, Nil)
+    else toProgram(tree)
 
   private class ErrorListener(using reporter: Reporter) extends BaseErrorListener:
     override def syntaxError(recognizer: Recognizer[?, ?], offendingSymbol: Any,
@@ -40,6 +40,15 @@ class Parser(using reporter: Reporter):
         case token: Token => getRange(token)
         case _ => Range(Position(line - 1, charPositionInLine), Position(line - 1, charPositionInLine + 1))
       reporter.reportSyntaxError(desc, range)
+
+  private def toProgram(node: FlanParser.ProgramContext): Program =
+    val imports = node.importClause.asScala.toList.map(toImport)
+    val body = node.topDef.asScala.toList.map(_.accept(TopDefVisitor))
+    Program(imports, body)
+
+  private def toImport(node: FlanParser.ImportClauseContext): Import =
+    val idents = node.IDENT.asScala.toList.map(toIdent)
+    Import(idents.head, idents.tail)
 
   private object TopDefVisitor extends FlanParserBaseVisitor[TopDef]:
     override def visitMethodDef(node: FlanParser.MethodDefContext): TopDef =

@@ -3,7 +3,9 @@ package flat.checker.flan
 import org.eclipse.lsp4j.Range
 
 object untpd:
-  final case class Program(body: List[TopDef])
+  final case class Program(imports: List[Import], body: List[TopDef])
+
+  final case class Import(module: Ident, items: List[Ident])
 
   // Top-Level Definitions
   sealed trait TopDef:

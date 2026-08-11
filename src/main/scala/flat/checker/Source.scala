@@ -10,6 +10,6 @@ class Source(val uri: String, val text: String):
 
 object Source:
   def fromPath(path: os.Path): Source =
-    val uri = path.toNIO.toUri.toString
+    val uri = s"file://$path"
     val text = os.read(path)
     Source(uri, text)

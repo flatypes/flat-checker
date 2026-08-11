@@ -140,6 +140,22 @@ class Inferer(goal: Goal) extends LazyLogging:
         case TStr(r) => TBool(r.absIsAscii)
         case _ => throw new Exception("Expected a string type for StrIsAscii")
 
+    // String eq
+    case Eq(e, Const(s: String)) =>
+      infer(e) match
+        case TStr(r) =>
+          if r.filterEq(s.toList).isEmpty then TBool(BoolSet.False)
+          else if r.filterNe(s.toList).isEmpty then TBool(BoolSet.True)
+          else TBool(BoolSet.Full)
+        case _ => throw new Exception("Expected a string type for Eq")
+    case Ne(e, Const(s: String)) =>
+      infer(e) match
+        case TStr(r) =>
+          if r.filterNe(s.toList).isEmpty then TBool(BoolSet.False)
+          else if r.filterEq(s.toList).isEmpty then TBool(BoolSet.True)
+          else TBool(BoolSet.Full)
+        case _ => throw new Exception("Expected a string type for Ne")
+
     case Ite(_, e1, e2) =>
       (infer(e1), infer(e2)) match
         case (TStr(r1), TStr(r2)) => TStr(narrow(expr, r1 | r2))
