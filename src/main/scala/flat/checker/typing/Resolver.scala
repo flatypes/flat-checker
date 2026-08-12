@@ -54,6 +54,7 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
 
     case untpd.LangDef(id, l) =>
       val regEx = typer.translate(l)(using ctx)
+      regEx.name = id.name
       LangInfo(regEx)(id.range)
 
     case untpd.ConstDef(id, e) =>

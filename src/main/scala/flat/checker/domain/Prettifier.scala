@@ -14,15 +14,17 @@ object Prettifier:
       case Comp(_, _) => LEVEL_COMP
       case Plus(_, _) => LEVEL_PLUS
 
-    override def ppExpr(r: RegEx[A]): String = r match
-      case Zero() => "∅"
-      case One() => "ε"
-      case Lit(a: CharSet) => ppCharSet(a)
-      case Lit(r1: RegEx[_]) => "⌜" + r1.pp + "⌝"
-      case Lit(d) => "⟨" + d.toString + "⟩"
-      case Plus(r1, r2) => ppInfix("|", LEVEL_PLUS, ASSOC_LEFT, r1, r2)
-      case Comp(r1, r2) => ppInfix("", LEVEL_COMP, ASSOC_LEFT, r1, r2)
-      case Star(r1) => ppPostfix("*", r1)
+    override def ppExpr(r: RegEx[A]): String =
+      if r.name.nonEmpty then "{" + r.name + "}"
+      else r match
+        case Zero() => "∅"
+        case One() => "ε"
+        case Lit(a: CharSet) => ppCharSet(a)
+        case Lit(r1: RegEx[_]) => "⌜" + r1.pp + "⌝"
+        case Lit(d) => "⟨" + d.toString + "⟩"
+        case Plus(r1, r2) => ppInfix("|", LEVEL_PLUS, ASSOC_LEFT, r1, r2)
+        case Comp(r1, r2) => ppInfix("", LEVEL_COMP, ASSOC_LEFT, r1, r2)
+        case Star(r1) => ppPostfix("*", r1)
 
     private def ppCharSet(a: CharSet): String =
       if a.isEmpty then "∅"

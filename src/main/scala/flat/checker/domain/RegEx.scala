@@ -12,6 +12,8 @@ enum RegEx[A] extends LazyLogging:
   case Comp(left: RegEx[A], right: RegEx[A])
   case Star(part: RegEx[A])
 
+  var name: String = ""
+
   def +(that: RegEx[A]): RegEx[A] = (this, that) match
     case (Zero(), r) => r // 0 + r = r
     case (r, Zero()) => r // r + 0 = r
