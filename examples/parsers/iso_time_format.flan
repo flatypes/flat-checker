@@ -1,0 +1,86 @@
+lang TimeSpec = "auto" | "hours" | "minutes" | "seconds" | "milliseconds" | "microseconds"
+
+lang Hour = r"[0-1][0-9]|2[0-3]"
+lang Minute = r"[0-5][0-9]"
+lang Second = r"[0-5][0-9]"
+lang Fraction = r"[0-9]+"
+lang RawTime = Hour (":" Minute (":" Second ("." Fraction)?)?)?
+
+lang TimeZone = ("+"|"-") RawTime
+lang Time = RawTime TimeZone
+
+// Time difference in seconds
+const SECOND = 1000000
+const MINUTE = 60 * SECOND
+const HOUR = 60 * MINUTE
+// TODO: BigInt, as HOUR exceeds 2^31-1
+
+method iso_format(hour: int, minute: int, second: int, microsecond: int, timespec: TimeSpec,
+                  utcoffset: int): Time
+  requires 0 <= hour && hour < 24
+  requires 0 <= minute && minute < 60
+  requires 0 <= second && second < 60
+  requires 0 <= microsecond && microsecond < 1000000
+  requires -24 * HOUR < utcoffset && utcoffset < 24 * HOUR
+{
+  var s = _format_time(hour, minute, second, microsecond, timespec);
+  var tz = _format_offset(utcoffset);
+  s += tz;
+  return s;
+}
+
+method _format_time(hh: int, mm: int, ss: int, us: int, timespec: TimeSpec): RawTime
+  requires 0 <= hh && hh < 24
+  requires 0 <= mm && mm < 60
+  requires 0 <= ss && ss < 60
+  requires 0 <= us && us < 1000000
+{
+  var spec: TimeSpec = timespec;
+  var fraction = us;
+  if timespec == "auto" {
+    spec = us != 0 ? "microseconds" : "seconds";
+  } else if timespec == "milliseconds" {
+    fraction = us / 1000;
+  }
+
+  if spec == "hours" {
+    return format("%02d", hh);
+  } else if spec == "minutes" {
+    return format("%02d:%02d", hh, mm);
+  } else if spec == "seconds" {
+    return format("%02d:%02d:%02d", hh, mm, ss);
+  } else if spec == "milliseconds" {
+    return format("%02d:%02d:%02d.%03d", hh, mm, ss, fraction);
+  } else if spec == "microseconds" {
+    return format("%02d:%02d:%02d.%06d", hh, mm, ss, fraction);
+  }
+}
+
+method _format_offset(off: int): TimeZone
+  requires -24 * HOUR < off && off < 24 * HOUR
+{
+  var s = "";
+  var n = off;
+  var sign: str;
+  if off < 0 {
+    sign = "-";
+    n = -n;
+  } else {
+    sign = "+";
+  }
+  var hh = n / HOUR;
+  n = n % HOUR;
+  var mm = n / MINUTE;
+  n = n % MINUTE;
+  s += format("%s%02d:%02d", sign, hh, mm);
+  if n >= 0 {
+    var ss = n / SECOND;
+    var ff = n % SECOND;
+    s += format(":%02d", ss);
+
+    if ff > 0 {
+      s += format(".%06d", ff);
+    }
+  }
+  // FIXME: return s;
+}
