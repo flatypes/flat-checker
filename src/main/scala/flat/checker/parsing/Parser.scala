@@ -1,414 +1,318 @@
 package flat.checker.parsing
 
-import flat.antlr.{FlanLexer, FlanParser, FlanParserBaseVisitor}
-import flat.checker.domain.REParser
+import com.typesafe.scalalogging.LazyLogging
+import flat.checker.Reporter
 import flat.checker.flan.untpd.*
-import flat.checker.flan.{Literal, parseInt, unescape}
-import flat.checker.{Reporter, Source}
-import org.antlr.v4.runtime.*
-import org.antlr.v4.runtime.tree.{RuleNode, TerminalNode}
-import org.eclipse.lsp4j
-import org.eclipse.lsp4j.{Position, Range}
-
-import scala.jdk.CollectionConverters.*
-
-class Parser(using reporter: Reporter):
-  def parse(source: Source): Program =
-    // Setup lexer
-    val stream = CharStreams.fromString(source.text, source.uri)
-    val lexer = FlanLexer(stream)
-    lexer.removeErrorListeners()
-    lexer.addErrorListener(ErrorListener())
-    // Setup parser
-    val tokens = CommonTokenStream(lexer)
-    val parser = FlanParser(tokens)
-    parser.removeErrorListeners()
-    parser.addErrorListener(ErrorListener())
-    // Process the parse tree
-    val tree = parser.program
-    if reporter.hasError then Program(Nil, Nil)
-    else toProgram(tree)
-
-  private class ErrorListener(using reporter: Reporter) extends BaseErrorListener:
-    override def syntaxError(recognizer: Recognizer[?, ?], offendingSymbol: Any,
-                             line: Int, charPositionInLine: Int, msg: String, e: RecognitionException): Unit =
-      val desc = e match
-        case e: InputMismatchException =>
-          s"unexpected token (expected ${e.getExpectedTokens.toString(recognizer.getVocabulary)})"
-        case _ => s"unexpected token ($msg)"
-      val range = offendingSymbol match
-        case token: Token => getRange(token)
-        case _ => Range(Position(line - 1, charPositionInLine), Position(line - 1, charPositionInLine + 1))
-      reporter.reportSyntaxError(desc, range)
-
-  private def toProgram(node: FlanParser.ProgramContext): Program =
-    val imports = node.importClause.asScala.toList.map(toImport)
-    val body = node.topDef.asScala.toList.map(_.accept(TopDefVisitor))
-    Program(imports, body)
-
-  private def toImport(node: FlanParser.ImportClauseContext): Import =
-    val idents = node.IDENT.asScala.toList.map(toIdent)
-    Import(idents.head, idents.tail)
-
-  private object TopDefVisitor extends FlanParserBaseVisitor[TopDef]:
-    override def visitMethodDef(node: FlanParser.MethodDefContext): TopDef =
-      val ident = toIdent(node.IDENT)
-      val params = toParamList(node.paramList(0))
-      val returnParams =
-        if node.paramList.size() == 2 then toParamList(node.paramList(1))
-        else if node.`type` != null then List(Param(Ident("_")(getRange(node.COLON)), node.`type`.accept(TypeVisitor)))
-        else Nil
-      val requires = node.requiresSpec.asScala.toList.map(_.expr.accept(ExprVisitor))
-      val ensures = node.ensuresSpec.asScala.toList.map(_.expr.accept(ExprVisitor))
-      val body = Option(node.block).map(StmtVisitor.toStmtList)
-      val endRange = if node.block != null then getRange(node.block.CLOSE_CURLY) else null
-      MethodDef(ident, params, returnParams, requires, ensures, body)(endRange)
-
-    def toParamList(node: FlanParser.ParamListContext): List[Param] = node.param.asScala.toList.map(toParam)
-
-    private def toParam(node: FlanParser.ParamContext): Param =
-      val ident = toIdent(node.IDENT)
-      val typ = node.`type`.accept(TypeVisitor)
-      Param(ident, typ)
-
-    override def visitConstDef(node: FlanParser.ConstDefContext): TopDef =
-      val ident = toIdent(node.IDENT)
-      val value = node.expr.accept(ExprVisitor)
-      ConstDef(ident, value)
-
-    override def visitTypeDef(node: FlanParser.TypeDefContext): TopDef =
-      val ident = toIdent(node.IDENT)
-      val value = node.`type`.accept(TypeVisitor)
-      TypeDef(ident, value)
-
-    override def visitLangDef(node: FlanParser.LangDefContext): TopDef =
-      val ident = toIdent(node.IDENT)
-      val value = node.lang.accept(LangVisitor)
-      LangDef(ident, value)
-
-    override def visitChildren(node: RuleNode): TopDef =
-      throw NotImplementedError(s"TopDefVisitor.visit${node.getClass.getSimpleName}")
-
-  private object TargetVisitor extends FlanParserBaseVisitor[Target]:
-    override def visitTargetName(node: FlanParser.TargetNameContext): Target =
-      TargetName(node.IDENT.getText)(getRange(node))
-
-    override def visitValTarget(node: FlanParser.ValTargetContext): Target =
-      val ident = toIdent(node.IDENT)
-      val typ = Option(node.`type`).map(_.accept(TypeVisitor))
-      ValTarget(ident, typ)(getRange(node))
-
-    override def visitVarTarget(node: FlanParser.VarTargetContext): Target =
-      val ident = toIdent(node.IDENT)
-      val typ = Option(node.`type`).map(_.accept(TypeVisitor))
-      VarTarget(ident, typ)(getRange(node))
-
-    override def visitTupleTarget(node: FlanParser.TupleTargetContext): Target =
-      val elems = node.target.asScala.toList.map(_.accept(this))
-      TupleTarget(elems)(getRange(node))
-
-    override def visitListTarget(node: FlanParser.ListTargetContext): Target =
-      val elems = node.target.asScala.toList.map(_.accept(this))
-      ListTarget(elems)(getRange(node))
-
-    override def visitChildren(node: RuleNode): Target =
-      throw NotImplementedError(s"TargetVisitor.visit${node.getClass.getSimpleName}")
-
-  private object StmtVisitor extends FlanParserBaseVisitor[Stmt]:
-    override def visitVarDecl(node: FlanParser.VarDeclContext): Stmt =
-      val ident = toIdent(node.IDENT)
-      val typ = node.`type`.accept(TypeVisitor)
-      VarDecl(ident, typ)
-
-    override def visitAssign(node: FlanParser.AssignContext): Stmt =
-      val target = node.target.accept(TargetVisitor)
-      val value = node.expr.accept(ExprVisitor)
-      Assign(target, value)
-
-    override def visitAugAssign(node: FlanParser.AugAssignContext): Stmt =
-      val ident = toIdent(node.IDENT)
-      val delta = node.expr.accept(ExprVisitor)
-      val op = Ident(node.augAssignOp.getText.dropRight(1))(getRange(node.augAssignOp))
-      val value = mkApply(TermName(ident.name)(ident.range), op, delta)(getRange(node))
-      Assign(TargetName(ident.name)(ident.range), value)
-
-    override def visitUpdateAssign(node: FlanParser.UpdateAssignContext): Stmt =
-      val ident = toIdent(node.IDENT)
-      val self = TermName(ident.name)(getRange(node.IDENT))
-      val index = node.expr(0).accept(ExprVisitor)
-      val delta = node.expr(1).accept(ExprVisitor)
-      val newValue =
-        if node.ASSIGN != null then delta
-        else
-          val oldValue = mkApply(self, Ident("select")(getRange(node.OPEN_SQUARE)), index)(getRange(node.OPEN_SQUARE))
-          val op = Ident(node.augAssignOp.getText.dropRight(1))(getRange(node.augAssignOp))
-          mkApply(oldValue, op, delta)(getRange(node))
-      val value = mkApply(self, Ident("update")(getRange(node.OPEN_SQUARE)), index, newValue)(getRange(node))
-      Assign(TargetName(ident.name)(ident.range), value)
-
-    override def visitExprStmt(node: FlanParser.ExprStmtContext): Stmt =
-      val expr = node.expr.accept(ExprVisitor)
-      ExprStmt(expr)
-
-    override def visitReturn(node: FlanParser.ReturnContext): Stmt =
-      val value = Option(node.expr).map(_.accept(ExprVisitor))
-      Return(value)(getRange(node.RETURN))
-
-    override def visitIf(node: FlanParser.IfContext): Stmt =
-      val branches = for b <- node.ifBranch.asScala.toList yield
-        val cond = toExprOrNondet(b.guard)
-        val thenBody = toStmtList(b.block)
-        (cond, thenBody)
-      val elseBody = if node.block != null then toStmtList(node.block) else Nil
-      val lastIf = If(branches.last._1, branches.last._2, elseBody)
-      branches.dropRight(1).foldRight(lastIf) { (b, s) => If(b._1, b._2, List(s)) }
-
-    private def toExprOrNondet(node: FlanParser.GuardContext): Expr | Nondet =
-      if node.expr != null then node.expr.accept(ExprVisitor) else Nondet()(getRange(node))
-
-    def toStmtList(node: FlanParser.BlockContext): List[Stmt] = node.stmt.asScala.toList.map(_.accept(this))
-
-    override def visitWhile(node: FlanParser.WhileContext): Stmt =
-      val cond = toExprOrNondet(node.guard)
-      val invariants = node.invariantSpec.asScala.toList.map(_.expr.accept(ExprVisitor))
-      val body = toStmtList(node.block)
-      While(cond, invariants, body)
-
-    override def visitFor(node: FlanParser.ForContext): Stmt =
-      val ident = toIdent(node.IDENT)
-      val iter = node.expr.accept(ExprVisitor)
-      val invariants = node.invariantSpec.asScala.toList.map(_.expr.accept(ExprVisitor))
-      val body = toStmtList(node.block)
-      For(ident, iter, invariants, body)
-
-    override def visitBreak(node: FlanParser.BreakContext): Stmt =
-      Break()(getRange(node.BREAK))
-
-    override def visitContinue(node: FlanParser.ContinueContext): Stmt =
-      Continue()(getRange(node.CONTINUE))
-
-    override def visitAbort(node: FlanParser.AbortContext): Stmt =
-      val expr = node.expr.accept(ExprVisitor)
-      Abort(expr)
-
-    override def visitAssume(node: FlanParser.AssumeContext): Stmt =
-      val cond = node.expr.accept(ExprVisitor)
-      Assume(cond)
-
-    override def visitAssert(node: FlanParser.AssertContext): Stmt =
-      val cond = node.expr.accept(ExprVisitor)
-      Assert(cond)
-
-    override def visitChildren(node: RuleNode): Stmt =
-      throw NotImplementedError(s"StmtVisitor.visit${node.getClass.getSimpleName}")
-
-  private object ExprVisitor extends FlanParserBaseVisitor[Expr]:
-    override def visitConst(node: FlanParser.ConstContext): Expr =
-      val value = toLiteral(node.literal)
-      Const(value)(getRange(node))
-
-    private def toLiteral(node: FlanParser.LiteralContext): Literal =
-      if node.NULL != null then null
-      else if node.TRUE != null then true
-      else if node.FALSE != null then false
-      else if node.INT_LITERAL != null then parseInt(node.getText)
-      else if node.CHAR_LITERAL != null then unescape(node.getText.drop(1).dropRight(1)).head
-      else unescape(node.getText.drop(1).dropRight(1))
-
-    override def visitTermName(node: FlanParser.TermNameContext): Expr =
-      val name = node.IDENT.getText
-      TermName(name)(getRange(node))
-
-    override def visitSeqExpr(node: FlanParser.SeqExprContext): Expr =
-      val args = toExprList(node.exprList)
-      SeqExpr(args)(getRange(node))
-
-    private def toExprList(node: FlanParser.ExprListContext): List[Expr] =
-      node.expr.asScala.toList.map(_.accept(this))
-
-    override def visitSetExpr(node: FlanParser.SetExprContext): Expr =
-      val args = toExprList(node.exprList)
-      SetExpr(args)(getRange(node))
-
-    override def visitMapExpr(node: FlanParser.MapExprContext): Expr =
-      val items = node.itemList.item.asScala.toList.map(i => (i.expr(0).accept(this), i.expr(1).accept(this)))
-      val (keys, vals) = items.unzip
-      MapExpr(keys, vals)(getRange(node))
-
-    override def visitParenExpr(node: FlanParser.ParenExprContext): Expr =
-      val exprs = toExprList(node.exprList)
-      if exprs.length == 1 then exprs.head else TupleExpr(exprs)(getRange(node))
-
-    override def visitSize(node: FlanParser.SizeContext): Expr =
-      val expr = node.expr.accept(this)
-      mkUnary(expr, Ident("size")(getRange(node.VERT(0))))(getRange(node))
-
-    override def visitAccess(node: FlanParser.AccessContext): Expr =
-      val receiver = node.expr.accept(this)
-      val member = toIdent(node.IDENT)
-      Access(receiver, member)(getRange(node))
-
-    override def visitApply(node: FlanParser.ApplyContext): Expr =
-      val fun = node.expr.accept(this)
-      val args = toExprList(node.exprList)
-      Apply(fun, args)(getRange(node))
-
-    override def visitSelect(node: FlanParser.SelectContext): Expr =
-      val receiver = node.expr(0).accept(this)
-      val arg = node.expr(1).accept(this)
-      mkApply(receiver, Ident("select")(getRange(node.OPEN_SQUARE)), arg)(getRange(node))
-
-    override def visitSlice(node: FlanParser.SliceContext): Expr =
-      val receiver = node.expr.accept(this)
-      val op = Ident("slice")(getRange(node.OPEN_SQUARE))
-      val start =
-        if node.range.start == null then Const(0)(getRange(node.OPEN_SQUARE))
-        else node.range.start.accept(this)
-      if node.range.end == null then
-        mkApply(receiver, op, start)(getRange(node))
-      else
-        val end = node.range.end.accept(this)
-        mkApply(receiver, op, start, end)(getRange(node))
-
-    override def visitPrefixExpr(node: FlanParser.PrefixExprContext): Expr =
-      val operand = node.expr.accept(this)
-      node.op.getText match
-        case "!" => Not(operand)(getRange(node))
-        case _ => mkUnary(operand, Ident("prefix_" + node.op.getText)(getRange(node.op)))(getRange(node))
-
-    override def visitInfixExpr(node: FlanParser.InfixExprContext): Expr =
-      val left = node.expr(0).accept(this)
-      val right = node.expr(1).accept(this)
-      node.op.getText match
-        case "&&" => And(left, right)(getRange(node))
-        case "||" => Or(left, right)(getRange(node))
-        case "==>" => Implies(left, right)(getRange(node))
-        case _ => mkApply(left, Ident(node.op.getText)(getRange(node.op)), right)(getRange(node))
-
-    override def visitRelExpr(node: FlanParser.RelExprContext): Expr =
-      val left = node.expr(0).accept(this)
-      val right = node.expr(1).accept(this)
-      if node.relOp.EQ != null then Eq(left, right)(getRange(node))
-      else if node.relOp.NE != null then Ne(left, right)(getRange(node))
-      else if node.relOp.IN != null then
-        val expr = mkApply(right, Ident("contains")(getRange(node.relOp.IN)), left)(getRange(node))
-        if node.relOp.NOT == null then expr else mkNot(expr)(expr.range, getRange(node.relOp.NOT))
-      else
-        mkApply(left, Ident(node.relOp.getText)(getRange(node.relOp)), right)(getRange(node))
-
-    override def visitLangMembership(node: FlanParser.LangMembershipContext): Expr =
-      val str = node.expr.accept(this)
-      val lang = node.lang.accept(LangVisitor)
-      val e = InLang(str, lang)(getRange(node))
-      if node.NOT_IN_LANG != null then mkNot(e)(e.range, getRange(node.NOT_IN_LANG)) else e
-
-    override def visitIteExpr(node: FlanParser.IteExprContext): Expr =
-      val cond = node.expr(0).accept(this)
-      val thenValue = node.expr(1).accept(this)
-      val elseValue = node.expr(2).accept(this)
-      Ite(cond, thenValue, elseValue)(getRange(node))
-
-    override def visitChildren(node: RuleNode): Expr =
-      throw NotImplementedError(s"ExprVisitor.visit${node.getClass.getSimpleName}")
-
-  private object TypeVisitor extends FlanParserBaseVisitor[Type]:
-    override def visitTypeName(node: FlanParser.TypeNameContext): Type =
-      TypeName(node.IDENT.getText)(getRange(node))
-
-    override def visitGenericType(node: FlanParser.GenericTypeContext): Type =
-      val name = node.IDENT.getText
-      val typeArgs = node.`type`.asScala.toList.map(_.accept(this))
-      GenericType(name, typeArgs)(getRange(node))
-
-    override def visitParenType(node: FlanParser.ParenTypeContext): Type =
-      val types = node.`type`.asScala.toList.map(_.accept(this))
-      if types.length == 1 then types.head else TupleType(types)
-
-    override def visitNullableType(node: FlanParser.NullableTypeContext): Type =
-      val baseType = node.`type`.accept(this)
-      NullableType(baseType)(getRange(node))
-
-    override def visitFunType(node: FlanParser.FunTypeContext): Type =
-      val returnType = node.`type`.asScala.toList.last.accept(this)
-      node.`type`(0).accept(this) match
-        case TupleType(ts) => FunType(ts, returnType)
-        case t => FunType(List(t), returnType)
-
-    override def visitChildren(node: RuleNode): Type =
-      throw NotImplementedError(s"TypeVisitor.visit${node.getClass.getSimpleName}")
-
-  private object LangVisitor extends FlanParserBaseVisitor[Lang]:
-    override def visitSingletonLang(node: FlanParser.SingletonLangContext): Lang =
-      val value =
-        if node.CHAR_LITERAL != null then unescape(node.CHAR_LITERAL.getText.drop(1).dropRight(1))
-        else unescape(node.STRING_LITERAL.getText.drop(1).dropRight(1))
-      LangConst(value)(getRange(node))
-
-    override def visitLangName(node: FlanParser.LangNameContext): Lang =
-      LangName(node.IDENT.getText)(getRange(node))
-
-    override def visitRegexLang(node: FlanParser.RegexLangContext): Lang =
-      val pattern = node.REGEX_LITERAL.getText.drop(2).dropRight(1)
-      val regEx = REParser.tryParse(pattern, Map.empty) match
-        case Left(msg) =>
-          reporter.reportSyntaxError(msg, getRange(node.REGEX_LITERAL))
-          flat.checker.domain.RegEx.Zero()
-        case Right(r) => r
-      RegEx(regEx)
-
-    override def visitParenLang(node: FlanParser.ParenLangContext): Lang = node.lang.accept(this)
-
-    override def visitLangStar(node: FlanParser.LangStarContext): Lang =
-      val lang = node.lang.accept(this)
-      LangStar(lang)(getRange(node))
-
-    override def visitLangPlus(node: FlanParser.LangPlusContext): Lang =
-      val lang = node.lang.accept(this)
-      LangPlus(lang)(getRange(node))
-
-    override def visitLangOpt(node: FlanParser.LangOptContext): Lang =
-      val lang = node.lang.accept(this)
-      LangOpt(lang)(getRange(node))
-
-    override def visitLangPower(node: FlanParser.LangPowerContext): Lang =
-      val lang = node.lang.accept(this)
-      val exp = parseInt(node.INT_LITERAL.getText)
-      LangPower(lang, exp)(getRange(node))
-
-    override def visitLangLoop(node: FlanParser.LangLoopContext): Lang =
-      val lang = node.lang.accept(this)
-      val min = parseInt(node.INT_LITERAL(0).getText)
-      val max = if node.INT_LITERAL.size() > 1 then Some(parseInt(node.INT_LITERAL(1).getText)) else None
-      LangLoop(lang, min, max)(getRange(node))
-
-    override def visitLangConcat(node: FlanParser.LangConcatContext): Lang =
-      val left = node.lang(0).accept(this)
-      val right = node.lang(1).accept(this)
-      LangConcat(left, right)(getRange(node))
-
-    override def visitLangUnion(node: FlanParser.LangUnionContext): Lang =
-      val left = node.lang(0).accept(this)
-      val right = node.lang(1).accept(this)
-      LangUnion(left, right)(getRange(node))
-
-    override def visitChildren(node: RuleNode): Lang =
-      throw NotImplementedError(s"LangVisitor.visit${node.getClass.getSimpleName}")
-
-  private def toIdent(node: TerminalNode): Ident = Ident(node.getText)(getRange(node))
-
-  // Range and position utilities
-  def getStart(token: Token): Position =
-    Position(token.getLine - 1, token.getCharPositionInLine)
-
-  def getEnd(token: Token): Position =
-    val lines = token.getText.count(_ == '\n')
-    if lines == 0 then
-      Position(token.getLine - 1, token.getCharPositionInLine + token.getText.length)
-    else
-      Position(token.getLine - 1 + lines, token.getText.length - token.getText.lastIndexOf('\n') - 1)
-
-  def getRange(token: Token): Range = Range(getStart(token), getEnd(token))
-
-  def getRange(node: TerminalNode): Range = getRange(node.getSymbol)
-
-  def getRange(node: ParserRuleContext): Range = Range(getStart(node.getStart), getEnd(node.getStop))
+import flat.checker.parsing.PosUtils.{*, given}
+import flat.checker.parsing.TokenType.*
+import org.eclipse.lsp4j.Range as Span
+
+import scala.util.parsing.input
+
+class TokenReader(tokens: List[Token]) extends input.Reader[Token]:
+  override def first: Token = tokens.head
+
+  override def atEnd: Boolean = tokens.isEmpty
+
+  override def pos: input.Position = input.NoPosition
+
+  override def rest: input.Reader[Token] = TokenReader(tokens.tail)
+
+class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprParsers, LazyLogging:
+  override type Elem = Token
+
+  // Tokens
+  given Conversion[TokenType, Parser[Token]] = t => elem(t.toString, _.typ == t)
+
+  given Conversion[String, Parser[Token]] = s => elem(s"'$s'", tk => tk.typ == KEYWORD && tk.value == s)
+
+  // Module
+  def module: Parser[Module] =
+    importStmt.* ~ topDef.* ^^ { case imports ~ body => Module(imports, body) }
+
+  private def importStmt: Parser[Import] =
+    "from" ~>! name ~ ("import" ~> rep1sep(name, ",")) <~ NEWLINE ^^ { case mod ~ nms => Import(mod, nms) }
+
+  private def name: Parser[Ident] = IDENTIFIER ^^ { tk => Ident(tk.value)(tk.span) }
+
+  // Top-level definitions
+  private def topDef: Parser[TopDef] = typeDef | valDef | langDef | funDef
+
+  private def typeDef: Parser[TypeDef] =
+    "type" ~>! name ~ ("=" ~> typ) <~ NEWLINE ^^ { case nm ~ t => TypeDef(nm, t) }
+
+  private def valDef: Parser[ValDef] =
+    "val" ~>! name ~ (":" ~> typ).? ~ ("=" ~> expr) <~ NEWLINE ^^ { case nm ~ t ~ e => ValDef(nm, t, e) }
+
+  private def langDef: Parser[LangDef] =
+    "lang" ~>! name ~ ("=" ~> pExpr) <~ NEWLINE ^^ { case nm ~ e => LangDef(nm, e) }
+
+  private def funDef: Parser[FunDef] =
+    "def" ~>! name ~ params ~ returns ~ (funBody | NEWLINE ^^^ (Nil, Nil, Nil))
+      ^^ { case nm ~ ps1 ~ ps2 ~ (es1, es2, body) => FunDef(nm, ps1, ps2, es1, es2, body)(nm.range) }
+
+  private def params: Parser[List[Param]] = "(" ~> repsep(param, ",") <~ ")"
+
+  private def param: Parser[Param] = name ~ (":" ~> typ) ^^ { case x ~ t => Param(x, t) }
+
+  private def returns: Parser[List[Param]] =
+    ("->" ~>! typ ^^ { t => List(Param(Ident("_")(t.range), t)) } | params) | success(Nil)
+
+  private def funBody: Parser[(List[Expr], List[Expr], List[Stmt])] =
+    block(("requires" ~>! expr <~ NEWLINE).* ~ ("ensures" ~>! expr <~ NEWLINE).* ~ stmt.*)
+      ^^ { case es1 ~ es2 ~ body => (es1, es2, body) }
+
+  private inline def block[T](p: Parser[T]): Parser[T] = ":" ~>! NEWLINE ~> INDENT ~> p <~ DEDENT
+
+  // Types
+  private def typ: Parser[Type] = infixRight("->" ^^^ mkArrowType, optType)
+
+  private def mkArrowType(left: Type, right: Type): Type = left match
+    case TupleType(ts) => FunType(ts, right)(left.range.getStart)
+    case _ => FunType(List(left), right)(left.range.getStart)
+
+  private def optType: Parser[Type] =
+    postfix(typeRef | genericType | parenType, "?" ^^ { tk => t => OptType(t)(tk.span.getEnd) })
+
+  private def typeRef: Parser[TypeRef] = IDENTIFIER ^^ { tk => TypeRef(tk.value)(tk.span) }
+
+  private def genericType: Parser[GenericType] =
+    name ~ ("[" ~> repsep(typ, ",")) ~ "]"
+      ^^ { case ctor ~ args ~ tk => GenericType(ctor, args)(tk.span.getEnd) }
+
+  private def parenType: Parser[Type] =
+    "(" ~ repsep(typ, ",") ~ ")" ^^ {
+      case _ ~ List(t) ~ _ => t
+      case tk1 ~ ts ~ tk2 => TupleType(ts)(Span(tk1.span.getStart, tk2.span.getEnd))
+    }
+
+  // Expressions
+  private def expr: Parser[Expr] = ite | implies
+
+  private def ite: Parser[Expr] =
+    implies ~ ("?" ~> implies) ~ (":" ~> implies) ^^ { case e ~ e1 ~ e2 => Ite(e, e1, e2) }
+
+  // Expressions: binary, unary
+  private def binaryOp(op: Parser[Token]): Parser[(Expr, Expr) => Expr] =
+    op ^^ { tk => (e1, e2) => BinaryExpr(e1, Ident(tk.value)(tk.span), e2) }
+
+  private def implies: Parser[Expr] = infixRight(binaryOp("==>"), or)
+
+  private def or: Parser[Expr] = infixRight(binaryOp("||"), and)
+
+  private def and: Parser[Expr] = infixRight(binaryOp("&&"), relational)
+
+  private def relational: Parser[Expr] =
+    chainedRelational("<=" | "<") | chainedRelational(">=" | ">")
+      | infixNonAssoc(binaryOp("==" | "!=" | "in" | notIn), bitOr)
+
+  private def chainedRelational(op: Parser[Token]): Parser[Expr] =
+    bitOr ~ (op ~ bitOr).+
+      ^^ { case left ~ cmps => ChainedExpr(left, cmps.map { case tk ~ e => (Ident(tk.value)(tk.span), e) }) }
+
+  private def notIn: Parser[Token] =
+    "!" ~ "in" ^^ { case tk1 ~ tk2 => Token(KEYWORD, "!in", Span(tk1.span.getStart, tk2.span.getEnd)) }
+
+  private def bitOr: Parser[Expr] = infixLeft(binaryOp("|"), bitXor)
+
+  private def bitXor: Parser[Expr] = infixLeft(binaryOp("^"), bitAnd)
+
+  private def bitAnd: Parser[Expr] = infixLeft(binaryOp("&"), bitShift)
+
+  private def bitShift: Parser[Expr] = infixLeft(binaryOp("<<" | ">>"), additive)
+
+  private def additive: Parser[Expr] = infixLeft(binaryOp("+" | "-"), multiplicative)
+
+  private def multiplicative: Parser[Expr] = infixLeft(binaryOp("*" | "/" | "%"), unary)
+
+  private def unaryOp(op: Parser[Token]): Parser[Expr => Expr] =
+    op ^^ { tk => e => UnaryExpr(Ident(tk.value)(tk.span), e) }
+
+  private def unary: Parser[Expr] = prefix(unaryOp("!" | "~" | "-"), term)
+
+  private def term: Parser[Expr] =
+    postfix(intConst | charConst | strConst | boolConst | nullConst | termRef | listExpr | setExpr | mapExpr
+      | parenExpr | size, fieldAccessOp | indexAccessOp | applyOp | sliceOp)
+
+  private def intConst: Parser[IntConst] = INT ^^ { tk => IntConst(parseInt(tk.value))(tk.span) }
+
+  private def parseInt(s: String): BigInt =
+    if s.startsWith("0b") || s.startsWith("0B") then BigInt(s.drop(2).replace("_", ""), 2)
+    else if s.startsWith("0o") || s.startsWith("0O") then BigInt(s.drop(2).replace("_", ""), 8)
+    else if s.startsWith("0x") || s.startsWith("0X") then BigInt(s.drop(2).replace("_", ""), 16)
+    else BigInt(s.replace("_", ""), 10)
+
+  private def charConst: Parser[CharConst] = CHAR ^^ { tk => CharConst(unescapeChar(tk.value))(tk.span) }
+
+  private def unescapeChar(s: String): Char =
+    val (c, j) = unescape(s, 1)
+    assert(j == s.length - 1)
+    c
+
+  private def unescape(s: String, i: Int): (Char, Int) =
+    s.charAt(i) match
+      case '\\' => s.charAt(i + 1) match
+        case c@('\\' | '\'' | '"') => (c, i + 2)
+        case 'a' => ('\u0007', i + 2)
+        case 'b' => ('\b', i + 2)
+        case 'f' => ('\f', i + 2)
+        case 'n' => ('\n', i + 2)
+        case 'r' => ('\r', i + 2)
+        case 't' => ('\t', i + 2)
+        case 'v' => ('\u000B', i + 2)
+        case 'u' => (Integer.parseInt(s.substring(i + 2, i + 6), 16).toChar, i + 6)
+      case c => (c, i + 1)
+
+  private def strConst: Parser[StrConst] = STR ^^ { tk => StrConst(unescapeStr(tk.value))(tk.span) }
+
+  private def unescapeStr(s: String): String =
+    val sb = new StringBuilder
+    var i = 1
+    while i < s.length - 1 do
+      val (c, j) = unescape(s, i)
+      sb += c
+      i = j
+    sb.toString
+
+  private def boolConst: Parser[BoolConst] = ("true" | "false") ^^ { tk => BoolConst(tk.value.toBoolean)(tk.span) }
+
+  private def nullConst: Parser[NullConst] = "null" ^^ { tk => NullConst()(tk.span) }
+
+  private def termRef: Parser[TermRef] = IDENTIFIER ^^ { tk => TermRef(tk.value)(tk.span) }
+
+  private def listExpr: Parser[ListExpr] =
+    "[" ~ repsep(expr, ",") ~ "]"
+      ^^ { case tk1 ~ es ~ tk2 => ListExpr(es)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+
+  private def setExpr: Parser[SetExpr] =
+    "{" ~ repsep(expr, ",") ~ "}"
+      ^^ { case tk1 ~ es ~ tk2 => SetExpr(es)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+
+  private def mapExpr: Parser[MapExpr] =
+    "{" ~ repsep(mapItem, ",") ~ "}"
+      ^^ { case tk1 ~ items ~ tk2 => MapExpr(items)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+
+  private def mapItem: Parser[(Expr, Expr)] = expr ~ (":" ~> expr) ^^ { case k ~ v => (k, v) }
+
+  private def parenExpr: Parser[Expr] =
+    "(" ~ repsep(expr, ",") ~ ")" ^^ {
+      case _ ~ List(e) ~ _ => e
+      case tk1 ~ es ~ tk2 => TupleExpr(es)(Span(tk1.span.getStart, tk2.span.getEnd))
+    }
+
+  private def fieldAccessOp: Parser[Expr => Expr] = "." ~> name ^^ { f => e => MemberAccess(e, f) }
+
+  private def indexAccessOp: Parser[Expr => Expr] =
+    "[" ~> expr ~ "]" ^^ { case ei ~ tk => e => IndexAccess(e, ei)(tk.span.getEnd) }
+
+  private def applyOp: Parser[Expr => Expr] =
+    "(" ~> repsep(expr, ",") ~ ")" ^^ { case es ~ tk => ef => Apply(ef, es)(tk.span.getEnd) }
+
+  private def sliceOp: Parser[Expr => Expr] =
+    "[" ~> expr.? ~ (":" ~> expr.?) ~ "]" ^^ { case e1 ~ e2 ~ tk => e => Slice(e, e1, e2)(tk.span.getEnd) }
+
+  private def size: Parser[Expr] =
+    "|" ~ expr ~ "|" ^^ { case tk1 ~ e ~ tk2 => Size(e)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+
+  // Parsing expressions
+  private def pExpr: Parser[PExpr] = infixRight("|" ^^^ (PUnion(_, _)), pConcat)
+
+  private def pConcat: Parser[PExpr] = infixRight(success(PConcat(_, _)), pTerm)
+
+  private def pTerm: Parser[PExpr] =
+    postfix(pChar | pStr | pRStr | pRef | pParen, pStarOp | pPlusOp | pOptOp | pRepOp)
+
+  private def pChar: Parser[PChar] = CHAR ^^ { tk => PChar(unescapeChar(tk.value)) }
+
+  private def pStr: Parser[PStr] = STR ^^ { tk => PStr(unescapeStr(tk.value)) }
+
+  private def pRStr: Parser[PExpr] =
+    R_STR ^^ { tk => RegParser(uri, tk.span.getStart).parse(tk.value.drop(2).dropRight(1)) }
+
+  private def pRef: Parser[PRef] = IDENTIFIER ^^ { tk => PRef(tk.value)(tk.span) }
+
+  private def pParen: Parser[PExpr] = "(" ~> pExpr <~ ")"
+
+  private def pStarOp: Parser[PExpr => PExpr] = "*" ^^^ (PStar(_))
+
+  private def pPlusOp: Parser[PExpr => PExpr] = "+" ^^^ (PPlus(_))
+
+  private def pOptOp: Parser[PExpr => PExpr] = "?" ^^^ (POpt(_))
+
+  private def pRepOp: Parser[PExpr => PExpr] =
+    "{" ~ pInt ~ ("," ~> pInt.?).? ~ "}" ^^ {
+      case _ ~ i ~ None ~ _ => PRep(_, i)
+      case tk1 ~ i1 ~ Some(i2) ~ tk2 => PRep(_, IntRange(i1, i2)(Span(tk1.span.getStart, tk2.span.getEnd)))
+    }
+
+  private def pInt: Parser[BigInt] = INT ^^ { tk => parseInt(tk.value) }
+
+  // Local statements
+  private def stmt: Parser[Stmt] =
+    pass | assumeStmt | assertStmt | abort | ifStmt | returnStmt | whileStmt | breakStmt | continueStmt | forStmt
+      | assign | augAssign | exprStmt
+
+  private def pass: Parser[Stmt] = "pass" <~! NEWLINE ^^^ Pass()
+
+  private def assumeStmt: Parser[Assume] = "assume" ~>! expr <~ NEWLINE ^^ (Assume(_))
+
+  private def assertStmt: Parser[Assert] = "assert" ~>! expr <~ NEWLINE ^^ (Assert(_))
+
+  private def abort: Parser[Abort] = "abort" ~>! expr <~ NEWLINE ^^ (Abort(_))
+
+  private def ifStmt: Parser[If] =
+    "if" ~>! expr ~ block(stmt.+) ~ ("else" ~> block(stmt.+) | ifStmt ^^ (List(_))).?
+      ^^ { case e ~ thenBody ~ elseBody => If(e, thenBody, elseBody.getOrElse(Nil)) }
+
+  private def returnStmt: Parser[Return] = "return" ~! expr.? <~ NEWLINE ^^ { case t ~ e => Return(e)(t.span) }
+
+  private def whileStmt: Parser[While] =
+    "while" ~>! expr ~ block(("invariant" ~>! expr <~ NEWLINE).* ~ stmt.+)
+      ^^ { case e ~ (es ~ body) => While(e, es, body) }
+
+  private def breakStmt: Parser[Break] = "break" <~! NEWLINE ^^ { tk => Break()(tk.span) }
+
+  private def continueStmt: Parser[Continue] = "continue" <~! NEWLINE ^^ { tk => Continue()(tk.span) }
+
+  private def forStmt: Parser[For] =
+    "for" ~>! name ~ ("in" ~> expr) ~ block(("invariant" ~> expr <~ NEWLINE).* ~ stmt.+)
+      ^^ { case x ~ e ~ (es ~ body) => For(x, e, es, body) }
+
+  private def assign: Parser[Assign] =
+    lExpr ~ ("=" ~>! expr | "*" ^^^ Nondet) <~ NEWLINE ^^ { case left ~ right => Assign(left, right) }
+
+  private def augAssign: Parser[AugAssign] =
+    name ~ ("+=" | "-=" | "*=" | "/=" | "%=") ~! expr <~ NEWLINE
+      ^^ { case left ~ tk ~ right => AugAssign(left, Ident(tk.value)(tk.span), right) }
+
+  private def exprStmt: Parser[ExprStmt] = expr <~ NEWLINE ^^ (ExprStmt(_))
+
+  // Left-hand side expressions
+  private def lExpr: Parser[LExpr] = lVarRef | lValDecl | lVarDecl | lTuple | lList
+
+  private def lVarRef: Parser[LVarRef] = IDENTIFIER ^^ { tk => LVarRef(tk.value)(tk.span) }
+
+  private def lValDecl: Parser[LValDecl] =
+    "val" ~ name ~ (":" ~> typ).? ^^ { case tk ~ x ~ t => LValDecl(x, t)(tk.span.getStart) }
+
+  private def lVarDecl: Parser[LVarDecl] =
+    "var" ~ name ~ (":" ~> typ).? ^^ { case tk ~ x ~ t => LVarDecl(x, t)(tk.span.getStart) }
+
+  private def lTuple: Parser[LTuple] =
+    "(" ~ repsep(lExpr, ",") ~ ")" ^^ { case tk1 ~ es ~ tk2 => LTuple(es)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+
+  private def lList: Parser[LList] =
+    "[" ~ repsep(lExpr, ",") ~ "]" ^^ { case tk1 ~ es ~ tk2 => LList(es)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+
+  def parse(): Module =
+    val lexer = Lexer(uri, text)
+    val tokens = lexer.lex()
+    if reporter.hasError then
+      return Module.empty
+
+    val reader = TokenReader(tokens)
+    phrase(module)(reader) match
+      case Success(mod, _) => mod
+      case NoSuccess(msg, next) =>
+        reporter.report(uri, SyntaxError(next.first.span, msg))
+        Module.empty

@@ -2,6 +2,7 @@ package flat.checker.flan
 
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{CharSet, StrRE}
+import flat.checker.verif.VerifError
 import org.eclipse.lsp4j.{Position, Range}
 
 object tpd:
@@ -13,6 +14,8 @@ object tpd:
                             (val endRange: Range)
 
   final case class VarDecl(name: String, typ: Type)
+
+  final case class Script(vars: List[VarDecl], body: List[Stmt])
 
   // Statements
   sealed trait Stmt
@@ -41,6 +44,8 @@ object tpd:
   final case class Assume(cond: Expr) extends Stmt
 
   final case class Assert(cond: Expr) extends Stmt
+
+  final case class GAssert(cond: Expr, error: VerifError) extends Stmt
 
   final case class Abort()(val range: Range) extends Stmt
 
@@ -76,9 +81,6 @@ object tpd:
   final case class NullableType(valType: Type) extends Type
 
   case object NoType extends Type
-
-  @deprecated
-  final case class NormType(sort: Type, reft: Option[Expr])
 
   // Expressions
   sealed trait Expr extends Product:

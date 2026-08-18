@@ -54,6 +54,9 @@ class Reporter(val source: Source):
   def report(reportable: Reportable): Unit =
     buffer += reportable.diagnostic
 
+  def report(uri: String, diagnostic: Diagnostic): Unit =
+    buffer += diagnostic
+
   // Syntax Errors
   def reportSyntaxError(desc: String, range: Range): Unit =
     val diagnostic = Diagnostic(range, s"Syntax error: $desc", Error, "parser")

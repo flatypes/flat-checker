@@ -6,11 +6,12 @@ import flat.checker.parsing.Parser
 import flat.checker.{Reporter, Source}
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class Resolver(using reporter: Reporter) extends LazyLogging:
-  private val typer = Typer()
+  private val typer = Typer(ListBuffer.empty)
 
-  def resolve(module: untpd.Program): Ctx =
+  def resolve(module: untpd.Module): Ctx =
     var ctx = Ctx()
     // Check imports
     for
@@ -42,8 +43,8 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
         val path = reporter.source.uri.stripPrefix("file://")
         val basePath = path.substring(0, path.lastIndexOf('/') + 1)
         val moduleSource = Source.fromPath(os.Path(s"$basePath$moduleName.flan"))
-        val parser = Parser()
-        val ctx = resolve(parser.parse(moduleSource))
+        val parser = Parser(moduleSource.uri, moduleSource.text)
+        val ctx = resolve(parser.parse())
         cache(moduleName) = ctx
         Some(ctx)
 
@@ -52,16 +53,20 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
       val value = typer.normalize(t, ctx)
       TypeInfo(value)(id.range)
 
-    case untpd.LangDef(id, l) =>
-      val regEx = typer.translate(l, ctx)
-      regEx.name = id.name
-      LangInfo(regEx)(id.range)
-
-    case untpd.ConstDef(id, e) =>
+    case untpd.ValDef(id, Some(t), e) =>
+      val typ = typer.normalize(t, ctx)
+      val value = typer.check(e, typ, ctx)
+      ConstInfo(typ, value)(id.range)
+    case untpd.ValDef(id, None, e) =>
       val (value, sort) = typer.infer(e, ctx)
       ConstInfo(sort, value)(id.range)
 
-    case untpd.MethodDef(id, ps1, ps2, _, _, _) =>
+    case untpd.LangDef(id, e) =>
+      val regEx = typer.translate(e, ctx)
+      regEx.name = id.name
+      LangInfo(regEx)(id.range)
+
+    case untpd.FunDef(id, ps1, ps2, _, _, _) =>
       val params = typer.inferParamList(ps1, ctx)
       val returnParams = typer.inferParamList(ps2, ctx)
       MethodInfo(params, returnParams)(id.range)
