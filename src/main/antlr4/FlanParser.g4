@@ -38,8 +38,8 @@ ensuresSpec
 
 // Statements
 stmt
-  : 'var' IDENT (':' type)? ('=' exprOrNondet)? ';'     #varStmt
-  | target '=' exprOrNondet ';'                         #assign
+  : 'var' IDENT ':' type ';'                            #varDecl
+  | target '=' expr ';'                                 #assign
   | IDENT augAssignOp expr ';'                          #augAssign
   | IDENT '[' expr ']' ('=' | augAssignOp) expr ';'     #updateAssign
   | expr ';'                                            #exprStmt
@@ -54,15 +54,12 @@ stmt
   | 'assert' expr ';'                                   #assert
   ;
 
-exprOrNondet
-  : expr
-  | '*'
-  ;
-
 target
   : IDENT                                     #targetName
+  | 'val' IDENT (':' type)?                   #valTarget
+  | 'var' IDENT (':' type)?                   #varTarget
   | '(' target (',' target)+ ')'              #tupleTarget
-  | '[' target (',' target)+ ']'              #listTarget
+  | '[' target (',' target)* ']'              #listTarget
   ;
 
 augAssignOp
@@ -142,7 +139,7 @@ type
   : IDENT                             #typeName
   | IDENT '[' type (',' type)* ']'    #genericType
   | '(' (type (',' type)*)? ')'       #parenType
-  | <assoc=right> type '|' type       #unionType
+  | type '?'                          #nullableType
   | paramList '->' type               #funType
   | <assoc=right> type '->' type      #funType
   ;

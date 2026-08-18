@@ -2,7 +2,6 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.flan.*
-import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
 import io.github.cvc5
 import io.github.cvc5.Kind.*
@@ -10,37 +9,37 @@ import io.github.cvc5.{Kind, Term, TermManager}
 
 import scala.collection.mutable
 
-class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
+class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
   val tm: TermManager = TermManager()
 
   private val strCount = tm.mkConst((str, str) -> int, "str.count")
 
   private val uninterpretedTerms = mutable.Map.empty[Expr, cvc5.Term]
 
-  def encodeSort(sort: Sort): cvc5.Sort = sort match
-    case BoolSort => tm.getBooleanSort
-    case IntSort => tm.getIntegerSort
-    case CharSort => tm.getStringSort
-    case `stringSort` => tm.getStringSort
-    case SeqSort(s) => tm.mkSequenceSort(encodeSort(s))
-    case SetSort(s) => tm.mkSetSort(encodeSort(s))
-    case MapSort(sk, sv) => encodeMapSort(sk, sv)
-    case TupleSort(ss) => tm.mkTupleSort(ss.map(encodeSort).toArray)
-    case _ => throw UnsupportedOperationException(s"encode ${sort.getClass.getSimpleName}")
+  def encodeSort(sort: Type): cvc5.Sort = sort match
+    case IntType => tm.getIntegerSort
+    case BoolType => tm.getBooleanSort
+    case CharType => tm.getStringSort
+    case `strType` => tm.getStringSort
+    case ListType(t) => tm.mkSequenceSort(encodeSort(t))
+    case SetType(t) => tm.mkSetSort(encodeSort(t))
+    case DictType(tk, tv) => encodeMapSort(tk, tv)
+    case RefinedType(t, _) => encodeSort(t)
+    case TupleType(ts) => tm.mkTupleSort(ts.map(encodeSort).toArray)
+    case FunType(ps, r) => tm.mkFunctionSort(ps.map(encodeSort).toArray, encodeSort(r))
+    case _ => throw UnsupportedOperationException(s"encode sort ${sort.getClass.getSimpleName}")
 
   def encodeExpr(expr: Expr)(using ctx: Map[String, cvc5.Term]): cvc5.Term = expr match
-    case Const(b: Boolean) => tm.mkBoolean(b)
-    case Const(i: Int) => tm.mkInteger(i.toString)
-    case Const(c: Char) => tm.mkString(escapeSMTString(c.toString), true)
-    case Const(s: String) => tm.mkString(escapeSMTString(s), true)
+    case BoolLit(b) => tm.mkBoolean(b)
+    case IntLit(i) => tm.mkInteger(i.toString)
+    case CharLit(c) => tm.mkString(escapeSMTString(c.toString), true)
+    case StrLit(s) => tm.mkString(escapeSMTString(s), true)
     case Var(x) =>
       ctx.get(x) match
         case Some(t) => t
         case None => encodeUninterpreted(expr, vars(x), x)
     case Apply(ef, es) => tm.mkTerm(APPLY_UF, (encodeExpr(ef) :: es.map(encodeExpr)).toArray)
-    case Lambda(ps, e) =>
-      val vars = for VarDecl(x, t) <- ps yield x -> tm.mkVar(encodeSort(t.sort), x)
-      mkLambda(vars.map(_._2), encodeExpr(e)(using ctx ++ vars))
+    case Lambda(ps, e) => ???
 
     // Basic
     case Eq(e1, e2) => tm.mkTerm(EQUAL, encodeExpr(e1), encodeExpr(e2))
@@ -66,7 +65,7 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
     case Lt(e1, e2) => tm.mkTerm(LT, encodeExpr(e1), encodeExpr(e2))
 
     // Char
-    case CharIn(cat, e) => encodeUninterpreted(expr, BoolSort)
+    case CharIn(cat, e) => encodeUninterpreted(expr, BoolType)
     case CharToInt(e) => tm.mkTerm(STRING_TO_CODE, encodeExpr(e))
     case CharFromInt(e) => tm.mkTerm(STRING_FROM_CODE, encodeExpr(e))
     case CharToString(e) => encodeExpr(e)
@@ -75,7 +74,7 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
     case e@SeqLit(es) =>
       val elems = es.map(encodeExpr)
       e.elemSort match
-        case CharSort =>
+        case CharType =>
           if elems.isEmpty then tm.mkString("")
           else tm.mkTerm(STRING_CONCAT, elems.toArray)
         case _ =>
@@ -83,7 +82,7 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
     case SeqLength(e) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_LENGTH else SEQ_LENGTH, seq)
-    case SeqSelect(e, ei) =>
+    case ListAt(e, ei) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_CHARAT else SEQ_NTH, seq, encodeExpr(ei))
     case SeqUpdate(e, ei, ex) =>
@@ -114,7 +113,7 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
       tm.mkTerm(if seq.getSort.isString then STRING_SUFFIX else SEQ_SUFFIX, encodeExpr(et), seq)
 
     // Seq find
-    case SeqContains(e, et) =>
+    case ListContainsSlice(e, et) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_CONTAINS else SEQ_CONTAINS, seq, encodeExpr(et))
     case SeqIndexOf(e, et, ei) =>
@@ -126,17 +125,17 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
       if seq.getSort.isString then
         mkApplyUF(strCount, seq, encodeExpr(et))
       else
-        encodeUninterpreted(expr, IntSort)
-    case _: SeqForall => encodeUninterpreted(expr, BoolSort)
+        encodeUninterpreted(expr, IntType)
+    case _: SeqForall => encodeUninterpreted(expr, BoolType)
 
     // String-specific
-    case _: StringSplit => encodeUninterpreted(expr, SeqSort(stringSort))
-    case _: StringTrim => encodeUninterpreted(expr, stringSort)
-    case StringToLower(e) => tm.mkTerm(STRING_TO_LOWER, encodeExpr(e))
-    case StringToUpper(e) => tm.mkTerm(STRING_TO_UPPER, encodeExpr(e))
-    case StringToInt(e) => tm.mkTerm(STRING_TO_INT, encodeExpr(e))
+    case _: StrSplit => encodeUninterpreted(expr, ListType(strType))
+    case _: StrTrim => encodeUninterpreted(expr, strType)
+    case StrToLower(e) => tm.mkTerm(STRING_TO_LOWER, encodeExpr(e))
+    case StrToUpper(e) => tm.mkTerm(STRING_TO_UPPER, encodeExpr(e))
+    case StrToInt(e) => tm.mkTerm(STRING_TO_INT, encodeExpr(e))
     case StrFromInt(e, _) => tm.mkTerm(STRING_FROM_INT, encodeExpr(e))
-    case StrIsAscii(e) => encodeUninterpreted(expr, BoolSort)
+    case StrIsAscii(e) => encodeUninterpreted(expr, BoolType)
 
     // Set
     case e@SetLit(es) => mkSet(encodeSort(e.elemSort), es.map(encodeExpr))
@@ -185,7 +184,7 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
     case TupleSelect(i, e) => encodeTupleSelect(i, e)
 
     // Others
-    case StringInLang(_, _) => encodeUninterpreted(expr, BoolSort)
+    case StringInLang(_, _) => encodeUninterpreted(expr, BoolType)
     case _ => throw UnsupportedOperationException(s"encode ${expr.getClass.getSimpleName}")
 
   // DSL
@@ -216,11 +215,11 @@ class SMTEncoder(using vars: Map[String, Sort]) extends LazyLogging:
    * 1. a set that stores all keys
    * 2. an array (which is a total function) that stores values for each key (uninterpreted for undefined keys)
    */
-  private def encodeMapSort(keySort: Sort, valSort: Sort): cvc5.Sort =
+  private def encodeMapSort(keySort: Type, valSort: Type): cvc5.Sort =
     val k = encodeSort(keySort)
     tm.mkTupleSort(Array(tm.mkSetSort(k), tm.mkArraySort(k, encodeSort(valSort))))
 
-  private def encodeUninterpreted(expr: Expr, sort: Sort, name: String = ""): cvc5.Term =
+  private def encodeUninterpreted(expr: Expr, sort: Type, name: String = ""): cvc5.Term =
     uninterpretedTerms.get(expr) match
       case Some(t) => t
       case None =>

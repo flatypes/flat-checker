@@ -5,7 +5,7 @@ import flat.checker.flan.Sort
 import flat.checker.flan.tpd.*
 import io.github.cvc5
 
-class SMTSolver(using vars: Map[String, Sort]) extends LazyLogging:
+class SMTSolver(using vars: Map[String, Type]) extends LazyLogging:
   private val encoder = SMTEncoder()
   private val slv = cvc5.Solver(encoder.tm)
   slv.setOption("tlimit-per", "3000")

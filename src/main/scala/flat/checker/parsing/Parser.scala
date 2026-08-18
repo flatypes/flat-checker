@@ -93,6 +93,16 @@ class Parser(using reporter: Reporter):
     override def visitTargetName(node: FlanParser.TargetNameContext): Target =
       TargetName(node.IDENT.getText)(getRange(node))
 
+    override def visitValTarget(node: FlanParser.ValTargetContext): Target =
+      val ident = toIdent(node.IDENT)
+      val typ = Option(node.`type`).map(_.accept(TypeVisitor))
+      ValTarget(ident, typ)(getRange(node))
+
+    override def visitVarTarget(node: FlanParser.VarTargetContext): Target =
+      val ident = toIdent(node.IDENT)
+      val typ = Option(node.`type`).map(_.accept(TypeVisitor))
+      VarTarget(ident, typ)(getRange(node))
+
     override def visitTupleTarget(node: FlanParser.TupleTargetContext): Target =
       val elems = node.target.asScala.toList.map(_.accept(this))
       TupleTarget(elems)(getRange(node))
@@ -105,18 +115,14 @@ class Parser(using reporter: Reporter):
       throw NotImplementedError(s"TargetVisitor.visit${node.getClass.getSimpleName}")
 
   private object StmtVisitor extends FlanParserBaseVisitor[Stmt]:
-    override def visitVarStmt(node: FlanParser.VarStmtContext): Stmt =
+    override def visitVarDecl(node: FlanParser.VarDeclContext): Stmt =
       val ident = toIdent(node.IDENT)
-      val typ = Option(node.`type`).map(_.accept(TypeVisitor))
-      val value = if node.exprOrNondet != null then toExprOrNondet(node.exprOrNondet) else Nondet()(getRange(node))
-      VarStmt(ident, typ, value)
-
-    private def toExprOrNondet(node: FlanParser.ExprOrNondetContext): Expr | Nondet =
-      if node.expr != null then node.expr.accept(ExprVisitor) else Nondet()(getRange(node))
+      val typ = node.`type`.accept(TypeVisitor)
+      VarDecl(ident, typ)
 
     override def visitAssign(node: FlanParser.AssignContext): Stmt =
       val target = node.target.accept(TargetVisitor)
-      val value = toExprOrNondet(node.exprOrNondet)
+      val value = node.expr.accept(ExprVisitor)
       Assign(target, value)
 
     override def visitAugAssign(node: FlanParser.AugAssignContext): Stmt =
@@ -266,12 +272,18 @@ class Parser(using reporter: Reporter):
 
     override def visitPrefixExpr(node: FlanParser.PrefixExprContext): Expr =
       val operand = node.expr.accept(this)
-      mkUnary(operand, Ident("prefix_" + node.op.getText)(getRange(node.op)))(getRange(node))
+      node.op.getText match
+        case "!" => Not(operand)(getRange(node))
+        case _ => mkUnary(operand, Ident("prefix_" + node.op.getText)(getRange(node.op)))(getRange(node))
 
     override def visitInfixExpr(node: FlanParser.InfixExprContext): Expr =
       val left = node.expr(0).accept(this)
       val right = node.expr(1).accept(this)
-      mkApply(left, Ident(node.op.getText)(getRange(node.op)), right)(getRange(node))
+      node.op.getText match
+        case "&&" => And(left, right)(getRange(node))
+        case "||" => Or(left, right)(getRange(node))
+        case "==>" => Implies(left, right)(getRange(node))
+        case _ => mkApply(left, Ident(node.op.getText)(getRange(node.op)), right)(getRange(node))
 
     override def visitRelExpr(node: FlanParser.RelExprContext): Expr =
       val left = node.expr(0).accept(this)
@@ -312,10 +324,9 @@ class Parser(using reporter: Reporter):
       val types = node.`type`.asScala.toList.map(_.accept(this))
       if types.length == 1 then types.head else TupleType(types)
 
-    override def visitUnionType(node: FlanParser.UnionTypeContext): Type =
-      val left = node.`type`(0).accept(this)
-      val right = node.`type`(1).accept(this)
-      UnionType(left, right)
+    override def visitNullableType(node: FlanParser.NullableTypeContext): Type =
+      val baseType = node.`type`.accept(this)
+      NullableType(baseType)(getRange(node))
 
     override def visitFunType(node: FlanParser.FunTypeContext): Type =
       val returnType = node.`type`.asScala.toList.last.accept(this)

@@ -23,11 +23,11 @@ class LPSolver(constraints: List[Expr]):
     val m = mutable.Map.empty[Int, Double]
     var const = 0.0
     e1.summands.foreach:
-      case Const(n: Int) => const -= n
+      case IntLit(n) => const -= n.intValue
       case Negate(e) => m += lookup(e) -> -1.0
       case e => m += lookup(e) -> 1.0
     e2.summands.foreach:
-      case Const(n: Int) => const += n
+      case IntLit(n) => const += n.intValue
       case Negate(e) => m += lookup(e) -> 1.0
       case e => m += lookup(e) -> -1.0
     val rel = op match
@@ -50,7 +50,7 @@ class LPSolver(constraints: List[Expr]):
     val m = mutable.Map.empty[Int, Double]
     var const = 0.0
     goal.summands.foreach:
-      case Const(n: Int) => const += n
+      case IntLit(n) => const += n.intValue
       case Negate(e) => m += lookup(e) -> -1.0
       case e => m += lookup(e) -> 1.0
     val objective = LinearObjectiveFunction(mkCoefficients(m.toMap), const)

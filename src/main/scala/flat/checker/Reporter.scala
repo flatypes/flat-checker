@@ -1,7 +1,7 @@
 package flat.checker
 
 import flat.checker.flan.Show.show
-import flat.checker.flan.{FunSort, Sort}
+import flat.checker.flan.tpd.{FunType, Type}
 import org.eclipse.lsp4j.DiagnosticSeverity.{Error, Warning}
 import org.eclipse.lsp4j.{Diagnostic, DiagnosticRelatedInformation, Location, Range}
 
@@ -70,7 +70,7 @@ class Reporter(val source: Source):
     val diagnostic = Diagnostic(range, s"Name Error: name is not defined", Error, "checker")
     buffer += diagnostic
 
-  def reportMemberNotFound(range: Range, member: String, typ: Sort): Unit =
+  def reportMemberNotFound(range: Range, member: String, typ: Type): Unit =
     val diagnostic = Diagnostic(range, s"Name Error: '$member' is not a member of ${typ.show}", Error, "checker")
     buffer += diagnostic
 
@@ -95,9 +95,9 @@ class Reporter(val source: Source):
     buffer += diagnostic
 
   // Type Errors
-  def reportTypeMismatch(range: Range, expected: Sort | String, actual: Sort): Unit =
+  def reportTypeMismatch(range: Range, expected: Type | String, actual: Type): Unit =
     val expectedStr = expected match
-      case t: Sort => t.show
+      case t: Type => t.show
       case s: String => s
     val diagnostic = Diagnostic(range, multiLineMessage(
       "Type Error: type mismatch",
@@ -105,7 +105,7 @@ class Reporter(val source: Source):
       s"actual:   ${actual.show}"), Error, "checker")
     buffer += diagnostic
 
-  def reportNotCallable(range: Range, typ: Sort): Unit =
+  def reportNotCallable(range: Range, typ: Type): Unit =
     val diagnostic = Diagnostic(range, s"Type Error: value of type ${typ.show} is not callable", Error, "checker")
     buffer += diagnostic
 
@@ -121,27 +121,27 @@ class Reporter(val source: Source):
     val diagnostic = Diagnostic(range, s"Type Error: '$name' is not a language", Error, "checker")
     buffer += diagnostic
 
-  def reportMissingArgs(range: Range, funType: FunSort, actual: Int): Unit =
+  def reportMissingArgs(range: Range, funType: FunType, actual: Int): Unit =
     val diagnostic = Diagnostic(range, multiLineMessage(
       s"Type Error: missing ${funType.arity - actual} argument(s)",
       s"note: function has type ${funType.show}"), Error, "checker")
     buffer += diagnostic
 
-  def reportTooManyArgs(range: Range, funType: FunSort): Unit =
+  def reportTooManyArgs(range: Range, funType: FunType): Unit =
     val diagnostic = Diagnostic(range, multiLineMessage(
       s"Type Error: too many arguments (expected ${funType.arity})",
       s"note: function has type ${funType.show}"), Error, "checker")
     buffer += diagnostic
 
-  def reportAmbiguousOverload(range: Range, member: String, typ: Sort, funTypes: List[FunSort]): Unit =
+  def reportAmbiguousOverload(range: Range, member: String, typ: Type, funTypes: List[FunType]): Unit =
     val diagnostic = Diagnostic(range, multiLineMessage(
       "Type Error: ambiguous overload",
       s"note: overloaded alternatives of $member in $typ have types",
       funTypes.map(_.show)), Error, "checker")
     buffer += diagnostic
 
-  def reportNoMatchingOverload(range: Range, member: String, typ: Sort, funTypes: List[FunSort],
-                               argTypes: List[Sort]): Unit =
+  def reportNoMatchingOverload(range: Range, member: String, typ: Type, funTypes: List[FunType],
+                               argTypes: List[Type]): Unit =
     val argTypesStr = argTypes.map(_.show).mkString(", ")
     val diagnostic = Diagnostic(range, multiLineMessage(
       s"Type Error: none of the overloaded alternatives of $member in $typ with types",
@@ -153,7 +153,7 @@ class Reporter(val source: Source):
     val diagnostic = Diagnostic(range, s"Type Error: missing type argument(s) for $typeConstr", Error, "checker")
     buffer += diagnostic
 
-  def reportTypesUnrelated(range: Range, left: Sort, right: Sort): Unit =
+  def reportTypesUnrelated(range: Range, left: Type, right: Type): Unit =
     val diagnostic = Diagnostic(range, multiLineMessage(
       "Type Warning: types are unrelated",
       s"left:  ${left.show}",

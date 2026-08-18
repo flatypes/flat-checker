@@ -10,6 +10,9 @@ abstract class VerifError(val tag: String, range: Range, message: String) extend
 final class IndexOutOfBoundsError(range: Range)
   extends VerifError("index", range, "index out of bounds")
 
+final class IndexNegError(range: Range)
+  extends VerifError("key", range, "index might be negative")
+
 final class EmptyIndexRangeError(range: Range)
   extends VerifError("index", range, "index range might be empty")
 

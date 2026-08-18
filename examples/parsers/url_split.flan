@@ -106,8 +106,7 @@ method _check_bracketed_netloc(netloc: BracketedNetLoc)
       abort "Invalid IPv6 URL";
     }
     i = bracketed.indexOf(']');
-    hostname = bracketed[:i];
-    var port = bracketed[i+1:];
+    (hostname, var port) = (bracketed[:i], bracketed[i+1:]);
     // No data is allowed after the bracket but before the port delimiter
     if port != "" && !port.startsWith(":") {
       abort "Invalid IPv6 URL";
@@ -132,3 +131,6 @@ method _check_bracketed_host(hostname: BracketedHost)
     // parse ipv6
   }
 }
+
+
+

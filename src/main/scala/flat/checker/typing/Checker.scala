@@ -3,7 +3,7 @@ package flat.checker.typing
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
 import flat.checker.flan.*
-import flat.checker.flan.SortOps.:<:
+import flat.checker.flan.TypeOps.{:<:, erase}
 import flat.checker.flan.tpd.*
 
 import scala.collection.mutable.ListBuffer
@@ -19,209 +19,212 @@ class Checker(using reporter: Reporter) extends LazyLogging:
       case _ => None
     Program(body)
 
-  private def checkMethod(node: untpd.MethodDef, globalCtx: GlobalCtx): MethodDef =
+  private def checkMethod(node: untpd.MethodDef, globalCtx: Ctx): MethodDef =
     val name = node.ident.name
-    var ctx = LocalCtx(globalCtx, name)
+    var ctx = globalCtx.push()
     val info = globalCtx.lookup(name).get.asInstanceOf[MethodInfo]
-    val vs = VarStore()
     // load parameters and check preconditions
-    for (p, d) <- node.params zip info.params do
-      val index = vs.add(d.name, d.typ)
-      ctx = ctx.define(d.name, VarInfo(d.typ, index, isVal = true)(p.ident.range))
-    val requires = node.requires.map(typer.check(_, BoolSort)(using ctx, vs))
+    for (x, paramInfo) <- info.paramInfos do
+      ctx = ctx.define(x, paramInfo)
+    val requires = node.requires.map(typer.check(_, BoolType, ctx))
     // load return variables and check postconditions
-    for (p, d) <- node.returnParams zip info.returnParams do
-      val index = vs.add(d.name, d.typ)
-      ctx = ctx.define(d.name, VarInfo(d.typ, index)(p.ident.range))
-    val ensures = node.ensures.map(typer.check(_, BoolSort)(using ctx, vs))
+    for (x, paramInfo) <- info.returnInfos do
+      ctx = ctx.define(x, paramInfo)
+    val ensures = node.ensures.map(typer.check(_, BoolType, ctx))
     // check body
-    val body = node.body.map(checkBlock(_, ctx)(using vs))
-    val locals = vs.toList.drop(info.params.length + 1) // exclude parameters and return variable
-    MethodDef(name, info.params, info.returnParams, requires, ensures, locals, body)(
-      node.endRange)
+    val (locals, body) = node.body match
+      case Some(body) => checkBlock(body, ctx, info)
+      case None => (Nil, Nil)
+    val params = for (id, t) <- info.params yield VarDecl(id.name, t)
+    val returns = for (id, t) <- info.returnParams yield VarDecl(id.name, t)
+    MethodDef(name, params, returns, requires, ensures, locals,
+      if body.isEmpty then None else Some(body))(node.endRange)
 
-  private def declareVar(ident: untpd.Ident, normType: NormType, ctx: LocalCtx)(using vs: VarStore): LocalCtx =
-    ctx.get(ident.name) match
-      case None =>
-        val index = vs.add(ident.name, normType)
-        ctx.define(ident.name, VarInfo(normType, index)(ident.range))
-      case Some(conflict) =>
-        reporter.reportNameRedefined(ident.range, conflict.range)
-        ctx
+  private def checkBlock(node: List[untpd.Stmt], ctx: Ctx, info: MethodInfo): (List[VarDecl], List[Stmt]) =
+    val visitor = BlockVisitor(ctx, info)
+    node.foreach(visitor.check)
+    (visitor.locals.toList, visitor.body.toList)
 
-  private def checkBlock(block: List[untpd.Stmt], blockCtx: LocalCtx)(using vs: VarStore): List[Stmt] =
-    var ctx = blockCtx
-    val body = ListBuffer.empty[Stmt]
-    block.foreach:
-      case untpd.VarStmt(id, Some(t), rhs) =>
-        val typ = typer.normalize(t)(using ctx)
-        val init = rhs match
-          case e: untpd.Expr => Some(typer.check(e, typ.sort)(using ctx))
-          case _ => None
-        ctx.get(id.name) match
-          case None =>
-            val index = vs.add(id.name, typ)
-            ctx = ctx.define(id.name, VarInfo(typ, index)(id.range))
-            for value <- init do
-              body += Assign(vs.getName(index), value)
-          case Some(conflict) =>
-            reporter.reportNameRedefined(id.range, conflict.range)
+  private class BlockVisitor(localCtx: Ctx, info: MethodInfo):
+    val locals: ListBuffer[VarDecl] = ListBuffer.empty[VarDecl]
+    val body: ListBuffer[Stmt] = ListBuffer.empty[Stmt]
+    private var ctx = localCtx
 
-      case untpd.VarStmt(id, None, e: untpd.Expr) =>
-        val (sort, value) = typer.infer(e)(using ctx)
-        val index = vs.add(id.name, sort)
-        ctx.get(id.name) match
-          case None =>
-            val index = vs.add(id.name, sort)
-            ctx = ctx.define(id.name, VarInfo(sort, index)(id.range))
-            body += Assign(vs.getName(index), value)
-          case Some(conflict) =>
-            reporter.reportNameRedefined(id.range, conflict.range)
-      case untpd.VarStmt(id, None, _) =>
-        reporter.reportMissingTypeAnnot(id.range)
-
-      case untpd.Assign(lhs@untpd.TargetName(name), rhs) =>
-        ctx.lookup(name) match
-          case Some(VarInfo(typ, index, false)) =>
-            rhs match
-              case e: untpd.Expr =>
-                val value = typer.check(e, typ.sort)(using ctx)
-                body += Assign(vs.getName(index), value)
-              case nd: untpd.Nondet =>
-                body += Havoc(vs.getName(index))
-          case result =>
-            rhs match
-              case e: untpd.Expr => typer.infer(e)(using ctx)
-              case nd: untpd.Nondet =>
-            result match
-              case Some(_) =>
-                reporter.reportNotAssignable(lhs.range)
-              case None =>
-                reporter.reportNameUndefined(lhs.range)
-
-      case untpd.Assign(t, e: untpd.Expr) =>
-        val (sort, value) = typer.infer(e)(using ctx)
-        assign(t, value, sort, body)(using ctx, vs)
-
+    def check(stmt: untpd.Stmt): Unit = stmt match
+      // Assignments
+      case untpd.VarDecl(id, t) =>
+        val typ = typer.normalize(t, ctx)
+        declareVar(id, typ)
+      case untpd.Assign(x, e) =>
+        assign(x, e)
       case untpd.ExprStmt(e) =>
-        val (_, value) = typer.infer(e)(using ctx)
+        val (value, _) = typer.infer(e, ctx)
         body += ExprStmt(value)
-
-      case ret@untpd.Return(None) =>
-        body += Return()(ret.range)
-      case ret@untpd.Return(Some(untpd.TupleExpr(es))) if es.length == ctx.info.returnParams.length =>
-        for (e, p) <- es zip ctx.info.returnParams do
-          val value = typer.check(e, p.typ.sort)(using ctx)
-          body += Assign(p.name, value)
-        body += Return()(ret.range)
-      case ret@untpd.Return(Some(e)) =>
-        val value = typer.check(e, ctx.info.returnSort)(using ctx)
-        ctx.info.returnParams match
-          case List(p) =>
-            body += Assign(p.name, value)
-          case ps =>
-            for (p, i) <- ps.zipWithIndex do
-              body += Assign(p.name, TupleSelect(i, value)(e.range))
-        body += Return()(ret.range)
-
+      // Proof derivatives
+      case untpd.Assume(e) =>
+        val expr = typer.check(e, BoolType, ctx)
+        body += Assume(expr)
+      case untpd.Assert(e) =>
+        val expr = typer.check(e, BoolType, ctx)
+        body += Assert(expr)
+      case untpd.Abort(e) =>
+        val (expr, _) = typer.infer(e, ctx)
+        body += Abort()(e.range)
+      // Conditional
+      case untpd.If(e: untpd.Expr, List(untpd.Abort(_)), Nil) =>
+        val cond = typer.check(e, BoolType, ctx)
+        body += Assert(Not(cond))
       case untpd.If(g, b1, b2) =>
-        val cond = checkGuard(g, ctx)
-        val thenBody = checkBlock(b1, narrow(cond, ctx).push)
-        val elseBody = checkBlock(b2, ctx.push)
+        val cond = checkGuard(g)
+        val (thenLocals, thenBody) = checkBlock(b1, typer.assume(cond, ctx.push()), info)
+        val (elseLocals, elseBody) = checkBlock(b2, typer.assume(Not(cond), ctx.push()), info)
+        locals ++= thenLocals
+        locals ++= elseLocals
         body += If(cond, thenBody, elseBody)
 
+      // Loops
       case untpd.While(g, is, b) =>
-        val cond = checkGuard(g, ctx)
-        val invariants = is.map(typer.check(_, BoolSort)(using ctx))
-        val loopBody = checkBlock(b, narrow(cond, ctx).enterLoop)
-        body += While(cond, invariants, loopBody)
+        val cond = checkGuard(g)
+        val invariants = is.map(typer.check(_, BoolType, ctx))
+        val (loopLocals, loopBody) = checkBlock(b, typer.assume(cond, ctx.push(isLoop = true)), info)
+        locals ++= loopLocals
+        body += While(cond, mkAnd(invariants), loopBody)
 
       case untpd.For(id, e, is, b) =>
-        val (iterSort, iter) = typer.infer(e)(using ctx)
+        val (iter, iterSort) = typer.infer(e, ctx)
         iterSort match
-          case SeqSort(elemSort) =>
-            val index = vs.add(id.name, elemSort)
-            val loopCtx = ctx.define(id.name, VarInfo(elemSort, index)(id.range)).enterLoop
-            val invariants = is.map(typer.check(_, BoolSort)(using loopCtx))
-            val loopBody = checkBlock(b, loopCtx)
-            body += For(vs.getName(index), iter, invariants, loopBody)
+          case ListType(elemSort) =>
+            val loopCtx = ctx.define(id.name, VarInfo(elemSort)(id.range)).push(isLoop = true)
+            val invariants = is.map(typer.check(_, BoolType, loopCtx))
+            val (loopLocals, loopBody) = checkBlock(b, loopCtx, info)
+            locals ++= loopLocals
+            body += For(id.name, iter, mkAnd(invariants), loopBody)
           case _ =>
             reporter.reportTypeMismatch(e.range, "list", iterSort)
 
+      // Jumps
+      case ret@untpd.Return(None) =>
+        body += Return()(ret.range)
+      case ret@untpd.Return(Some(e)) =>
+        val value = typer.check(e, info.returnType.erase, ctx)
+        info.returnParams match
+          case List((id, _)) =>
+            body += Assign(id.name, value)
+          case ps =>
+            for (id, i) <- ps.map(_._1).zipWithIndex do
+              body += Assign(id.name, TupleSelect(i, value)(e.range))
+        body += Return()(ret.range)
+
       case node: untpd.Break =>
-        if ctx.inLoop then
+        if ctx.insideLoop then
           body += Break()(node.range)
         else
           reporter.reportBreakOutOfLoop(node.range)
       case node: untpd.Continue =>
-        if ctx.inLoop then
+        if ctx.insideLoop then
           body += Continue()(node.range)
         else
           reporter.reportContinueOutOfLoop(node.range)
 
-      case untpd.Assume(e) =>
-        val expr = typer.check(e, BoolSort)(using ctx)
-        body += Assume(expr)
-      case untpd.Assert(e) =>
-        val expr = typer.check(e, BoolSort)(using ctx)
-        body += Assert(expr)
-      case untpd.Abort(e) =>
-        val (_, expr) = typer.infer(e)(using ctx)
-        body += Abort(expr)
+    private def declareVar(ident: untpd.Ident, typ: Type): Unit =
+      ctx.getDefined(ident.name) match
+        case None =>
+          locals += VarDecl(ident.name, typ)
+          ctx = ctx.define(ident.name, VarInfo(typ)(ident.range))
+        case Some(conflict) =>
+          reporter.reportNameRedefined(ident.range, conflict.range)
 
-    body.toList
+    private def assign(target: untpd.Target, expr: untpd.Expr): Unit = target match
+      case untpd.TargetName(x) =>
+        ctx.lookup(x) match
+          case Some(VarInfo(typ)) =>
+            val value = typer.check(expr, typ, ctx)
+            body += Assign(x, value)
+          case Some(_) =>
+            reporter.reportNotAssignable(target.range)
+          case None =>
+            reporter.reportNameUndefined(target.range)
 
-  private def assign(target: untpd.Target, value: Expr, sort: Sort, body: ListBuffer[Stmt])
-                    (using ctx: Ctx, vs: VarStore): Unit = target match
-    case untpd.TargetName(x) =>
-      ctx.lookup(x) match
-        case Some(VarInfo(NormType(expected, _), index, false)) =>
-          if sort :<: expected then
-            body += Assign(vs.getName(index), value)
-          else
-            reporter.reportTypeMismatch(target.range, expected, sort)
+      case untpd.ValTarget(id, _) =>
+        throw UnsupportedOperationException("val target is not supported yet")
+
+      case untpd.VarTarget(id, Some(t)) =>
+        val typ = typer.normalize(t, ctx)
+        val value = typer.check(expr, typ, ctx)
+        declareVar(id, typ)
+        body += Assign(id.name, value)
+      case untpd.VarTarget(_, None) =>
+        val (value, typ) = typer.infer(expr, ctx)
+        assign(target, value, typ)
+
+      case untpd.TupleTarget(xs) =>
+        expr match
+          case untpd.TupleExpr(es) if es.length == xs.length =>
+            for (x, e) <- xs zip es do
+              assign(x, e)
+          case _ =>
+            val (value, typ) = typer.infer(expr, ctx)
+            assign(target, value, typ)
+
+      case untpd.ListTarget(_) =>
+        val (value, typ) = typer.infer(expr, ctx)
+        assign(target, value, typ)
+
+    private def assign(target: untpd.Target, value: Expr, valueType: Type): Unit = target match
+      case untpd.TargetName(x) =>
+        ctx.lookup(x) match
+          case Some(VarInfo(t)) =>
+            if valueType.erase :<: t.erase then
+              body += Assign(x, value)
+            else
+              reporter.reportTypeMismatch(target.range, t.erase, valueType)
+          case Some(_) =>
+            reporter.reportNotAssignable(target.range)
+          case None =>
+            reporter.reportNameUndefined(target.range)
+
+      case untpd.ValTarget(id, _) =>
+        throw UnsupportedOperationException("val target is not supported yet")
+
+      case untpd.VarTarget(id, Some(t)) =>
+        val typ = typer.normalize(t, ctx)
+        if valueType.erase :<: typ.erase then
+          declareVar(id, typ)
+          body += Assign(id.name, value)
+        else
+          reporter.reportTypeMismatch(target.range, typ.erase, valueType)
+      case untpd.VarTarget(id, None) =>
+        declareVar(id, valueType)
+        body += Assign(id.name, value)
+
+      case untpd.TupleTarget(xs) => valueType match
+        case TupleType(ts) if ts.length == xs.length =>
+          val (fresh, ctx1) = ctx.defineFreshVal(valueType)
+          locals += VarDecl(fresh, valueType)
+          ctx = ctx1
+          body += Assign(fresh, value)
+          val tuple = Var(fresh)(value.range)
+          for (x, i) <- xs.zipWithIndex do
+            val e = TupleSelect(i, tuple)(value.range)
+            assign(x, e, ts(i))
         case _ =>
-          reporter.reportNotAssignable(target.range)
-      body += Assign(x, value)
-    case untpd.TupleTarget(ts) => sort match
-      case TupleSort(ss) if ts.length == ss.length =>
-        val fresh = vs.add("tuple", sort)
-        body += Assign(vs.getName(fresh), value)
-        val tuple = Var(vs.getName(fresh))(value.range)
-        for (t, i) <- ts.zipWithIndex yield
-          val elem = TupleSelect(i, tuple)(value.range)
-          assign(t, elem, ss(i), body)
-      case _ =>
-        reporter.reportTypeMismatch(target.range, "tuple", sort)
-    case untpd.ListTarget(ts) => sort match
-      case SeqSort(s) =>
-        val fresh = vs.add("list", SeqSort(s))
-        body += Assign(vs.getName(fresh), value)
-        val list = Var(vs.getName(fresh))(value.range)
-        body += Assert(Eq(SeqLength(list)(value.range), Const(ts.length))(value.range))
-        for (t, i) <- ts.zipWithIndex yield
-          val elem = SeqSelect(list, Const(i))(value.range)
-          assign(t, elem, s, body)
-      case _ =>
-        reporter.reportTypeMismatch(target.range, "list", sort)
+          reporter.reportTypeMismatch(value.range, s"${xs.length}-tuple", valueType)
 
-  private def checkGuard(guard: untpd.Expr | untpd.Nondet, ctx: LocalCtx)(using va: VarStore): Expr = guard match
-    case e: untpd.Expr =>
-      typer.check(e, BoolSort)(using ctx)
-    case nd: untpd.Nondet =>
-      val index = va.add("*", BoolSort)
-      Var(va.getName(index))(nd.range)
+      case untpd.ListTarget(xs) => valueType match
+        case ListType(s) =>
+          val (fresh, ctx1) = ctx.defineFreshVal(valueType)
+          locals += VarDecl(fresh, valueType)
+          ctx = ctx1
+          body += Assign(fresh, value)
+          val list = Var(fresh)(value.range)
+          for (x, i) <- xs.zipWithIndex do
+            val e = ListAt(list, IntLit(i)(value.range))(value.range)
+            assign(x, e, s)
+        case _ =>
+          reporter.reportTypeMismatch(value.range, "list", valueType)
 
-  private def narrow(cond: Expr, ctx: LocalCtx): LocalCtx = cond match
-    case Ne(Var(x), Const(null)) =>
-      ctx.lookup(x) match
-        case Some(VarInfo(NormType(sort, reft), _, _)) =>
-          ctx.updateType(x, NormType(sortMinusNull(sort), reft))
-        case _ => ctx
-    case _ => ctx
-
-  private def sortMinusNull(sort: Sort): Sort = sort match
-    case UnionSort(NullSort, s) => s
-    case UnionSort(s, NullSort) => s
-    case UnionSort(s1, s2) => UnionSort(sortMinusNull(s1), sortMinusNull(s2))
-    case _ => sort
+    private def checkGuard(guard: untpd.Expr | untpd.Nondet): Expr = guard match
+      case e: untpd.Expr =>
+        typer.check(e, BoolType, ctx)
+      case nd: untpd.Nondet =>
+        throw UnsupportedOperationException("nondet guard will be dropped")

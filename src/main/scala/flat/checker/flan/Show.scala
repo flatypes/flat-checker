@@ -6,6 +6,24 @@ import flat.checker.flan.tpd.*
 
 object Show extends LazyLogging:
   // Types and sorts
+  extension (typ: Type)
+    def show: String = typ match
+      case IntType => "int"
+      case BoolType => "bool"
+      case CharType => "char"
+      case `strType` => "str"
+      case ListType(t) => s"list[${t.show}]"
+      case SetType(t) => s"set[${t.show}]"
+      case DictType(tk, tv) => s"dict[${tk.show}, ${tv.show}]"
+      case t: RefinedType =>
+        if t.name.nonEmpty then t.name
+        else s"{${t.base.show} | ${t.reft.show}}"
+      case TupleType(ts) => ts.map(_.show).mkString("(", ", ", ")")
+      case FunType(ts, t) => ts.map(_.show).mkString("(", ", ", ")") + " -> " + t.show
+      case NullType => "null"
+      case NullableType(t) => s"${t.show}?"
+      case NoType => "∅"
+
   extension (sort: Sort)
     def show: String = sort match
       case NullSort => "null"
@@ -20,11 +38,6 @@ object Show extends LazyLogging:
       case FunSort(ss, s) => ss.map(_.show).mkString("(", ", ", ")") + " -> " + s.show
       case UnionSort(s1, s2) => s"${s1.show} | ${s2.show}"
       case NoSort => "?"
-
-  extension (typ: NormType)
-    def show: String = typ match
-      case NormType(s, None) => s.show
-      case NormType(s, Some(e)) => s"${s.show}[${e.show}]"
 
   extension (varDecl: VarDecl)
     def show: String = s"${varDecl.name}: ${varDecl.typ.show}"
@@ -64,11 +77,11 @@ object Show extends LazyLogging:
   private def showExpr(expr: Expr, paren: Boolean = false): String =
     val s = expr match
       // Constants and variables
-      case Const(null) => "null"
-      case Const(b: Boolean) => b.toString
-      case Const(i: Int) => i.toString
-      case Const(c: Char) => s"'${escapeChar(c)}'"
-      case Const(s: String) => s"\"${escapeString(s)}\""
+      case NullLit() => "null"
+      case BoolLit(b) => b.toString
+      case IntLit(i) => i.toString
+      case CharLit(c) => s"'${escapeChar(c)}'"
+      case StrLit(s) => s"\"${escapeString(s)}\""
       case Var(x) => showVar(x)
       case MethodRef(f) => f
 
@@ -114,15 +127,15 @@ object Show extends LazyLogging:
       // Seq
       case SeqLit(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
       case SeqLength(e) => s"|${showExpr(e)}|"
-      case SeqSelect(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
+      case ListAt(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
       case SeqUpdate(e, ei, ev) => s"${showTighter(e)}[${showExpr(ei)} = ${showExpr(ev)}]"
       case SeqSlice(e, ei, ej) if ej == NoExpr || ej == SeqLength(e) => s"${showTighter(e)}[${showExpr(ei)}:]"
       case SeqSlice(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
       case SeqConcat(e1, e2) => showInfix("++", LEVEL_ADD, ASSOC_LEFT, e1, e2)
       case SeqReverse(e) => showMemberApply(e, "reverse")
-      case SeqIndexOf(e, et, Const(0)) => showMemberApply(e, "indexOf", et)
+      case SeqIndexOf(e, et, IntLit(0)) => showMemberApply(e, "indexOf", et)
       case SeqIndexOf(e, et, ei) => showMemberApply(e, "indexOf", et, ei)
-      case SeqContains(e, et) => showMemberApply(e, "contains", et)
+      case ListContainsSlice(e, et) => showMemberApply(e, "contains", et)
       case SeqStartsWith(e, et) => showMemberApply(e, "startsWith", et)
       case SeqEndsWith(e, et) => showMemberApply(e, "endsWith", et)
       case SeqCount(e, ep) => showMemberApply(e, "count", ep)
@@ -130,12 +143,13 @@ object Show extends LazyLogging:
 
       // String
       case StrReplace(e, e1, e2) => showMemberApply(e, "replace", e1, e2)
-      case StringSplit(e, et, None) => showMemberApply(e, "split", et)
-      case StringSplit(e, et, Some(em)) => showMemberApply(e, "split", et, em)
-      case StringTrim(e) => showMemberApply(e, "trim")
-      case StringToLower(e) => showMemberApply(e, "toLower")
-      case StringToUpper(e) => showMemberApply(e, "toUpper")
-      case StringToInt(e) => showMemberApply(e, "toInt")
+      case StrSplit(e, et, None) => showMemberApply(e, "split", et)
+      case StrSplit(e, et, Some(em)) => showMemberApply(e, "split", et, em)
+      case StrJoin(e, es) => showMemberApply(e, "join", es)
+      case StrTrim(e) => showMemberApply(e, "trim")
+      case StrToLower(e) => showMemberApply(e, "toLower")
+      case StrToUpper(e) => showMemberApply(e, "toUpper")
+      case StrToInt(e) => showMemberApply(e, "toInt")
       case StrFromInt(e, _) => showMemberApply(e, "toString")
       case StrIsAscii(e) => showMemberApply(e, "isAscii")
 

@@ -30,18 +30,25 @@ object untpd:
 
   final case class Nondet()(val range: Range)
 
-  final case class VarStmt(ident: Ident, typ: Option[Type], value: Expr | Nondet) extends Stmt
+  @deprecated
+  final case class VarStmt(ident: Ident, typ: Type, value: Expr | Nondet) extends Stmt
+
+  final case class VarDecl(ident: Ident, typ: Type) extends Stmt
 
   sealed trait Target:
     val range: Range
 
   final case class TargetName(name: String)(val range: Range) extends Target
 
+  final case class ValTarget(ident: Ident, typ: Option[Type])(val range: Range) extends Target
+
+  final case class VarTarget(ident: Ident, typ: Option[Type])(val range: Range) extends Target
+
   final case class TupleTarget(elems: List[Target])(val range: Range) extends Target
 
   final case class ListTarget(elems: List[Target])(val range: Range) extends Target
 
-  final case class Assign(target: Target, value: Expr | Nondet) extends Stmt
+  final case class Assign(target: Target, value: Expr) extends Stmt
 
   final case class ExprStmt(expr: Expr) extends Stmt
 
@@ -66,30 +73,6 @@ object untpd:
   // Types
   trait Type
 
-  @deprecated
-  case object NullType extends Type
-
-  @deprecated
-  case object BoolType extends Type
-
-  @deprecated
-  case object IntType extends Type
-
-  @deprecated
-  case object CharType extends Type
-
-  @deprecated
-  final case class SeqType(elemType: Type) extends Type
-
-  @deprecated
-  val stringType = SeqType(CharType)
-
-  @deprecated
-  final case class SetType(elemType: Type) extends Type
-
-  @deprecated
-  final case class MapType(keyType: Type, valueType: Type) extends Type
-
   final case class TypeName(name: String)(val range: Range) extends Type
 
   final case class GenericType(constr: String, args: List[Type])(val range: Range) extends Type
@@ -103,6 +86,9 @@ object untpd:
 
   final case class FunType(paramTypes: List[Type], returnType: Type) extends Type
 
+  final case class NullableType(baseType: Type)(val range: Range) extends Type
+
+  @deprecated
   final case class UnionType(left: Type, right: Type) extends Type
 
   // Formal Languages
@@ -136,9 +122,39 @@ object untpd:
 
   final case class TermName(name: String)(val range: Range) extends Expr
 
-  final case class Access(receiver: Expr, member: Ident)(val range: Range) extends Expr
+  // Equality
+  final case class Eq(left: Expr, right: Expr)(val range: Range) extends Expr
 
-  final case class Apply(fun: Expr, args: List[Expr])(val range: Range) extends Expr
+  final case class Ne(left: Expr, right: Expr)(val range: Range) extends Expr
+
+  // Boolean Operators
+  final case class And(left: Expr, right: Expr)(val range: Range) extends Expr
+
+  final case class Or(left: Expr, right: Expr)(val range: Range) extends Expr
+
+  final case class Not(cond: Expr)(val range: Range) extends Expr
+
+  final case class Implies(left: Expr, right: Expr)(val range: Range) extends Expr
+
+  final case class Ite(cond: Expr, thenExpr: Expr, elseExpr: Expr)(val range: Range) extends Expr
+
+  // General Operators
+  // NOTE: for future
+  final case class UnaryExpr(op: Ident, expr: Expr)(val range: Range) extends Expr
+
+  // NOTE: for future
+  final case class BinaryExpr(op: Ident, left: Expr, right: Expr)(val range: Range) extends Expr
+
+  // NOTE: for future
+  final case class Size(coll: Expr)(val range: Range) extends Expr
+
+  // NOTE: for future
+  final case class At(coll: Expr, index: Expr)(val range: Range) extends Expr
+
+  // NOTE: for future
+  final case class Slice(coll: Expr, start: Option[Expr], end: Option[Expr])(val range: Range) extends Expr
+
+  final case class Access(receiver: Expr, member: Ident)(val range: Range) extends Expr
 
   def mkUnary(operand: Expr, op: Ident)(range: Range): Apply =
     val access = Access(operand, op)(range)
@@ -151,6 +167,9 @@ object untpd:
     val access = Access(receiver, op)(Range(receiver.range.getStart, op.range.getEnd))
     Apply(access, args.toList)(range)
 
+  final case class Apply(fun: Expr, args: List[Expr])(val range: Range) extends Expr
+
+  // Constructors
   final case class SeqExpr(elems: List[Expr])(val range: Range) extends Expr
 
   final case class SetExpr(elems: List[Expr])(val range: Range) extends Expr
@@ -159,12 +178,6 @@ object untpd:
 
   final case class TupleExpr(elems: List[Expr])(val range: Range) extends Expr
 
-  final case class Eq(left: Expr, right: Expr)(val range: Range) extends Expr
-
-  final case class Ne(left: Expr, right: Expr)(val range: Range) extends Expr
-
   final case class InLang(str: Expr, lang: Lang)(val range: Range) extends Expr
 
-  final case class Ite(cond: Expr, thenValue: Expr, elseValue: Expr)(val range: Range) extends Expr
 
-  final case class And(left: Expr, right: Expr)(val range: Range) extends Expr

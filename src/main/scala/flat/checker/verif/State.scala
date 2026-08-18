@@ -1,7 +1,8 @@
 package flat.checker.verif
 
 import flat.checker.flan.*
-import flat.checker.flan.tpd.{Expr, NormType, VarDecl}
+import flat.checker.flan.TypeOps.erase
+import flat.checker.flan.tpd.*
 import flat.checker.verif.Simplifier.{simplify, toCNF}
 
 final case class MethodInfo(params: List[VarDecl], returns: List[VarDecl],
@@ -13,25 +14,25 @@ final case class MethodInfo(params: List[VarDecl], returns: List[VarDecl],
 
   def names: List[String] = params.map(_.name) ++ returns.map(_.name) ++ locals.map(_.name)
 
-  def types: Map[String, NormType] = Map.from(for p <- params ++ returns ++ locals yield p.name -> p.typ)
+  def types: Map[String, Type] = Map.from(for p <- params ++ returns ++ locals yield p.name -> p.typ)
 
-final case class VarInfo(typ: Sort, value: Expr)
+final case class VarInfo(typ: Type, value: Expr)
 
-final case class PrfCtx(vars: Map[String, Sort] = Map.empty,
+final case class PrfCtx(vars: Map[String, Type] = Map.empty,
                         premises: List[Expr] = Nil):
   def add(value: Expr): PrfCtx =
-    copy(premises = premises ++ value.simplify(using vars).toCNF)
+    copy(premises = premises ++ value.simplify.toCNF)
 
 final case class State(methods: Map[String, MethodInfo] = Map.empty,
                        currentMethod: String = "",
                        values: Map[String, Expr] = Map.empty,
                        freshCounts: Map[String, Int] = Map.empty,
                        ctx: PrfCtx = PrfCtx()):
-  val types: Map[String, NormType] = methods(currentMethod).types
+  val types: Map[String, Type] = methods(currentMethod).types
 
-  val sorts: Map[String, Sort] = types.map { (name, typ) => name -> typ.sort }
+  val sorts: Map[String, Type] = types.map { (name, typ) => name -> typ.erase }
 
-  def fresh(name: String, sort: Sort): (String, State) =
+  def fresh(name: String, sort: Type): (String, State) =
     val version = freshCounts.getOrElse(name, 0)
     val freshName = versioned(name, version)
     (freshName, copy(

@@ -1,0 +1,80 @@
+from url_split import Scheme, NetLoc, Path, Query, Fragment, URL
+
+method url_split(url: URL) returns (scheme: Scheme?, netloc: NetLoc?, path: Path, query: Query?, fragment: Fragment?)
+
+method url_unsplit(scheme: Scheme?, netloc: NetLoc?, path: Path, query: Query?, fragment: Fragment?) returns (url: URL)
+
+const uses_relative = ["", "https"]
+const uses_netloc = ["", "https"]
+
+method url_join(base: URL, url: URL): URL
+{
+  if base == "" {
+    return url;
+  }
+  if url == "" {
+    return base;
+  }
+
+  (var bscheme, var bnetloc, var bpath, var bquery, var bfragment) = url_split(base);
+  (var scheme, var netloc, var path, var query, var fragment) = url_split(url);
+
+  if scheme == null {
+    scheme = bscheme;
+  }
+  if scheme != bscheme || (scheme != null && scheme != "" && scheme !in uses_relative) {
+    return url;
+  }
+  if scheme == null || scheme in uses_netloc {
+    if netloc != null && netloc != "" {
+      return url_unsplit(scheme, netloc, path, query, fragment);
+    }
+    netloc = bnetloc;
+  }
+
+  if path == "" {
+    path = bpath;
+    if query == null {
+      query = bquery;
+      if fragment == null {
+        fragment = bfragment;
+      }
+    }
+    return url_unsplit(scheme, netloc, path, query, fragment);
+  }
+
+  var base_parts = bpath.split('/');
+  if base_parts[|base_parts| - 1] != "" {
+    base_parts = base_parts[:|base_parts| - 1];
+  }
+
+  var segments: list[str];
+  if path[:1] == "/" {
+    segments = path.split('/');
+  } else {
+    segments = base_parts + path.split('/');
+  }
+
+  var resolved_path: list[str] = [];
+  for seg in segments {
+    if seg == ".." {
+      if |resolved_path| > 0 {
+        resolved_path = resolved_path.init; // pop the last segment
+      }
+    } else if seg == "." {
+      continue;
+    } else {
+      resolved_path += seg;
+    }
+  }
+
+  if segments[|segments| - 1] in {".", ".."} {
+    resolved_path += "";
+  }
+
+  path = '/'.join(resolved_path);
+  if path == "" {
+    path = "/";
+  }
+  return url_unsplit(scheme, netloc, path, query, fragment);
+}

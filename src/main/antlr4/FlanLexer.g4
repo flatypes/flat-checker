@@ -11,6 +11,7 @@ RETURNS: 'returns';
 REQUIRES: 'requires';
 ENSURES: 'ensures';
 VAR: 'var';
+VAL: 'val';
 ASSUME: 'assume';
 ASSERT: 'assert';
 RETURN: 'return';
@@ -45,9 +46,9 @@ DOT: '.';
 QUESTION: '?';
 
 // Operators
-AND: 'and' | '&&';
-OR: 'or' | '||';
-NOT: 'not' | '!';
+AND: '&&';
+OR: '||';
+NOT: '!';
 IMPLIES: '==>';
 PLUS: '+';
 MINUS: '-';

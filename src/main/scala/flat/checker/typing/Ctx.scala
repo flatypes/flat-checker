@@ -2,8 +2,9 @@ package flat.checker.typing
 
 import flat.checker.*
 import flat.checker.domain.StrRE
+import flat.checker.flan.TypeOps.erase
 import flat.checker.flan.tpd.*
-import flat.checker.flan.{FunSort, Sort, TupleSort}
+import flat.checker.flan.untpd
 import org.eclipse.lsp4j.Range
 
 import scala.collection.mutable
@@ -12,81 +13,75 @@ import scala.collection.mutable.ListBuffer
 sealed trait Info:
   val range: Range
 
-final case class TypeInfo(typ: NormType)(val range: Range) extends Info
+final case class TypeInfo(typ: Type)(val range: Range) extends Info
 
 final case class LangInfo(regEx: StrRE)(val range: Range) extends Info
 
-final case class ConstInfo(sort: Sort, value: Expr)(val range: Range) extends Info
+final case class ConstInfo(sort: Type, value: Expr)(val range: Range) extends Info
 
-final case class ParamInfo(name: String, typ: Sort)(val range: Range)
+final case class MethodInfo(params: List[(untpd.Ident, Type)], returnParams: List[(untpd.Ident, Type)])
+                           (val range: Range) extends Info:
+  def paramInfos: List[(String, ValInfo)] = for (id, t) <- params yield id.name -> ValInfo(t.erase)(id.range)
 
-final case class MethodInfo(params: List[VarDecl], returnParams: List[VarDecl])(val range: Range) extends Info:
-  def returnSort: Sort =
-    returnParams.map(_.typ.sort) match
-      case List(s) => s
-      case ss => TupleSort(ss)
+  def returnInfos: List[(String, VarInfo)] = for (id, t) <- returnParams yield id.name -> VarInfo(t.erase)(id.range)
 
-  def funSort: FunSort = FunSort(params.map(_.typ.sort), returnSort)
+  def returnType: Type =
+    returnParams.map(_._2) match
+      case List(t) => t
+      case ts => TupleType(ts)
 
-sealed trait Ctx:
-  def lookup(name: String): Option[Info]
+  def funType: FunType = FunType(params.map(_._2), returnType)
 
-final case class GlobalCtx(types: Map[String, TypeInfo] = Map.empty,
-                           langs: Map[String, LangInfo] = Map.empty,
-                           consts: Map[String, ConstInfo] = Map.empty,
-                           methods: Map[String, MethodInfo] = Map.empty) extends Ctx:
+final case class ValInfo(typ: Type)(val range: Range) extends Info
+
+final case class VarInfo(typ: Type)(val range: Range) extends Info
+
+final case class Local(scope: Map[String, Info], narrowedTypes: Map[String, Type],
+                       isLoop: Boolean, nextFresh: Int = 0)
+
+final case class Ctx(globalScope: Map[String, Info] = Map.empty, localStack: List[Local] = Nil):
+  def getDefined(name: String): Option[Info] =
+    localStack.headOption.flatMap(_.scope.get(name)).orElse(globalScope.get(name))
+
+  def define(name: String, info: Info): Ctx = localStack match
+    case Nil => copy(globalScope = globalScope + (name -> info))
+    case current :: rest =>
+      val updated = current.copy(scope = current.scope + (name -> info))
+      copy(localStack = updated :: rest)
+
+  def defineFreshVal(sort: Type): (String, Ctx) = localStack match
+    case Nil => throw IllegalStateException("Cannot define fresh val in global scope")
+    case current :: rest =>
+      val freshName = s"fresh:${current.nextFresh}"
+      val updated = current.copy(
+        scope = current.scope + (freshName -> ValInfo(sort)(noRange)),
+        nextFresh = current.nextFresh + 1)
+      (freshName, copy(localStack = updated :: rest))
+
   def lookup(name: String): Option[Info] =
-    types.get(name)
-      .orElse(langs.get(name))
-      .orElse(consts.get(name))
-      .orElse(methods.get(name))
+    localStack.collectFirst { case ctx if ctx.scope.contains(name) => ctx.scope(name) }
+      .orElse(globalScope.get(name))
 
-  def define(name: String, info: Info): GlobalCtx = info match
-    case t: TypeInfo => copy(types = types + (name -> t))
-    case l: LangInfo => copy(langs = langs + (name -> l))
-    case c: ConstInfo => copy(consts = consts + (name -> c))
-    case m: MethodInfo => copy(methods = methods + (name -> m))
-    case _ => throw IllegalArgumentException(s"Cannot define ${info.getClass.getSimpleName}")
+  def narrow(name: String, typ: Type): Ctx = localStack match
+    case Nil => this
+    case current :: rest =>
+      val updated = current.copy(narrowedTypes = current.narrowedTypes + (name -> typ))
+      copy(localStack = updated :: rest)
 
-final case class VarInfo(normType: NormType, index: Int, isVal: Boolean = false)(val range: Range) extends Info
+  def getNarrowedType(name: String): Option[Type] =
+    localStack.collectFirst { case ctx if ctx.narrowedTypes.contains(name) => ctx.narrowedTypes(name) }
 
-final case class LocalCtx(global: GlobalCtx,
-                          currentMethod: String,
-                          scopeStack: List[Map[String, VarInfo]] = List(Map.empty),
-                          loopLevel: Int = 0) extends Ctx:
-  def lookup(name: String): Option[Info] =
-    scopeStack.collectFirst { case scope if scope.contains(name) => scope(name) }
-      .orElse(global.lookup(name))
+  def insideLoop: Boolean = localStack.exists(_.isLoop)
 
-  def get(name: String): Option[VarInfo] =
-    require(scopeStack.nonEmpty)
-    scopeStack.head.get(name)
+  def push(isLoop: Boolean = false): Ctx =
+    copy(localStack = Local(Map.empty, Map.empty, isLoop) :: localStack)
 
-  def inLoop: Boolean = loopLevel > 0
-
-  def info: MethodInfo = global.methods(currentMethod)
-
-  def define(name: String, info: VarInfo): LocalCtx =
-    require(scopeStack.nonEmpty)
-    val scope = scopeStack.head + (name -> info)
-    copy(scopeStack = scope :: scopeStack.tail)
-
-  def updateType(name: String, typ: NormType): LocalCtx =
-    val i = scopeStack.indexWhere(_.contains(name))
-    require(i >= 0, s"Variable $name not found in any scope")
-    val scope = scopeStack(i)
-    val info = scope(name)
-    copy(scopeStack = scopeStack.updated(i, scope + (name -> info.copy(normType = typ)(info.range))))
-
-  def push: LocalCtx = copy(scopeStack = Map.empty :: scopeStack)
-
-  def enterLoop: LocalCtx = copy(scopeStack = Map.empty :: scopeStack, loopLevel = loopLevel + 1)
-
+@deprecated
 final class VarStore:
   private val counts = mutable.Map.empty[String, Int]
   private val buf = ListBuffer.empty[VarDecl]
 
-  def add(name: String, typ: NormType): Int =
+  def add(name: String, typ: Type): Int =
     counts.get(name) match
       case Some(n) =>
         val newName = s"${name}_$n"

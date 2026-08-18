@@ -3,7 +3,7 @@ package flat
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.parsing.Parser
 import flat.checker.typing.Checker
-import flat.checker.verif.Verifier
+import flat.checker.verif.{VCGenerator, Verifier}
 import flat.checker.{Reporter, Source}
 import flat.util.{Aggregator, MetricCollector}
 import scopt.OParser
