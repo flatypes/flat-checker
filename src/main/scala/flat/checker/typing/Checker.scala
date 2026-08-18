@@ -9,36 +9,38 @@ import flat.checker.flan.tpd.*
 import scala.collection.mutable.ListBuffer
 
 class Checker(using reporter: Reporter) extends LazyLogging:
-  private val typer = Typer()
   private val resolver = Resolver()
 
-  def checkProgram(module: untpd.Program): Program =
+  def checkProgram(module: untpd.Program): List[Script] =
     val ctx = resolver.resolve(module)
-    val body = module.body.flatMap:
+    module.body.flatMap:
       case node: untpd.MethodDef => Some(checkMethod(node, ctx))
       case _ => None
-    Program(body)
 
-  private def checkMethod(node: untpd.MethodDef, globalCtx: Ctx): MethodDef =
+  private def checkMethod(node: untpd.MethodDef, globalCtx: Ctx): Script =
     val name = node.ident.name
     var ctx = globalCtx.push()
     val info = globalCtx.lookup(name).get.asInstanceOf[MethodInfo]
+    val locals = ListBuffer.empty[VarDecl]
+    val body = ListBuffer.empty[Stmt]
+    val typer = Typer(body)
     // load parameters and check preconditions
     for (x, paramInfo) <- info.paramInfos do
       ctx = ctx.define(x, paramInfo)
+      locals += VarDecl(x, paramInfo.typ.erase)
     val requires = node.requires.map(typer.check(_, BoolType, ctx))
+    body += Assume(mkAnd(requires))
     // load return variables and check postconditions
     for (x, paramInfo) <- info.returnInfos do
       ctx = ctx.define(x, paramInfo)
+      locals += VarDecl(x, paramInfo.typ.erase)
     val ensures = node.ensures.map(typer.check(_, BoolType, ctx))
     // check body
-    val (locals, body) = node.body match
-      case Some(body) => checkBlock(body, ctx, info)
-      case None => (Nil, Nil)
-    val params = for (id, t) <- info.params yield VarDecl(id.name, t)
-    val returns = for (id, t) <- info.returnParams yield VarDecl(id.name, t)
-    MethodDef(name, params, returns, requires, ensures, locals,
-      if body.isEmpty then None else Some(body))(node.endRange)
+    for block <- node.body do
+      val (lcs, ss) = checkBlock(block, ctx, info)
+      locals ++= lcs
+      body ++= ss
+    Script(locals.toList, body.toList)
 
   private def checkBlock(node: List[untpd.Stmt], ctx: Ctx, info: MethodInfo): (List[VarDecl], List[Stmt]) =
     val visitor = BlockVisitor(ctx, info)
@@ -48,6 +50,7 @@ class Checker(using reporter: Reporter) extends LazyLogging:
   private class BlockVisitor(localCtx: Ctx, info: MethodInfo):
     val locals: ListBuffer[VarDecl] = ListBuffer.empty[VarDecl]
     val body: ListBuffer[Stmt] = ListBuffer.empty[Stmt]
+    val typer = Typer(body)
     private var ctx = localCtx
 
     def check(stmt: untpd.Stmt): Unit = stmt match

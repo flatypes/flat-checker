@@ -5,14 +5,16 @@ import flat.checker.Reporter
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{RegEx, StrRE, given}
 import flat.checker.flan.*
+import flat.checker.flan.Show.*
 import flat.checker.flan.TypeOps.*
 import flat.checker.flan.tpd.*
+import flat.checker.verif.ReftNotProvedError
 import org.eclipse.lsp4j.{Position, Range}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class Typer(using reporter: Reporter) extends LazyLogging:
+class Typer(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
   def normalize(node: untpd.Type, ctx: Ctx): Type = node match
     case t@untpd.TypeName(x) =>
       ctx.lookup(x) match
@@ -303,11 +305,11 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     Some(formatter, i + 1)
 
   def check(node: untpd.Expr, expectedType: Type, ctx: Ctx): Expr =
-    (node, expectedType.erase) match
-      case (untpd.Ite(e, e1, e2), t) =>
+    (node, expectedType) match
+      case (untpd.Ite(e, e1, e2), _) =>
         val cond = check(e, BoolType, ctx)
-        val thenExpr = check(e1, t, assume(cond, ctx))
-        val elseExpr = check(e2, t, assume(Not(cond), ctx))
+        val thenExpr = check(e1, expectedType, assume(cond, ctx))
+        val elseExpr = check(e2, expectedType, assume(Not(cond), ctx))
         Ite(cond, thenExpr, elseExpr)(node.range)
 
       case (untpd.SeqExpr(es), ListType(t)) =>
@@ -326,11 +328,35 @@ class Typer(using reporter: Reporter) extends LazyLogging:
         TupleExpr(elems)(node.range)
 
       case (_, expected) =>
-        val (expr, typ) = infer(node, ctx)
-        val actual = typ.erase
-        if !(actual :<: expected) then
+        val (expr, actual) = infer(node, ctx)
+        if isSubtype(actual, expected) then
+          return expr
+
+        if !isSubtype(actual, expected.erase) then
           reporter.reportTypeMismatch(node.range, expected, actual)
+          return expr
+
+        expected match
+          case RefinedType(_, reft) =>
+            body += GAssert(reft.subst(Map("_" -> expr)), ReftNotProvedError(node.range))
+          case _ =>
+            throw NotImplementedError(s"Type checking for $node: ${actual.show} <: ${expected.show} is not implemented")
         expr
+
+  private def isSubtype(left: Type, right: Type): Boolean =
+    if left == right || left == NoType || right == NoType then true
+    else (left, right) match
+      case (ListType(t1), ListType(t2)) => isSubtype(t1, t2)
+      case (SetType(t1), SetType(t2)) => isSubtype(t1, t2)
+      case (DictType(k1, v1), DictType(k2, v2)) => isSubtype(k1, k2) && isSubtype(k2, k1) && isSubtype(v1, v2)
+      case (RefinedType(t1, _), t2) => isSubtype(t1, t2)
+      case (TupleType(ts1), TupleType(ts2)) => ts1.length == ts2.length && (ts1 zip ts2).forall(isSubtype)
+      case (FunType(ps1, r1), FunType(ps2, r2)) =>
+        ps1.length == ps2.length && (ps2 zip ps1).forall(isSubtype) && isSubtype(r1, r2)
+      case (NullableType(t1), NullableType(t2)) => isSubtype(t1, t2)
+      case (NullType, NullableType(_)) => true
+      case (t1, NullableType(t2)) => isSubtype(t1, t2)
+      case _ => false
 
   def inferParamList(nodes: List[untpd.Param], ctx: Ctx): List[(untpd.Ident, Type)] =
     val scope = mutable.Map.empty[String, Range]

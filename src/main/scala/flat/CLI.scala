@@ -3,7 +3,7 @@ package flat
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.parsing.Parser
 import flat.checker.typing.Checker
-import flat.checker.verif.{VCGenerator, Verifier}
+import flat.checker.verif.Verifier
 import flat.checker.{Reporter, Source}
 import flat.util.{Aggregator, MetricCollector}
 import scopt.OParser
@@ -104,7 +104,7 @@ object CLI extends LazyLogging:
         System.exit(1)
 
       val verifier = Verifier(using reporter)
-      verifier.verify(program)
+      verifier.verify(???)
       if reporter.hasError then
         reporter.printTo(Console.err)
         System.exit(1)

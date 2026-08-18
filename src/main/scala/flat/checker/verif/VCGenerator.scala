@@ -64,6 +64,7 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
       // Proof derivatives
       case Assume(e) => safetyCheck(e) && e -> post
       case Assert(e) => (safetyCheck(e) && mkVCAssert(e, e => AssertNotProvedError(e.range))) & post
+      case GAssert(e, error) => VCAssert(e, error) & post
       case s@Abort() => VCAssert(BoolLit(false), AssertNotProvedError(s.range))
       // Conditional
       case If(e, thenBody, elseBody) =>

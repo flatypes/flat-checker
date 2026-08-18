@@ -6,9 +6,10 @@ import flat.checker.parsing.Parser
 import flat.checker.{Reporter, Source}
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class Resolver(using reporter: Reporter) extends LazyLogging:
-  private val typer = Typer()
+  private val typer = Typer(ListBuffer.empty)
 
   def resolve(module: untpd.Program): Ctx =
     var ctx = Ctx()
