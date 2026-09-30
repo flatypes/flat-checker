@@ -1,0 +1,4 @@
+lang Input = r""
+
+def f000(s: Input):
+    assert |s| == 0

@@ -1,0 +1,17 @@
+lang Input = r"a*|b*"
+
+def f400(s: Input):
+    var i = 0
+    while i < |s|:
+        invariant 0 <= i <= |s|
+        invariant 'a' !in s ==> i == 0
+        if s[i] != 'a':
+            break
+        i += 1
+    if i == 0:
+        while i < |s|:
+            invariant 0 <= i <= |s|
+            if s[i] != 'b':
+                break
+        i += 1
+    assert i == |s|

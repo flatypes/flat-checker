@@ -3,6 +3,7 @@ package flat
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.*
 import flat.checker.ast.Module
+import flat.checker.parsing.FlanParsers
 import flat.checker.py.{Transpiler, Unpickler}
 import flat.util.MetricCollector
 
@@ -15,31 +16,28 @@ object Driver extends LazyLogging:
   def run(using config: Config): Unit =
     require(config.inputs.nonEmpty, "no inputs")
     for input <- config.inputs do
-      for path <- collectPy(input) do
+      for path <- collectFlan(input) do
         logger.info("")
         logger.info("Checking: {}", path)
-        for mc <- config.metrics do
-          mc.push("files")
-          mc.put("path", path.toString)
-          mc.timeStart("time/transpile")
-        val module = transpile(path)
-        for mc <- config.metrics do
-          mc.timePause("time/transpile")
-        for mc <- config.metrics do
-          mc.timeStart("time/check")
-        val checker = new Checker
-        checker.check(module)
-        checker.issuer.print()
-        for mc <- config.metrics do
-          mc.timePause("time/check")
-          mc.put("succeed", checker.issuer.noError)
-          mc.pop()
-        if checker.issuer.noError then
-          logger.info("Type CHECKED")
-        else if config.noError then
-          done
-          System.exit(1)
+        val reporter = new Reporter(Source.fromPath(path))
+        val parser = new FlanParsers(path.toString, os.read(path))(using reporter)
+        val mod = parser.parse()
+        if reporter.hasErrors then
+          reporter.printTo(System.err)
+        else
+          logger.info("Parsed: {}", path)
+
     done
+
+  private def collectFlan(path: os.Path): Seq[os.Path] =
+    if os.isFile(path) then
+      if path.ext == "flan" then
+        Seq(path)
+      else
+        logger.warn("Ignored: {}", path)
+        Seq.empty
+    else
+      os.walk(path).filter(_.ext == "flan").sorted
 
   private def collectPy(path: os.Path): Seq[os.Path] =
     if os.isFile(path) then

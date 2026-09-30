@@ -1,0 +1,24 @@
+def _urlsplit(url: str, scheme: str?):
+    netloc = null
+    query = null
+    fragment = null
+    i = url.find(':')
+    if i > 0 && url[0].isascii() && url[0].isalpha():
+        for c in url[:i]:
+            if c !in scheme_chars:
+                break
+        #else:
+        #    scheme, url = url[:i].lower(), url[i+1:]
+    if url[:2] == "//":
+        (netloc, url) = _splitnetloc(url, 2)
+        if (('[' in netloc && ']' !in netloc) ||
+            (']' in netloc && '[' !in netloc)):
+            abort "Invalid IPv6 URL"
+        if '[' in netloc && ']' in netloc:
+            _check_bracketed_netloc(netloc)
+    if '#' in url:
+        (url, fragment) = url.split('#', 1)
+    if '?' in url:
+        (url, query) = url.split('?', 1)
+    _checknetloc(netloc)
+    return (scheme, netloc, url, query, fragment)

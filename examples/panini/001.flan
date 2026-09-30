@@ -1,0 +1,4 @@
+lang Input = r""
+
+def f001(s: Input):
+    assert s == ""
