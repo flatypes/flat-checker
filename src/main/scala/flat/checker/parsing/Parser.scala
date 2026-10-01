@@ -6,18 +6,18 @@ import flat.checker.flan.untpd.*
 import flat.checker.parsing.TokenType.*
 import org.eclipse.lsp4j.Range as Span
 
-import scala.util.parsing.input.{NoPosition, Position, Reader}
+import scala.util.parsing.input
 
-class TokenReader(tokens: List[Token]) extends Reader[Token]:
+class TokenReader(tokens: List[Token]) extends input.Reader[Token]:
   override def first: Token = tokens.head
 
   override def atEnd: Boolean = tokens.isEmpty
 
-  override def pos: Position = NoPosition
+  override def pos: input.Position = input.NoPosition
 
-  override def rest: Reader[Token] = TokenReader(tokens.tail)
+  override def rest: input.Reader[Token] = TokenReader(tokens.tail)
 
-class FlanParsers(uri: String, text: String)(using reporter: Reporter) extends ExprParsers, LazyLogging:
+class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprParsers, LazyLogging:
   override type Elem = Token
 
   // Tokens
@@ -133,14 +133,45 @@ class FlanParsers(uri: String, text: String)(using reporter: Reporter) extends E
     postfix(intConst | charConst | strConst | boolConst | nullConst | termRef | listExpr | setExpr | mapExpr
       | parenExpr | size, fieldAccessOp | indexAccessOp | applyOp | sliceOp)
 
-  private def intConst: Parser[IntConst] =
-    INT ^^ { tk => IntConst(LitParsers(uri, tk.span.getStart).parseIntLit(tk.value))(tk.span) }
+  private def intConst: Parser[IntConst] = INT ^^ { tk => IntConst(parseInt(tk.value))(tk.span) }
 
-  private def charConst: Parser[CharConst] =
-    CHAR ^^ { tk => CharConst(LitParsers(uri, tk.span.getStart).parseCharLit(tk.value))(tk.span) }
+  private def parseInt(s: String): BigInt =
+    if s.startsWith("0b") || s.startsWith("0B") then BigInt(s.drop(2).replace("_", ""), 2)
+    else if s.startsWith("0o") || s.startsWith("0O") then BigInt(s.drop(2).replace("_", ""), 8)
+    else if s.startsWith("0x") || s.startsWith("0X") then BigInt(s.drop(2).replace("_", ""), 16)
+    else BigInt(s.replace("_", ""), 10)
 
-  private def strConst: Parser[StrConst] =
-    STR ^^ { tk => StrConst(LitParsers(uri, tk.span.getStart).parseStrLit(tk.value))(tk.span) }
+  private def charConst: Parser[CharConst] = CHAR ^^ { tk => CharConst(unescapeChar(tk.value))(tk.span) }
+
+  private def unescapeChar(s: String): Char =
+    val (c, j) = unescape(s, 1)
+    assert(j == s.length - 1)
+    c
+
+  private def unescape(s: String, i: Int): (Char, Int) =
+    s.charAt(i) match
+      case '\\' => s.charAt(i + 1) match
+        case c@('\\' | '\'' | '"') => (c, i + 2)
+        case 'a' => ('\u0007', i + 2)
+        case 'b' => ('\b', i + 2)
+        case 'f' => ('\f', i + 2)
+        case 'n' => ('\n', i + 2)
+        case 'r' => ('\r', i + 2)
+        case 't' => ('\t', i + 2)
+        case 'v' => ('\u000B', i + 2)
+        case 'u' => (Integer.parseInt(s.substring(i + 2, i + 6), 16).toChar, i + 6)
+      case c => (c, i + 1)
+
+  private def strConst: Parser[StrConst] = STR ^^ { tk => StrConst(unescapeStr(tk.value))(tk.span) }
+
+  private def unescapeStr(s: String): String =
+    val sb = new StringBuilder
+    var i = 1
+    while i < s.length - 1 do
+      val (c, j) = unescape(s, i)
+      sb += c
+      i = j
+    sb.toString
 
   private def boolConst: Parser[BoolConst] = ("true" | "false") ^^ { tk => BoolConst(tk.value.toBoolean)(tk.span) }
 
@@ -190,11 +221,12 @@ class FlanParsers(uri: String, text: String)(using reporter: Reporter) extends E
   private def pTerm: Parser[PExpr] =
     postfix(pChar | pStr | pRStr | pRef | pParen, pStarOp | pPlusOp | pOptOp | pRepOp)
 
-  private def pChar: Parser[PChar] = CHAR ^^ { tk => PChar(LitParsers(uri, tk.span.getStart).parseCharLit(tk.value)) }
+  private def pChar: Parser[PChar] = CHAR ^^ { tk => PChar(unescapeChar(tk.value)) }
 
-  private def pStr: Parser[PStr] = STR ^^ { tk => PStr(LitParsers(uri, tk.span.getStart).parseStrLit(tk.value)) }
+  private def pStr: Parser[PStr] = STR ^^ { tk => PStr(unescapeStr(tk.value)) }
 
-  private def pRStr: Parser[PExpr] = R_STR ^^ { tk => LitParsers(uri, tk.span.getStart).parseRStrLit(tk.value) }
+  private def pRStr: Parser[PExpr] =
+    R_STR ^^ { tk => RegParser(uri, tk.span.getStart).parse(tk.value.drop(2).dropRight(1)) }
 
   private def pRef: Parser[PRef] = IDENTIFIER ^^ { tk => PRef(tk.value)(tk.span) }
 
@@ -212,7 +244,7 @@ class FlanParsers(uri: String, text: String)(using reporter: Reporter) extends E
       case tk1 ~ i1 ~ Some(i2) ~ tk2 => PRep(_, IntRange(i1, i2)(Span(tk1.span.getStart, tk2.span.getEnd)))
     }
 
-  private def pInt: Parser[BigInt] = INT ^^ { tk => LitParsers(uri, tk.span.getStart).parseIntLit(tk.value) }
+  private def pInt: Parser[BigInt] = INT ^^ { tk => parseInt(tk.value) }
 
   // Local statements
   private def stmt: Parser[Stmt] =
@@ -274,7 +306,6 @@ class FlanParsers(uri: String, text: String)(using reporter: Reporter) extends E
   def parse(): Module =
     val lexer = Lexer(uri, text)
     val tokens = lexer.lex()
-    logger.debug("Tokens: {}", tokens.map(tk => s"${tk.typ}(${tk.value})").mkString(", "))
     if reporter.hasErrors then
       return Module.empty
 

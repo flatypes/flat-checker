@@ -6,6 +6,7 @@ import flat.checker.parsing.PosUtils.{*, given}
 import org.eclipse.lsp4j.{Position, Range as Span}
 
 import scala.collection.mutable
+import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 enum TokenType:
@@ -42,10 +43,11 @@ class Lexer(uri: String, text: String)(using reporter: Reporter) extends RegexPa
 
   private def emptyLine: Parser[List[Token]] = whitespace ~> "\n" ^^^ Nil
 
-  private def whitespace: Parser[String] = in =>
-    val p: Parser[String] =
-      if openingParens.isEmpty then """([ \f\t]|#[^\n]*|\\\n)*""".r else """([ \f\t\n]|#[^\n]*|\\\n)*""".r
-    p(in)
+  private val ws1: Parser[String] = """([ \f\t]|#[^\n]*|\\\n)*""".r
+
+  private val ws2: Parser[String] = """([ \f\t\n]|#[^\n]*|\\\n)*""".r
+
+  private def whitespace: Parser[String] = in => if openingParens.isEmpty then ws1(in) else ws2(in)
 
   private def nonEmptyLine: Parser[List[Token]] = elem(' ').* ~> (token <~ whitespace).+ <~ "\n" ^^ processLine
 
@@ -53,11 +55,15 @@ class Lexer(uri: String, text: String)(using reporter: Reporter) extends RegexPa
     int | char | str | rStr | openingParen | closingParen | operator | keywordOrIdentifier
 
   private def int: Parser[Token] =
-    withSpan("""[0-9]+|0[Xx][0-9A-Fa-f]+|0[Bb][01]+""".r) ^^ (Token(INT, _, _))
+    withSpan("""[1-9](_?[0-9])*|0[bB](_?[01])+|0[oO](_?[0-7])+|0[xX](_?[0-9a-fA-F])+|0""".r) ^^ (Token(INT, _, _))
 
-  private def char: Parser[Token] = withSpan("""'[^\n']*'""".r) ^^ (Token(CHAR, _, _))
+  private def char: Parser[Token] =
+    withSpan(Regex("'" + """([^\n\\']|""" + escapeSeq + ")'")) ^^ (Token(CHAR, _, _))
 
-  private def str: Parser[Token] = withSpan(""""[^\n"]*"""".r) ^^ (Token(STR, _, _))
+  private val escapeSeq: Regex = """\\([\\'"abfnrtv]|u[0-9a-fA-F]{4})""".r
+
+  private def str: Parser[Token] =
+    withSpan(Regex("\"" + """([^\n\\"]|""" + escapeSeq + ")*\"")) ^^ (Token(STR, _, _))
 
   private def rStr: Parser[Token] = withSpan("""r"[^\n"]*"""".r) ^^ (Token(R_STR, _, _))
 

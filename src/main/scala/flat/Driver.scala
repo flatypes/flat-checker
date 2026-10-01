@@ -3,7 +3,7 @@ package flat
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.*
 import flat.checker.ast.Module
-import flat.checker.parsing.FlanParsers
+import flat.checker.parsing.Parser
 import flat.checker.py.{Transpiler, Unpickler}
 import flat.util.MetricCollector
 
@@ -20,7 +20,7 @@ object Driver extends LazyLogging:
         logger.info("")
         logger.info("Checking: {}", path)
         val reporter = new Reporter(Source.fromPath(path))
-        val parser = new FlanParsers(path.toString, os.read(path))(using reporter)
+        val parser = new Parser(path.toString, os.read(path))(using reporter)
         val mod = parser.parse()
         if reporter.hasErrors then
           reporter.printTo(System.err)
