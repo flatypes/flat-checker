@@ -109,7 +109,7 @@ object CLI extends LazyLogging:
 //        System.exit(1)
 
       reporter.printTo(Console.err) // print warnings if any
-      Console.println("Typer success: " + path.toString)
+      Console.println("Typing success: " + path.toString)
 
   private def collectFlan(path: os.Path): Seq[os.Path] =
     if os.isDir(path) then os.walk(path).filter(_.ext == "flan")

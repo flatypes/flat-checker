@@ -10,24 +10,24 @@ import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 enum TokenType:
-  case INT, CHAR, STR, R_STR, KEYWORD, IDENTIFIER, INDENT, DEDENT, NEWLINE
+  case INT, STR, R_STR, KEYWORD, IDENTIFIER, INDENT, DEDENT, NEWLINE
 
 import flat.checker.parsing.TokenType.*
 
 final case class Token(typ: TokenType, value: String, span: Span)
 
 val operators: List[String] = List(
-  ",", ":", "=", "->", "?",
+  ",", ":", ".", "=", "->", "?",
   "!", "-", "~",
   "+", "*", "/", "%", "==", "!=", "<=", "<", ">=", ">",
-  "&&", "||", "==>", "&", "|", "^", "<<", ">>", ".",
+  "&&", "||", "==>", "&", "|", "^", "<<", ">>",
   "+=", "-=", "*=", "/=", "%="
 ).sortBy(_.length).reverse
 
 val keywords: List[String] = List(
   "from", "import", "type", "val", "lang", "def", "requires", "ensures",
-  "true", "false", "null", "in",
-  "pass", "var", "assume", "assert", "abort", "if", "else", "return",
+  "true", "false", "null", "in", "lambda",
+  "pass", "var", "assume", "assert", "raise", "if", "else", "return",
   "while", "invariant", "break", "continue", "for"
 )
 
@@ -43,30 +43,33 @@ class Lexer(uri: String, text: String)(using reporter: Reporter) extends RegexPa
 
   private def emptyLine: Parser[List[Token]] = whitespace ~> "\n" ^^^ Nil
 
-  private val ws1: Parser[String] = """([ \f\t]|#[^\n]*|\\\n)*""".r
+  private val comment = """//[^\n]*|/\*([^*]|\*(?!/))*\*/"""
 
-  private val ws2: Parser[String] = """([ \f\t\n]|#[^\n]*|\\\n)*""".r
+  private val ws1: Parser[String] = Regex("""([ \f\t]|""" + comment + """|\\\n)*""")
+
+  private val ws2: Parser[String] = Regex("""([ \f\t\n]|""" + comment + ")*")
 
   private def whitespace: Parser[String] = in => if openingParens.isEmpty then ws1(in) else ws2(in)
 
   private def nonEmptyLine: Parser[List[Token]] = elem(' ').* ~> (token <~ whitespace).+ <~ "\n" ^^ processLine
 
   private def token: Parser[Token] =
-    int | char | str | rStr | openingParen | closingParen | operator | keywordOrIdentifier
+    int | str | rStr | openingParen | closingParen | operator | keywordOrIdentifier
 
   private def int: Parser[Token] =
     withSpan("""[1-9](_?[0-9])*|0[bB](_?[01])+|0[oO](_?[0-7])+|0[xX](_?[0-9a-fA-F])+|0""".r) ^^ (Token(INT, _, _))
 
-  private def char: Parser[Token] =
-    withSpan(Regex("'" + """([^\n\\']|""" + escapeSeq + ")'")) ^^ (Token(CHAR, _, _))
+  private def str: Parser[Token] = withSpan(singleQuotedStr | doubleQuotedStr) ^^ (Token(STR, _, _))
 
-  private val escapeSeq = """\\([\\'"abfnrtv]|u[0-9a-fA-F]{4})"""
+  private def singleQuotedStr: Parser[String] = """'([^\n\\']|\\([\\'"abfnrtv]|u[0-9a-fA-F]{4}))*'""".r
 
-  private def str: Parser[Token] =
-    withSpan(Regex("\"" + """([^\n\\"]|""" + escapeSeq + ")*\"")) ^^ (Token(STR, _, _))
+  private def doubleQuotedStr: Parser[String] = """"([^\n\\"]|\\([\\'"abfnrtv]|u[0-9a-fA-F]{4}))*"""".r
 
-  private def rStr: Parser[Token] =
-    withSpan(Regex("r\"" + """([^\n\\"]|\\[^\n])*""" + "\"")) ^^ (Token(R_STR, _, _))
+  private def rStr: Parser[Token] = withSpan(singleQuotedRStr | doubleQuotedRStr) ^^ (Token(R_STR, _, _))
+
+  private def singleQuotedRStr: Parser[String] = """r'([^\n\\']|\\[^\n])*'""".r
+
+  private def doubleQuotedRStr: Parser[String] = """r"([^\n\\"]|\\[^\n])*"""".r
 
   private def openingParen: Parser[Token] =
     withSpan(elem('(') | '[' | '{')
@@ -130,7 +133,9 @@ class Lexer(uri: String, text: String)(using reporter: Reporter) extends RegexPa
   def lex(): List[Token] =
     val safeText = if text.endsWith("\n") then text else text + "\n"
     parseAll(file, safeText) match
-      case Success(tks, _) => tks
+      case Success(tks, _) =>
+        // logger.debug("Tokens: {}", tks.map(t => s"${t.typ}(${t.value})").mkString("\n"))
+        tks
       case NoSuccess(msg, next) =>
         val pos: Position = next.pos
         reporter.report(uri, SyntaxError(pos, msg))

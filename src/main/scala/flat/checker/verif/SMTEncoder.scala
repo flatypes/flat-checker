@@ -66,8 +66,8 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
 
     // Char
     case CharIn(cat, e) => encodeUninterpreted(expr, BoolType)
-    case CharToInt(e) => tm.mkTerm(STRING_TO_CODE, encodeExpr(e))
-    case CharFromInt(e) => tm.mkTerm(STRING_FROM_CODE, encodeExpr(e))
+    case CharToCode(e) => tm.mkTerm(STRING_TO_CODE, encodeExpr(e))
+    case CodeToChar(e) => tm.mkTerm(STRING_FROM_CODE, encodeExpr(e))
     case CharToString(e) => encodeExpr(e)
 
     // Seq
@@ -79,10 +79,10 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
           else tm.mkTerm(STRING_CONCAT, elems.toArray)
         case _ =>
           mkSeq(encodeSort(e.elemSort), elems)
-    case SeqLength(e) =>
+    case StrLength(e) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_LENGTH else SEQ_LENGTH, seq)
-    case ListAt(e, ei) =>
+    case StrAt(e, ei) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_CHARAT else SEQ_NTH, seq, encodeExpr(ei))
     case SeqUpdate(e, ei, ex) =>
@@ -91,7 +91,7 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
         tm.mkTerm(STRING_UPDATE, seq, encodeExpr(ei), encodeExpr(ex))
       else
         tm.mkTerm(SEQ_UPDATE, seq, encodeExpr(ei), tm.mkTerm(SEQ_UNIT, encodeExpr(ex)))
-    case SeqSlice(e, ei, ej) =>
+    case StrSlice(e, ei, ej) =>
       val seq = encodeExpr(e)
       val start = encodeExpr(ei)
       val end = ej match
@@ -99,16 +99,16 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
         case _ => encodeExpr(ej)
       val count = tm.mkTerm(SUB, end, start)
       tm.mkTerm(if seq.getSort.isString then STRING_SUBSTR else SEQ_EXTRACT, seq, start, count)
-    case SeqConcat(e1, e2) =>
+    case StrConcat(e1, e2) =>
       val seq1 = encodeExpr(e1)
       tm.mkTerm(if seq1.getSort.isString then STRING_CONCAT else SEQ_CONCAT, seq1, encodeExpr(e2))
-    case SeqReverse(e) =>
+    case StrReverse(e) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_REV else SEQ_REV, seq)
-    case SeqStartsWith(e, et) =>
+    case StrStartsWith(e, et) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_PREFIX else SEQ_PREFIX, encodeExpr(et), seq)
-    case SeqEndsWith(e, et) =>
+    case StrEndsWith(e, et) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_SUFFIX else SEQ_SUFFIX, encodeExpr(et), seq)
 
@@ -116,17 +116,17 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
     case ListContainsSlice(e, et) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_CONTAINS else SEQ_CONTAINS, seq, encodeExpr(et))
-    case SeqIndexOf(e, et, ei) =>
+    case StrIndexOf(e, et, ei) =>
       val seq = encodeExpr(e)
       tm.mkTerm(if seq.getSort.isString then STRING_INDEXOF else SEQ_INDEXOF,
         seq, encodeExpr(et), encodeExpr(ei))
-    case SeqCount(e, et) =>
+    case StrCount(e, et) =>
       val seq = encodeExpr(e)
       if seq.getSort.isString then
         mkApplyUF(strCount, seq, encodeExpr(et))
       else
         encodeUninterpreted(expr, IntType)
-    case _: SeqForall => encodeUninterpreted(expr, BoolType)
+    case _: ListForall => encodeUninterpreted(expr, BoolType)
 
     // String-specific
     case _: StrSplit => encodeUninterpreted(expr, ListType(strType))

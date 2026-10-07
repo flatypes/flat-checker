@@ -1,12 +1,16 @@
-lang Year = r"[0-9]{4}"
-lang Month = r"0[1-9]|1[0-2]"
-lang Day = r"0[1-9]|[12][0-9]|3[01]"
-lang Date = Year '-' Month '-' Day
+type Year = {y: Int | 0 <= y <= 9999}
+type Month = {m: Int | 1 <= m <= 12}
+type Day = {d: Int | 1 <= d <= 31}
 
-method iso_format(year: int, month: int, day: int): Date
-  requires 0 <= year && year <= 9999
-  requires 1 <= month && month <= 12
-  requires 1 <= day && day <= 31
-{
-  return format("%04d-%02d-%02d", year, month, day);
-}
+lang Y = r"[0-9]{4}"
+lang M = r"0[1-9]|1[0-2]"
+lang D = r"0[1-9]|[12][0-9]|3[01]"
+lang ISODate = Y "-" M "-" D
+
+/** Return the date formatted according to ISO.
+    This is 'YYYY-MM-DD'.
+    References:
+    - https://www.w3.org/TR/NOTE-datetime
+    - https://www.cl.cam.ac.uk/~mgk25/iso-time.html */
+def format_iso_date(year: Year, month: Month, day: Day) -> ISODate:
+    return "%04d-%02d-%02d" % (year, month, day)

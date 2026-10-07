@@ -1,80 +1,80 @@
-from url_split import Scheme, NetLoc, Path, Query, Fragment, URL
+def url_split(url: str) -> (str?, str?, str, str?, str?)
+def url_unsplit(scheme: str?, netloc: str?, path: str, query: str?, fragment: str?) -> str
 
-method url_split(url: URL) returns (scheme: Scheme?, netloc: NetLoc?, path: Path, query: Query?, fragment: Fragment?)
+val uses_relative: List[Str] = []
+val uses_netloc: List[Str] = []
 
-method url_unsplit(scheme: Scheme?, netloc: NetLoc?, path: Path, query: Query?, fragment: Fragment?) returns (url: URL)
+/** Join a base URL and a possibly relative URL to form an absolute
+    interpretation of the latter. */
+def url_join(base: str, url: str) -> str:
+    if base == '':
+        return url
+    if url == '':
+        return base
 
-const uses_relative = ["", "https"]
-const uses_netloc = ["", "https"]
+    var bscheme: str?
+    var bnetloc: str?
+    var bpath: str
+    var bquery: str?
+    var bfragment: str?
+    var scheme: str?
+    var netloc: str?
+    var path: str
+    var query: str?
+    var fragment: str?
+    (bscheme, bnetloc, bpath, bquery, bfragment) = url_split(base)
+    (scheme, netloc, path, query, fragment) = url_split(url)
 
-method url_join(base: URL, url: URL): URL
-{
-  if base == "" {
-    return url;
-  }
-  if url == "" {
-    return base;
-  }
+    if scheme == null:
+        scheme = bscheme
+    if scheme != bscheme || (scheme != null && scheme != '' && scheme !in uses_relative):
+        return url
+    if (scheme == null || scheme == '') || scheme in uses_netloc:
+        if netloc != null && netloc != '':
+            return url_unsplit(scheme, netloc, path, query, fragment)
+        netloc = bnetloc
 
-  (var bscheme, var bnetloc, var bpath, var bquery, var bfragment) = url_split(base);
-  (var scheme, var netloc, var path, var query, var fragment) = url_split(url);
+    if path == '':
+        path = bpath
+        if query == null:
+            query = bquery
+            if fragment == null:
+                fragment = bfragment
+        return url_unsplit(scheme, netloc, path, query, fragment)
 
-  if scheme == null {
-    scheme = bscheme;
-  }
-  if scheme != bscheme || (scheme != null && scheme != "" && scheme !in uses_relative) {
-    return url;
-  }
-  if scheme == null || scheme in uses_netloc {
-    if netloc != null && netloc != "" {
-      return url_unsplit(scheme, netloc, path, query, fragment);
-    }
-    netloc = bnetloc;
-  }
+    var base_parts = bpath.split('/')
+    if base_parts.last != '':
+        // the last item is not a directory, so will not be taken into account
+        // in resolving the relative path
+        base_parts = base_parts.init
 
-  if path == "" {
-    path = bpath;
-    if query == null {
-      query = bquery;
-      if fragment == null {
-        fragment = bfragment;
-      }
-    }
-    return url_unsplit(scheme, netloc, path, query, fragment);
-  }
+    var segments: List[Str]
+    // for rfc3986, ignore all base path should the first character be root.
+    if path[:1] == '/':
+        segments = path.split('/')
+    else:
+        segments = base_parts + path.split('/')
+        // filter out elements that would cause redundant slashes on re-joining
+        // the resolved_path
+        segments = [segments.head] + segments[1:-1].filter(lambda x -> x != '') + [segments.last]
 
-  var base_parts = bpath.split('/');
-  if base_parts[|base_parts| - 1] != "" {
-    base_parts = base_parts[:|base_parts| - 1];
-  }
+    var resolved_path: List[Str] = []
+    for seg in segments:
+        if seg == '..':
+            if |resolved_path| > 0:
+                resolved_path = resolved_path.init
+            else:
+                // ignore any .. segments that would otherwise cause an IndexError
+                // when popped from resolved_path if resolving for rfc3986
+                pass
+        else if seg == '.':
+            continue
+        else:
+            resolved_path += [seg]
 
-  var segments: list[str];
-  if path[:1] == "/" {
-    segments = path.split('/');
-  } else {
-    segments = base_parts + path.split('/');
-  }
+    if segments.last in {'.', '..'}:
+        // do some post-processing here. if the last segment was a relative dir,
+        // then we need to append the trailing '/'
+        resolved_path += ['']
 
-  var resolved_path: list[str] = [];
-  for seg in segments {
-    if seg == ".." {
-      if |resolved_path| > 0 {
-        resolved_path = resolved_path.init; // pop the last segment
-      }
-    } else if seg == "." {
-      continue;
-    } else {
-      resolved_path += seg;
-    }
-  }
-
-  if segments[|segments| - 1] in {".", ".."} {
-    resolved_path += "";
-  }
-
-  path = '/'.join(resolved_path);
-  if path == "" {
-    path = "/";
-  }
-  return url_unsplit(scheme, netloc, path, query, fragment);
-}
+    return url_unsplit(scheme, netloc, |resolved_path| == 0 ? '/' : '/'.join(resolved_path), query, fragment)

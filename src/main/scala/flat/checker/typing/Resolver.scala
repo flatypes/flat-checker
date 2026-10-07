@@ -13,25 +13,45 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
 
   def resolve(module: untpd.Module): Ctx =
     var ctx = Ctx()
-    // Check imports
-    for
-      stmt <- module.imports
-      moduleCtx <- load(stmt.module.name)
-      item <- stmt.items
-    do
-      moduleCtx.lookup(item.name) match
-        case Some(info) =>
-          ctx = ctx.define(item.name, info)
-        case None =>
-          reporter.reportNameUndefined(item.range)
-    // Check definitions
-    for node <- module.body do
-      val info = resolveInfo(node, ctx)
-      ctx.lookup(node.ident.name) match
-        case None =>
-          ctx = ctx.define(node.ident.name, info)
-        case Some(conflict) =>
-          reporter.reportNameRedefined(node.ident.range, conflict.range)
+    module.body.foreach:
+      case untpd.Import(mod, ids) =>
+        for
+          moduleCtx <- load(mod.name)
+          id <- ids
+        do
+          moduleCtx.lookup(id.name) match
+            case Some(info) =>
+              ctx = ctx.define(id.name, info)
+            case None =>
+              reporter.reportNameUndefined(id.range)
+
+      case untpd.TypeAlias(id, t) =>
+        val value = typer.normalize(t, ctx)
+        ctx = define(ctx, id, TypeInfo(value)(id.range))
+
+      case untpd.ValDef(id, Some(t), e) =>
+        val typ = typer.normalize(t, ctx)
+        val value = typer.check(e, typ, ctx)
+        ctx = define(ctx, id, ConstInfo(typ, value)(id.range))
+      case untpd.ValDef(id, None, e) =>
+        val (value, sort) = typer.infer(e, ctx)
+        ctx = define(ctx, id, ConstInfo(sort, value)(id.range))
+
+      case untpd.LangDef(id, e) =>
+        val regEx = typer.translate(e, ctx)
+        regEx.name = id.name
+        ctx = define(ctx, id, LangInfo(regEx)(id.range))
+
+      case untpd.FunDef(id, ps1, t, _) =>
+        val params = typer.inferParamList(ps1, ctx)
+        val returnParams = t match
+          case Some(rt) =>
+            val returnType = typer.normalize(rt, ctx)
+            List((untpd.Ident("return")(rt.range), returnType))
+          case None =>
+            Nil
+        ctx = define(ctx, id, MethodInfo(params, returnParams)(id.range))
+
     ctx
 
   private val cache = mutable.Map.empty[String, Ctx]
@@ -48,25 +68,10 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
         cache(moduleName) = ctx
         Some(ctx)
 
-  private def resolveInfo(node: untpd.TopDef, ctx: Ctx): Info = node match
-    case untpd.TypeDef(id, t) =>
-      val value = typer.normalize(t, ctx)
-      TypeInfo(value)(id.range)
-
-    case untpd.ValDef(id, Some(t), e) =>
-      val typ = typer.normalize(t, ctx)
-      val value = typer.check(e, typ, ctx)
-      ConstInfo(typ, value)(id.range)
-    case untpd.ValDef(id, None, e) =>
-      val (value, sort) = typer.infer(e, ctx)
-      ConstInfo(sort, value)(id.range)
-
-    case untpd.LangDef(id, e) =>
-      val regEx = typer.translate(e, ctx)
-      regEx.name = id.name
-      LangInfo(regEx)(id.range)
-
-    case untpd.FunDef(id, ps1, ps2, _, _, _) =>
-      val params = typer.inferParamList(ps1, ctx)
-      val returnParams = typer.inferParamList(ps2, ctx)
-      MethodInfo(params, returnParams)(id.range)
+  private def define(ctx: Ctx, id: untpd.Ident, info: Info): Ctx =
+    ctx.lookup(id.name) match
+      case None =>
+        ctx.define(id.name, info)
+      case Some(conflict) =>
+        reporter.reportNameRedefined(id.range, conflict.range)
+        ctx

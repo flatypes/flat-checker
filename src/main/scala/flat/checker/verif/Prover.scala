@@ -105,27 +105,27 @@ class Prover extends LazyLogging:
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
           case _ => ()
-      case e@SeqLength(es) if isStrOrStrList(es)(using goal.sorts) =>
+      case e@StrLength(es) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TNat(set) =>
             lemmas += inNatSet(e, set)
           case _ => ()
-      case e@ListAt(es, _) if isStrOrStrList(es)(using goal.sorts) =>
+      case e@StrAt(es, _) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TChar(set) =>
             lemmas += inCharSet(e, set)
           case _ => ()
-      case e@SeqSlice(es, _, _) if isStrOrStrList(es)(using goal.sorts) =>
+      case e@StrSlice(es, _, _) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TStr(r) =>
             lemmas += inRegEx(e, r)
           case _ => ()
-      case e@SeqStartsWith(es, _) if isStrOrStrList(es)(using goal.sorts) =>
+      case e@StrStartsWith(es, _) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
           case _ => ()
-      case e@SeqEndsWith(es, _) if isStrOrStrList(es)(using goal.sorts) =>
+      case e@StrEndsWith(es, _) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
@@ -135,7 +135,7 @@ class Prover extends LazyLogging:
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
           case _ => ()
-      case e@SeqIndexOf(es, _, IntLit(0)) if isStrOrStrList(es)(using goal.sorts) =>
+      case e@StrIndexOf(es, _, IntLit(0)) if isStrOrStrList(es)(using goal.sorts) =>
         inferer.infer(e) match
           case TIndex(set) =>
             lemmas += inIndexSet(e, set)
@@ -163,14 +163,14 @@ class Prover extends LazyLogging:
           case _ => ()
 
       // Algebraic properties for count
-      case e@SeqCount(SeqSlice(es, ei, ej), StrLit(s)) if s.length == 1 && goal.have(Lt(ei, ej)) =>
+      case e@StrCount(StrSlice(es, ei, ej), StrLit(s)) if s.length == 1 && goal.have(Lt(ei, ej)) =>
         val c = s.head
         // If `i < j`, then `s[i:j].count(c) == s[i+1:j].count(c) + (if s[i] == c then 1 else 0)`
         goal.premises.collectFirst:
-          case Eq(ListAt(`es`, ek), CharLit(c)) if goal.have(Eq(ek, ei)) =>
-            lemmas += Eq(e, Add(SeqCount(SeqSlice(es, Add(ei, IntLit(1)), ej), StrLit(s)), IntLit(1)))
-          case Ne(ListAt(`es`, ek), CharLit(c)) if goal.have(Eq(ek, ei)) =>
-            lemmas += Eq(e, SeqCount(SeqSlice(es, Add(ei, IntLit(1)), ej), StrLit(s)))
+          case Eq(StrAt(`es`, ek), CharLit(c)) if goal.have(Eq(ek, ei)) =>
+            lemmas += Eq(e, Add(StrCount(StrSlice(es, Add(ei, IntLit(1)), ej), StrLit(s)), IntLit(1)))
+          case Ne(StrAt(`es`, ek), CharLit(c)) if goal.have(Eq(ek, ei)) =>
+            lemmas += Eq(e, StrCount(StrSlice(es, Add(ei, IntLit(1)), ej), StrLit(s)))
 
     lemmas.toList
 

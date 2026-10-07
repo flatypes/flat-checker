@@ -44,6 +44,10 @@ class Typer(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLoggin
     case untpd.TupleType(ts) => TupleType(ts.map(normalize(_, ctx)))
     case untpd.FunType(ts, t) => FunType(ts.map(normalize(_, ctx)), normalize(t, ctx))
     case untpd.OptType(t) => NullableType(normalize(t, ctx))
+    case untpd.RefinedType(untpd.Param(id, t), e) =>
+      val base = normalize(t, ctx)
+      val reft = check(e, BoolType, ctx.push().define(id.name, ValInfo(base)(id.range)))
+      RefinedType(base, reft.subst(Map(id.name -> Var("_"))))
 
   def translate(node: untpd.PExpr, ctx: Ctx): StrRE = node match
     case untpd.PChar(c) => RegEx.symbolSet(CharSet(c))
@@ -125,6 +129,44 @@ class Typer(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLoggin
       val (elems, elemTypes) = es.map(infer(_, ctx)).unzip
       (TupleExpr(elems)(expr.range), TupleType(elemTypes))
 
+    case untpd.BinaryExpr(e1, untpd.Ident("&&"), e2) =>
+      val left = check(e1, BoolType, ctx)
+      val right = check(e2, BoolType, assume(left, ctx))
+      (And(left, right)(expr.range), BoolType)
+    case untpd.BinaryExpr(e1, untpd.Ident("||"), e2) =>
+      val left = check(e1, BoolType, ctx)
+      val right = check(e2, BoolType, assume(Not(left), ctx))
+      (Or(left, right)(expr.range), BoolType)
+    case untpd.BinaryExpr(e1, untpd.Ident("==>"), e2) =>
+      val left = check(e1, BoolType, ctx)
+      val right = check(e2, BoolType, assume(left, ctx))
+      (Implies(left, right)(expr.range), BoolType)
+
+    case untpd.BinaryExpr(e1, untpd.Ident("=="), e2) =>
+      val (left, leftType) = infer(e1, ctx)
+      val (right, rightType) = infer(e2, ctx)
+      if !isSubtype(leftType, rightType) && !isSubtype(rightType, leftType) then
+        reporter.reportTypeMismatch(e2.range, leftType, rightType)
+      (Eq(left, right)(expr.range), BoolType)
+    case untpd.BinaryExpr(e1, untpd.Ident("!="), e2) =>
+      val (left, leftType) = infer(e1, ctx)
+      val (right, rightType) = infer(e2, ctx)
+      if !isSubtype(leftType, rightType) && !isSubtype(rightType, leftType) then
+        reporter.reportTypeMismatch(e2.range, leftType, rightType)
+      (Ne(left, right)(expr.range), BoolType)
+
+    case untpd.BinaryExpr(e1, op@untpd.Ident("in"), e2) =>
+      resolveMethodCall(e2, untpd.Ident("contains")(op.range), List(e1), expr.range, ctx)
+    case untpd.BinaryExpr(e1, op@untpd.Ident("!in"), e2) =>
+      val (e, t) = resolveMethodCall(e2, untpd.Ident("contains")(op.range), List(e1), expr.range, ctx)
+      (Not(e)(expr.range), BoolType)
+
+    case untpd.BinaryExpr(untpd.StrConst(fmt), untpd.Ident("%"), e) =>
+      val args = e match
+        case untpd.TupleExpr(es) => es
+        case _ => List(e)
+      (checkStrFormat(fmt, args, expr.range, ctx), strType)
+
     case untpd.UnaryExpr(op, e) => resolveMethodCallNullary(e, op, expr.range, ctx)
     case untpd.BinaryExpr(e1, op, e2) => resolveMethodCall(e1, op, List(e2), expr.range, ctx)
     case untpd.ChainedExpr(e, List((op, e2))) => resolveMethodCall(e, op, List(e2), expr.range, ctx)
@@ -141,9 +183,6 @@ class Typer(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLoggin
         ei.getOrElse(IntConst(0)(null)) :: ej.toList, expr.range, ctx)
 
     case untpd.Apply(untpd.MemberAccess(e, m), es) => resolveMethodCall(e, m, es, expr.range, ctx)
-    case untpd.Apply(untpd.TermRef("format"), untpd.StrConst(s: String) :: es) =>
-      val e = checkStrFormat(s, es, expr.range, ctx)
-      (e, strType)
     case untpd.Apply(e, es) =>
       val (fun, typ) = infer(e, ctx)
       typ match
@@ -268,7 +307,7 @@ class Typer(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLoggin
         parts += StrLit(s)
         i += s.length
 
-    if parts.isEmpty then StrLit("") else parts.reduce(SeqConcat(_, _)(range))
+    if parts.isEmpty then StrLit("") else parts.reduce(StrConcat(_, _)(range))
 
   private def parseFormatter(f: String, range: Span): Option[(NumStrFormat, Int)] =
     // flag: 0 for zero-padded
@@ -314,6 +353,11 @@ class Typer(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLoggin
       case (untpd.TupleExpr(es), TupleType(ts)) if es.length == ts.length =>
         val elems = es.zip(ts).map((e, t) => check(e, t, ctx))
         TupleExpr(elems)(node.range)
+
+      case (untpd.Lambda(id, e), FunType(List(t1), t2)) =>
+        val localCtx = ctx.push().define(id.name, ValInfo(t1)(id.range))
+        val value = check(e, t2, localCtx)
+        Lambda(List(VarDecl(id.name, t1)), value)(node.range)
 
       case (_, expected) =>
         val (expr, actual) = infer(node, ctx)

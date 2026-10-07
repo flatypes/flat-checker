@@ -28,13 +28,10 @@ class Checker(using reporter: Reporter) extends LazyLogging:
     for (x, paramInfo) <- info.paramInfos do
       ctx = ctx.define(x, paramInfo)
       locals += VarDecl(x, paramInfo.typ.erase)
-    val requires = node.requires.map(typer.check(_, BoolType, ctx))
-    body += Assume(mkAnd(requires))
     // load return variables and check postconditions
     for (x, paramInfo) <- info.returnInfos do
       ctx = ctx.define(x, paramInfo)
       locals += VarDecl(x, paramInfo.typ.erase)
-    val ensures = node.ensures.map(typer.check(_, BoolType, ctx))
     // check body
     if node.body.nonEmpty then
       val (lcs, ss) = checkBlock(node.body, ctx, info)
@@ -59,26 +56,23 @@ class Checker(using reporter: Reporter) extends LazyLogging:
         val (value, _) = typer.infer(e, ctx)
         body += ExprStmt(value)
 
-      case untpd.Assign(x, e: untpd.Expr) => assign(x, e)
-      case untpd.Assign(l@untpd.LVarRef(x), untpd.Nondet) =>
-        ctx.lookup(x) match
-          case Some(VarInfo(_)) =>
-            body += Assign(x, None)
-          case Some(_) =>
-            reporter.reportNotAssignable(l.range)
-          case None =>
-            reporter.reportNameUndefined(l.range)
-      case untpd.Assign(untpd.LVarDecl(id, Some(t)), untpd.Nondet) =>
+      case untpd.VarStmt(id, Some(t), init) =>
         val typ = typer.normalize(t, ctx)
         declareVar(id, typ)
-        body += Assign(id.name, None)
-      case untpd.Assign(untpd.LVarDecl(id, None), untpd.Nondet) =>
+        for e <- init do
+          val value = typer.check(e, typ, ctx)
+          body += Assign(id.name, value)
+      case untpd.VarStmt(id, None, Some(e)) =>
+        val (value, typ) = typer.infer(e, ctx)
+        declareVar(id, typ)
+        body += Assign(id.name, value)
+      case untpd.VarStmt(id, None, None) =>
         reporter.reportMissingTypeAnnot(id.range)
-      case untpd.Assign(l, untpd.Nondet) =>
-        throw UnsupportedOperationException("target is not supported yet")
 
+      case untpd.Assign(x, e) => assign(x, e)
       case untpd.AugAssign(x, op, e: untpd.Expr) =>
-        assign(untpd.LVarRef(x.name)(x.range), untpd.BinaryExpr(untpd.TermRef(x.name)(x.range), op, e))
+        assign(untpd.LRef(x.name)(x.range),
+          untpd.BinaryExpr(untpd.TermRef(x.name)(x.range), untpd.Ident(op.name.init)(op.range), e))
 
       case untpd.Assume(e) =>
         val expr = typer.check(e, BoolType, ctx)
@@ -87,10 +81,11 @@ class Checker(using reporter: Reporter) extends LazyLogging:
         val expr = typer.check(e, BoolType, ctx)
         body += Assert(expr)
       case untpd.Abort(e) =>
-        val (expr, _) = typer.infer(e, ctx)
+        typer.check(e, strType, ctx)
         body += Abort()(e.range)
 
-      case untpd.If(e: untpd.Expr, List(untpd.Abort(_)), Nil) =>
+      case untpd.If(e: untpd.Expr, List(untpd.Abort(em)), Nil) =>
+        typer.check(em, strType, ctx)
         val cond = typer.check(e, BoolType, ctx)
         body += Assert(Not(cond))
       case untpd.If(g, b1, b2) =>
@@ -113,9 +108,9 @@ class Checker(using reporter: Reporter) extends LazyLogging:
               body += Assign(id.name, TupleSelect(i, value)(e.range))
         body += Return()(ret.range)
 
-      case untpd.While(g, is, b) =>
+      case s@untpd.While(g, _, b) =>
         val cond = checkGuard(g)
-        val invariants = is.map(typer.check(_, BoolType, ctx))
+        val invariants = s.invariants.map(typer.check(_, BoolType, ctx))
         val (loopLocals, loopBody) = checkBlock(b, typer.assume(cond, ctx.push(isLoop = true)), info)
         locals ++= loopLocals
         body += While(cond, mkAnd(invariants), loopBody)
@@ -131,17 +126,19 @@ class Checker(using reporter: Reporter) extends LazyLogging:
         else
           reporter.reportContinueOutOfLoop(node.range)
 
-      case untpd.For(id, e, is, b) =>
+      case s@untpd.For(id, e, _, b) =>
         val (iter, iterSort) = typer.infer(e, ctx)
-        iterSort match
-          case ListType(elemSort) =>
-            val loopCtx = ctx.define(id.name, VarInfo(elemSort)(id.range)).push(isLoop = true)
-            val invariants = is.map(typer.check(_, BoolType, loopCtx))
-            val (loopLocals, loopBody) = checkBlock(b, loopCtx, info)
-            locals ++= loopLocals
-            body += For(id.name, iter, mkAnd(invariants), loopBody)
+        val elemSort = iterSort match
+          case `strType` => strType
+          case ListType(elemSort) => elemSort
           case _ =>
             reporter.reportTypeMismatch(e.range, "list", iterSort)
+            NoType
+        val loopCtx = ctx.define(id.name, VarInfo(elemSort)(id.range)).push(isLoop = true)
+        val invariants = s.invariants.map(typer.check(_, BoolType, loopCtx))
+        val (loopLocals, loopBody) = checkBlock(b, loopCtx, info)
+        locals ++= loopLocals
+        body += For(id.name, iter, mkAnd(invariants), loopBody)
 
     private def declareVar(ident: untpd.Ident, typ: Type): Unit =
       ctx.getDefined(ident.name) match
@@ -152,7 +149,8 @@ class Checker(using reporter: Reporter) extends LazyLogging:
           reporter.reportNameRedefined(ident.range, conflict.range)
 
     private def assign(target: untpd.LExpr, expr: untpd.Expr): Unit = target match
-      case untpd.LVarRef(x) =>
+      case untpd.LRef("_") => // ignore
+      case untpd.LRef(x) =>
         ctx.lookup(x) match
           case Some(VarInfo(typ)) =>
             val value = typer.check(expr, typ, ctx)
@@ -161,18 +159,6 @@ class Checker(using reporter: Reporter) extends LazyLogging:
             reporter.reportNotAssignable(target.range)
           case None =>
             reporter.reportNameUndefined(target.range)
-
-      case untpd.LValDecl(id, _) =>
-        throw UnsupportedOperationException("val target is not supported yet")
-
-      case untpd.LVarDecl(id, Some(t)) =>
-        val typ = typer.normalize(t, ctx)
-        val value = typer.check(expr, typ, ctx)
-        declareVar(id, typ)
-        body += Assign(id.name, value)
-      case untpd.LVarDecl(_, None) =>
-        val (value, typ) = typer.infer(expr, ctx)
-        assign(target, value, typ)
 
       case untpd.LTuple(xs) =>
         expr match
@@ -188,7 +174,8 @@ class Checker(using reporter: Reporter) extends LazyLogging:
         assign(target, value, typ)
 
     private def assign(target: untpd.LExpr, value: Expr, valueType: Type): Unit = target match
-      case untpd.LVarRef(x) =>
+      case untpd.LRef("_") => // ignore
+      case untpd.LRef(x) =>
         ctx.lookup(x) match
           case Some(VarInfo(t)) =>
             if valueType.erase :<: t.erase then
@@ -199,20 +186,6 @@ class Checker(using reporter: Reporter) extends LazyLogging:
             reporter.reportNotAssignable(target.range)
           case None =>
             reporter.reportNameUndefined(target.range)
-
-      case untpd.LValDecl(id, _) =>
-        throw UnsupportedOperationException("val target is not supported yet")
-
-      case untpd.LVarDecl(id, Some(t)) =>
-        val typ = typer.normalize(t, ctx)
-        if valueType.erase :<: typ.erase then
-          declareVar(id, typ)
-          body += Assign(id.name, value)
-        else
-          reporter.reportTypeMismatch(target.range, typ.erase, valueType)
-      case untpd.LVarDecl(id, None) =>
-        declareVar(id, valueType)
-        body += Assign(id.name, value)
 
       case untpd.LTuple(xs) => valueType match
         case TupleType(ts) if ts.length == xs.length =>
@@ -235,7 +208,7 @@ class Checker(using reporter: Reporter) extends LazyLogging:
           body += Assign(fresh, value)
           val list = Var(fresh)(value.range)
           for (x, i) <- xs.zipWithIndex do
-            val e = ListAt(list, IntLit(i)(value.range))(value.range)
+            val e = StrAt(list, IntLit(i)(value.range))(value.range)
             assign(x, e, s)
         case _ =>
           reporter.reportTypeMismatch(value.range, "list", valueType)

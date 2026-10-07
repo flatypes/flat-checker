@@ -3,30 +3,36 @@ package flat.checker.flan
 import org.eclipse.lsp4j.{Position, Range}
 
 object untpd:
-  final case class Module(imports: List[Import], body: List[TopDef])
+  final case class Module(body: List[TopStmt])
 
   object Module:
-    val empty: Module = Module(Nil, Nil)
-
-  final case class Import(module: Ident, items: List[Ident])
+    val empty: Module = Module(Nil)
 
   final case class Ident(name: String)(val range: Range)
 
   // Top-Level Definitions
-  sealed trait TopDef:
+  sealed trait TopStmt:
     val ident: Ident
 
-  final case class TypeDef(ident: Ident, value: Type) extends TopDef
+  final case class Import(module: Ident, items: List[Ident]) extends TopStmt:
+    override val ident: Ident = module
 
-  final case class ValDef(ident: Ident, typ: Option[Type], value: Expr) extends TopDef
+  final case class TypeAlias(ident: Ident, value: Type) extends TopStmt
 
-  final case class LangDef(ident: Ident, value: PExpr) extends TopDef
+  final case class ValDef(ident: Ident, typ: Option[Type], value: Expr) extends TopStmt
 
-  final case class FunDef(ident: Ident, params: List[Param], returnParams: List[Param],
-                          requires: List[Expr], ensures: List[Expr], body: List[Stmt])
-                         (val endRange: Range) extends TopDef
+  final case class LangDef(ident: Ident, value: PExpr) extends TopStmt
+
+  final case class FunDef(ident: Ident, params: List[Param], returnType: Option[Type], body: List[Stmt])
+                         (val endRange: Range) extends TopStmt
 
   final case class Param(ident: Ident, typ: Type)
+
+  sealed trait FunSpec
+
+  final case class RequireSpec(cond: Expr) extends FunSpec
+
+  final case class EnsureSpec(cond: Expr) extends FunSpec
 
   // Types
   sealed trait Type:
@@ -42,6 +48,8 @@ object untpd:
   final case class FunType(paramTypes: List[Type], returnType: Type)(val range: Range) extends Type
 
   final case class OptType(baseType: Type)(val range: Range) extends Type
+
+  final case class RefinedType(param: Param, cond: Expr)(val range: Range) extends Type
 
   // Expressions
   sealed trait Expr:
@@ -66,6 +74,8 @@ object untpd:
   final case class MapExpr(items: List[(Expr, Expr)])(val range: Range) extends Expr
 
   final case class TupleExpr(elems: List[Expr])(val range: Range) extends Expr
+
+  final case class Lambda(param: Ident, value: Expr)(val range: Range) extends Expr
 
   final case class UnaryExpr(op: Ident, expr: Expr) extends Expr:
     override val range: Range = Range(op.range.getStart, expr.range.getEnd)
@@ -129,9 +139,9 @@ object untpd:
 
   final case class ExprStmt(expr: Expr) extends Stmt
 
-  final case class Assign(left: LExpr, right: Expr | Nondet.type) extends Stmt
+  final case class VarStmt(ident: Ident, typ: Option[Type], init: Option[Expr]) extends Stmt
 
-  case object Nondet
+  final case class Assign(left: LExpr, right: Expr) extends Stmt
 
   final case class AugAssign(left: Ident, op: Ident, right: Expr) extends Stmt
 
@@ -141,29 +151,29 @@ object untpd:
 
   final case class Abort(expr: Expr) extends Stmt
 
-  final case class If(guard: Expr, thenBody: List[Stmt], elseBody: List[Stmt]) extends Stmt
+  final case class If(cond: Expr, thenBody: List[Stmt], elseBody: List[Stmt]) extends Stmt
 
   final case class Return(value: Option[Expr])(val range: Range) extends Stmt
 
-  final case class While(guard: Expr, invariants: List[Expr], body: List[Stmt]) extends Stmt
+  final case class While(cond: Expr, specs: List[LoopSpec], body: List[Stmt]) extends Stmt:
+    def invariants: List[Expr] = specs.collect { case InvariantSpec(e) => e }
+
+  sealed trait LoopSpec
+
+  final case class InvariantSpec(cond: Expr) extends LoopSpec
 
   final case class Break()(val range: Range) extends Stmt
 
   final case class Continue()(val range: Range) extends Stmt
 
-  final case class For(ident: Ident, iter: Expr, invariants: List[Expr], body: List[Stmt]) extends Stmt
+  final case class For(ident: Ident, iter: Expr, specs: List[LoopSpec], body: List[Stmt]) extends Stmt:
+    def invariants: List[Expr] = specs.collect { case InvariantSpec(e) => e }
 
   // Left-values
   sealed trait LExpr:
     val range: Range
 
-  final case class LVarRef(name: String)(val range: Range) extends LExpr
-
-  final case class LValDecl(ident: Ident, typ: Option[Type])(startPos: Position) extends LExpr:
-    override val range: Range = Range(startPos, if typ.isEmpty then ident.range.getEnd else typ.get.range.getEnd)
-
-  final case class LVarDecl(ident: Ident, typ: Option[Type])(startPos: Position) extends LExpr:
-    override val range: Range = Range(startPos, if typ.isEmpty then ident.range.getEnd else typ.get.range.getEnd)
+  final case class LRef(name: String)(val range: Range) extends LExpr
 
   final case class LTuple(elems: List[LExpr])(val range: Range) extends LExpr
 

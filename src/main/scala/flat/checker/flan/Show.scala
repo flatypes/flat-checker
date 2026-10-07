@@ -59,7 +59,7 @@ object Show extends LazyLogging:
   private def getLevel(expr: Expr): Int = expr match
     case _: Negate | _: Not | _: BitNot => LEVEL_PREFIX
     case _: Mul | _: Div | _: Mod => LEVEL_MUL
-    case _: Add | _: Sub | _: SeqConcat | _: SetDiff => LEVEL_ADD
+    case _: Add | _: Sub | _: StrConcat | _: SetDiff => LEVEL_ADD
     case _: Eq | _: Ne | _: Le | _: Lt | _: Subset => LEVEL_REL
     case _: BitXor | _: BitShL | _: BitShR => LEVEL_BIT
     case _: BitAnd | _: SetInter => LEVEL_BIT_AND
@@ -119,27 +119,27 @@ object Show extends LazyLogging:
       case BitShR(e1, e2) => showInfix(">>", LEVEL_BIT, ASSOC_LEFT, e1, e2)
 
       // Char
-      case CharToInt(e) => showMemberApply(e, "toInt")
-      case CharFromInt(e) => showMemberApply(e, "toChar")
+      case CharToCode(e) => showMemberApply(e, "toInt")
+      case CodeToChar(e) => showMemberApply(e, "toChar")
       case CharToString(e) => showMemberApply(e, "toString")
       case CharIn(e, a) => s"${showExpr(e)} ∈ $a"
 
       // Seq
       case SeqLit(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
-      case SeqLength(e) => s"|${showExpr(e)}|"
-      case ListAt(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
+      case StrLength(e) => s"|${showExpr(e)}|"
+      case StrAt(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
       case SeqUpdate(e, ei, ev) => s"${showTighter(e)}[${showExpr(ei)} = ${showExpr(ev)}]"
-      case SeqSlice(e, ei, ej) if ej == NoExpr || ej == SeqLength(e) => s"${showTighter(e)}[${showExpr(ei)}:]"
-      case SeqSlice(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
-      case SeqConcat(e1, e2) => showInfix("++", LEVEL_ADD, ASSOC_LEFT, e1, e2)
-      case SeqReverse(e) => showMemberApply(e, "reverse")
-      case SeqIndexOf(e, et, IntLit(0)) => showMemberApply(e, "indexOf", et)
-      case SeqIndexOf(e, et, ei) => showMemberApply(e, "indexOf", et, ei)
+      case StrSlice(e, ei, ej) if ej == NoExpr || ej == StrLength(e) => s"${showTighter(e)}[${showExpr(ei)}:]"
+      case StrSlice(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
+      case StrConcat(e1, e2) => showInfix("++", LEVEL_ADD, ASSOC_LEFT, e1, e2)
+      case StrReverse(e) => showMemberApply(e, "reverse")
+      case StrIndexOf(e, et, IntLit(0)) => showMemberApply(e, "indexOf", et)
+      case StrIndexOf(e, et, ei) => showMemberApply(e, "indexOf", et, ei)
       case ListContainsSlice(e, et) => showMemberApply(e, "contains", et)
-      case SeqStartsWith(e, et) => showMemberApply(e, "startsWith", et)
-      case SeqEndsWith(e, et) => showMemberApply(e, "endsWith", et)
-      case SeqCount(e, ep) => showMemberApply(e, "count", ep)
-      case SeqForall(e, ep) => showMemberApply(e, "forall", ep)
+      case StrStartsWith(e, et) => showMemberApply(e, "startsWith", et)
+      case StrEndsWith(e, et) => showMemberApply(e, "endsWith", et)
+      case StrCount(e, ep) => showMemberApply(e, "count", ep)
+      case ListForall(e, ep) => showMemberApply(e, "forall", ep)
 
       // String
       case StrReplace(e, e1, e2) => showMemberApply(e, "replace", e1, e2)

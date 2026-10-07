@@ -85,7 +85,7 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
         val m = Map.from[String, Expr](for x <- collectModifiedVars(loopBody) yield x -> Var(fresh(x)))
         (safetyCheck(e) & safetyCheck(inv)) &&
           (mkVCAssert(inv, e => InvNotProvedOnEntryError(e.range)) &
-            (inv -> (ListContains(e, Var(x)) -> wlpLoop & post)).subst(m))
+            (inv -> (StrContains(e, Var(x)) -> wlpLoop & post)).subst(m))
       // Jumps
       case Return() => returnPost
       case Break() => breakPost
@@ -97,9 +97,9 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
     case Or(e1, e2) => safetyCheck(e1) && Not(e1) -> safetyCheck(e2)
     case Ite(e, e1, e2) => safetyCheck(e1) && (e -> safetyCheck(e1) & Not(e) -> safetyCheck(e2))
     // List
-    case ListAt(e, ei) =>
-      VCAssert(And(Le(IntLit(0), ei), Lt(ei, SeqLength(e))), IndexOutOfBoundsError(ei.range))
-    case SeqSlice(_, ei, ej) =>
+    case StrAt(e, ei) =>
+      VCAssert(And(Le(IntLit(0), ei), Lt(ei, StrLength(e))), IndexOutOfBoundsError(ei.range))
+    case StrSlice(_, ei, ej) =>
       VCAssert(Le(IntLit(0), ei), IndexNegError(ei.range)) & VCAssert(Le(IntLit(0), ej), IndexNegError(ej.range))
 
     // Method call

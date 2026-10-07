@@ -1,75 +1,58 @@
-lang Year = r"[0-9]{4}"
-lang Month = r"0[1-9]|1[0-2]"
-lang Day = r"0[1-9]|[12][0-9]|3[01]"
-lang CalendarDate = Year Month Day | Year '-' Month '-' Day
+from iso_date_format import Y, M, D
+lang CalendarDate = Y M D | Y '-' M '-' D
 
-lang Week = r"W(0[1-9]|[1-4][0-9]|5[0-3])"
-lang Weekday = r"[1-7]"
-lang WeekDate = Year Week Weekday? | Year '-' Week ('-' Weekday)?
-lang Date = CalendarDate | WeekDate
+lang W = r'W(0[1-9]|[1-4][0-9]|5[0-3])'
+lang Wd = r'[1-7]'
+lang WeekDate = Y W Wd? | Y '-' W ('-' Wd)?
+lang ISODate = CalendarDate | WeekDate
 
-/* Construct a date from a string in ISO 8601 format. */
-method from_iso_format(date_string: Date) returns (year: int, month: int, day: int)
-  ensures 0 <= year && year <= 9999
-  ensures 1 <= month && month <= 12
-  ensures 1 <= day && day <= 31
-{
-  if !date_string.isAscii {
-    abort "Argument must be an ASCII str";
-  }
+from iso_date_format import Year, Month, Day
 
-  if |date_string| !in {7, 8, 10} {
-    abort "Invalid isoformat string";
-  }
+/** Construct a date from a string in ISO 8601 format. */
+def parse_iso_date(date_string: ISODate) -> (Year, Month, Day):
+    if !date_string.isAscii:
+        raise "Argument must be an ASCII str"
 
-  return _parse_iso_format_date(date_string);
-}
+    if |date_string| !in {7, 8, 10}:
+        raise "Invalid iso format string"
 
-method _parse_iso_format_date(dstr: Date) returns (year: int, month: int, day: int)
-  ensures 0 <= year && year <= 9999
-  ensures 1 <= month && month <= 12
-  ensures 1 <= day && day <= 31
-{
-  // It is assumed that this is an ASCII-only string of lengths 7, 8 or 10
-  assert |dstr| in {7, 8, 10};
-  year = dstr[0:4].toInt;
-  var has_sep = dstr[4] == '-';
+    return _parse_iso_format_date(date_string)
 
-  var pos = 4 + (has_sep ? 1 : 0);
-  if (dstr[pos:pos + 1] == "W") {
-    // YYYY-?Www-?D?
-    pos += 1;
-    var weekno = dstr[pos:pos + 2].toInt;
-    pos += 2;
+def _parse_iso_format_date(dtstr: ISODate) -> (Year, Month, Day):
+    // It is assumed that this is an ASCII-only string of lengths 7, 8 or 10.
+    assert |dtstr| in {7, 8, 10}
+    var year = dtstr[0:4].toInt
+    var has_sep = dtstr[4] == '-'
 
-    var dayno = 1;
-    if pos < |dstr| {
-      if (dstr[pos:pos + 1] == "-") != has_sep {
-        abort "Inconsistent use of dash separator";
-      }
+    var pos = 4 + (has_sep ? 1 : 0)
+    if dtstr[pos:pos + 1] == 'W':
+        // YYYY-?Www-?D?
+        pos += 1
+        var weekno = dtstr[pos:pos + 2].toInt
+        pos += 2
 
-      pos += (has_sep ? 1 : 0);
-      dayno = dstr[pos:pos + 1].toInt;
-    }
+        var dayno = 1
+        if |dtstr| > pos:
+            if (dtstr[pos:pos + 1] == '-') != has_sep:
+                raise "Inconsistent use of dash separator"
 
-    return _iso_week_to_gregorian(year, weekno, dayno);
+            pos += has_sep ? 1 : 0
 
-  } else {
-    month = dstr[pos:pos + 2].toInt;
-    pos += 2;
-    if (dstr[pos:pos + 1] == "-") != has_sep {
-      abort "Inconsistent use of dash separator";
-    }
+            dayno = dtstr[pos:pos + 1].toInt
 
-    pos += (has_sep ? 1 : 0);
-    day = dstr[pos:pos + 2].toInt;
-  }
-}
+        return _iso_week_to_gregorian(year, weekno, dayno)
+    else:
+        var month = dtstr[pos:pos + 2].toInt
+        pos += 2
+        if (dtstr[pos:pos + 1] == '-') != has_sep:
+            raise "Inconsistent use of dash separator"
 
-method _iso_week_to_gregorian(year: int, week: int, day: int) returns (y: int, m: int, d: int)
-  requires 0 <= year && year <= 9999
-  requires 1 <= week && week <= 53
-  requires 1 <= day && day <= 7
-  ensures 0 <= y && y <= 9999
-  ensures 1 <= m && m <= 12
-  ensures 1 <= d && d <= 31
+        pos += has_sep ? 1 : 0
+        var day = dtstr[pos:pos + 2].toInt
+
+        return (year, month, day)
+
+type Week = {w: Int | 1 <= w && w <= 53}
+type WeekDay = {d: Int | 1 <= d && d <= 7}
+
+def _iso_week_to_gregorian(year: Year, week: Week, day: WeekDay) -> (Year, Month, Day)

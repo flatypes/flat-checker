@@ -116,7 +116,7 @@ object Simplifier extends LazyLogging:
       case Lt(e1, e2) =>
         (e1.simplify, e2.simplify) match
           case (IntLit(i1), IntLit(i2)) => BoolLit(i1 < i2)(expr.range)
-          case (SeqIndexOf(e1, _, _), SeqLength(e2)) if e1 == e2 => BoolLit(true)(expr.range) // s.indexOf(t) < |s|
+          case (StrIndexOf(e1, _, _), StrLength(e2)) if e1 == e2 => BoolLit(true)(expr.range) // s.indexOf(t) < |s|
           case (e1, e2) => Lt(e1, e2)(expr.range)
 
       // Char
@@ -124,14 +124,14 @@ object Simplifier extends LazyLogging:
         e.simplify match
           case CharLit(c) => BoolLit(a.contains(c))(expr.range)
           case e => CharIn(e, a)(expr.range)
-      case CharToInt(e) =>
+      case CharToCode(e) =>
         e.simplify match
           case CharLit(c) => IntLit(c.toInt)(expr.range)
-          case e => CharToInt(e)(expr.range)
-      case CharFromInt(e) =>
+          case e => CharToCode(e)(expr.range)
+      case CodeToChar(e) =>
         e.simplify match
           case IntLit(i) => CharLit(i.toChar)(expr.range)
-          case e => CharFromInt(e)(expr.range)
+          case e => CodeToChar(e)(expr.range)
       case CharToString(e) =>
         e.simplify match
           case CharLit(c) => StrLit(c.toString)(expr.range)
@@ -144,27 +144,27 @@ object Simplifier extends LazyLogging:
           StrLit(es1.collect { case CharLit(c) => c }.mkString)(expr.range)
         else
           SeqLit(es1)(s.elemSort, s.range)
-      case SeqLength(e) =>
+      case StrLength(e) =>
         e.simplify match
           case SeqLit(es) => IntLit(es.length)(expr.range)
           case StrLit(s) => IntLit(s.length)(expr.range)
-          case e => SeqLength(e)(expr.range)
-      case ListAt(e, ei) =>
+          case e => StrLength(e)(expr.range)
+      case StrAt(e, ei) =>
         (e.simplify, ei.simplify) match
           case (SeqLit(es), IntLit(i)) => es(i.intValue)
           case (StrLit(s), IntLit(i)) => CharLit(s.charAt(i.intValue))(expr.range)
-          case (e, ei) => ListAt(e, ei)(expr.range)
+          case (e, ei) => StrAt(e, ei)(expr.range)
       case SeqUpdate(e, ei, ex) =>
         (e.simplify, ei.simplify, ex.simplify) match
           case (s@SeqLit(es), IntLit(i), ev) => SeqLit(es.updated(i.intValue, ev))(s.elemSort, s.range)
           case (StrLit(s), IntLit(i), CharLit(c)) => StrLit(s.updated(i.intValue, c))(expr.range)
           case (e, ei, ev) => SeqUpdate(e, ei, ev)(expr.range)
-      case SeqSlice(e, ei, NoExpr) =>
+      case StrSlice(e, ei, NoExpr) =>
         (e.simplify, ei.simplify) match
           case (s@SeqLit(es), IntLit(i)) => SeqLit(es.drop(i.intValue))(s.elemSort, s.range)
           case (StrLit(s), IntLit(i)) => StrLit(s.substring(i.intValue))(expr.range)
-          case (e, ei) => SeqSlice(e, ei, NoExpr)(expr.range)
-      case SeqSlice(e, ei, ej) =>
+          case (e, ei) => StrSlice(e, ei, NoExpr)(expr.range)
+      case StrSlice(e, ei, ej) =>
         (e.simplify, ei.simplify, ej.simplify) match
           case (s@SeqLit(es), IntLit(i), IntLit(j)) =>
             SeqLit(es.slice(i.intValue, j.intValue))(s.elemSort, s.range)
@@ -174,43 +174,43 @@ object Simplifier extends LazyLogging:
 //              case `strType` => Const("")(expr.range)
 //              case SeqSort(s) => SeqLit(Nil)(s, expr.range)
 //              case _ => assert(false)
-          case (e, ei, ej) => SeqSlice(e, ei, ej)
-      case SeqConcat(e1, e2) =>
+          case (e, ei, ej) => StrSlice(e, ei, ej)
+      case StrConcat(e1, e2) =>
         (e1.simplify, e2.simplify) match
           case (s1@SeqLit(es1), SeqLit(es2)) => SeqLit(es1 ++ es2)(s1.elemSort, expr.range)
           case (StrLit(s1), StrLit(s2)) => StrLit(s1 + s2)(expr.range)
-          case (e1, e2) => SeqConcat(e1, e2)(expr.range)
-      case SeqReverse(e) =>
+          case (e1, e2) => StrConcat(e1, e2)(expr.range)
+      case StrReverse(e) =>
         e.simplify match
           case s@SeqLit(es) => SeqLit(es.reverse)(s.elemSort, s.range)
           case StrLit(s) => StrLit(s.reverse)(expr.range)
-          case e => SeqReverse(e)(expr.range)
-      case SeqIndexOf(e, et, ei) =>
+          case e => StrReverse(e)(expr.range)
+      case StrIndexOf(e, et, ei) =>
         (e.simplify, et.simplify, ei.simplify) match
           case (StrLit(s), StrLit(t), IntLit(i)) => IntLit(s.indexOf(t, i.intValue))
-          case (e, et, ei) => SeqIndexOf(e, et, ei)(expr.range)
+          case (e, et, ei) => StrIndexOf(e, et, ei)(expr.range)
       case ListContainsSlice(e, et) =>
         (e.simplify, et.simplify) match
           case (s1@SeqLit(es1), s2@SeqLit(es2)) if s1.isConst && s2.isConst =>
             BoolLit(es1.containsSlice(es2))(expr.range)
           case (StrLit(s), StrLit(t)) => BoolLit(s.contains(t))(expr.range)
           case (e, et) => ListContainsSlice(e, et)(expr.range)
-      case SeqStartsWith(e, et) =>
+      case StrStartsWith(e, et) =>
         (e.simplify, et.simplify) match
           case (s1@SeqLit(es1), s2@SeqLit(es2)) if s1.isConst && s2.isConst => BoolLit(es1.startsWith(es2))(expr.range)
           case (StrLit(s), StrLit(t)) => BoolLit(s.startsWith(t))(expr.range)
-          case (e, et) => SeqStartsWith(e, et)(expr.range)
-      case SeqEndsWith(e, et) =>
+          case (e, et) => StrStartsWith(e, et)(expr.range)
+      case StrEndsWith(e, et) =>
         (e.simplify, et.simplify) match
           case (s1@SeqLit(es1), s2@SeqLit(es2)) if s1.isConst && s2.isConst => BoolLit(es1.endsWith(es2))(expr.range)
           case (StrLit(s), StrLit(t)) => BoolLit(s.endsWith(t))(expr.range)
-          case (e, et) => SeqEndsWith(e, et)(expr.range)
-      case SeqCount(e, et) =>
+          case (e, et) => StrEndsWith(e, et)(expr.range)
+      case StrCount(e, et) =>
         (e.simplify, et.simplify) match
           case (s1@SeqLit(es1), s2@SeqLit(es2)) if s1.isConst && s2.isConst => IntLit(es1.countSlice(es2))(expr.range)
           case (StrLit(s), StrLit(t)) => IntLit(s.countSlice(t))(expr.range)
-          case (e, et) => SeqCount(e, et)(expr.range)
-      case SeqForall(e, ep) => SeqForall(e.simplify, ep.simplify)(expr.range)
+          case (e, et) => StrCount(e, et)(expr.range)
+      case ListForall(e, ep) => ListForall(e.simplify, ep.simplify)(expr.range)
 
       // String-specific
       case StrReplace(e, e1, e2) =>
