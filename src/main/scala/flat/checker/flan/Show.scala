@@ -150,7 +150,7 @@ object Show extends LazyLogging:
       case StrToLower(e) => showMemberApply(e, "toLower")
       case StrToUpper(e) => showMemberApply(e, "toUpper")
       case StrToInt(e) => showMemberApply(e, "toInt")
-      case StrFromInt(e, _) => showMemberApply(e, "toString")
+      case IntFormat(e, _) => showMemberApply(e, "toString")
       case StrIsAscii(e) => showMemberApply(e, "isAscii")
 
       // Set

@@ -13,7 +13,10 @@ trait ExprParsers extends Parsers:
     term ~ (op ~ term).* ^^ { case e ~ l => l.foldLeft(e) { case (e1, f ~ e2) => f(e1, e2) } }
 
   def infixRight[E](op: Parser[(E, E) => E], term: Parser[E]): Parser[E] =
-    term ~ (op ~ term).* ^^ { case e ~ l => l.foldRight(e) { case (f ~ e2, e1) => f(e1, e2) } }
+    term ~ (op ~ term).* ^^ { case e ~ l =>
+      val es = e :: l.map(_._2)
+      (es.init zip l.map(_._1)).foldRight(es.last) { case ((e1, f), e2) => f(e1, e2) }
+    }
 
   def infixNonAssoc[E](op: Parser[(E, E) => E], term: Parser[E]): Parser[E] =
     term ~ (op ~ term).? ^^ { case e ~ None => e; case e1 ~ Some(f ~ e2) => f(e1, e2) }

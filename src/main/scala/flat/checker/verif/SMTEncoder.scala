@@ -134,7 +134,7 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
     case StrToLower(e) => tm.mkTerm(STRING_TO_LOWER, encodeExpr(e))
     case StrToUpper(e) => tm.mkTerm(STRING_TO_UPPER, encodeExpr(e))
     case StrToInt(e) => tm.mkTerm(STRING_TO_INT, encodeExpr(e))
-    case StrFromInt(e, _) => tm.mkTerm(STRING_FROM_INT, encodeExpr(e))
+    case IntFormat(e, _) => tm.mkTerm(STRING_FROM_INT, encodeExpr(e))
     case StrIsAscii(e) => encodeUninterpreted(expr, BoolType)
 
     // Set

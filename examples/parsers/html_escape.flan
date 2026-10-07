@@ -1,4 +1,6 @@
-lang Safe = r"([^&<>\"']|&[A-Za-z]+;|&#x[0-9A-Fa-f]+;)*"
+lang A = r'abc'
+
+lang Safe = r'([^&<>"\']|&[A-Za-z]+;|&#x[0-9A-Fa-f]+;)*'
 
 /** Replace special characters "&", "<" and ">" to HTML-safe sequences.
     If the optional flag quote is true (the default), the quotation mark

@@ -183,14 +183,13 @@ class VCDischarger(methodInfos: Map[String, MethodInfo])(using reporter: Reporte
                      error: => VerifError): Boolean =
     val conclusion = cond.simplify
     logger.info("Goal {}:\n{}", goalCounter.incrementAndGet(), showGoal(premises, conclusion))
-    true
-//    if prover.prove(Goal(premises, conclusion.simplify)) then
-//      logger.info("PROVED")
-//      true
-//    else
-//      reporter.report(AssertNotProvedError(conclusion.range))
-//      logger.warn("❌ NOT PROVED")
-//      false
+    if prover.prove(Goal(premises, conclusion.simplify)(using types)) then
+      logger.info("PROVED")
+      true
+    else
+      reporter.report(error)
+      logger.error("❌ NOT PROVED")
+      false
 
   private def showGoal(premises: List[Expr], conclusion: Expr): String =
     val premiseStr = (for e <- premises yield s"  ${e.show}\n").mkString

@@ -55,7 +55,7 @@ object builtin:
     case ">>" => List(Member(int -> int, { case List(n1, n2) => BitShR(n1, n2) }))
     // conversion
     case "toChar" => List(Member(() -> str, { case List(n) => CodeToChar(n) }))
-    case "toString" => List(Member(() -> str, { case List(n) => StrFromInt(n) }))
+    case "toString" => List(Member(() -> str, { case List(n) => IntFormat(n) }))
     case _ => Nil
 
   private def accessBoolMember(name: String): List[Member] = name match

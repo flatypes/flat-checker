@@ -122,7 +122,7 @@ class Inferer(goal: Goal) extends LazyLogging:
       infer(e) match
         case TStr(r) => TStr(narrow(expr, r.absTrim()))
         case _ => throw new Exception("Expected a string type for StringTrim")
-    case StrFromInt(e, fmt) =>
+    case IntFormat(e, fmt) =>
       val solver = LPSolver(goal.premises)
       solver.solve(e) match
         case (Some(min), Some(max)) if 0 <= min =>

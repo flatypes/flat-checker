@@ -10,6 +10,13 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       node.name -> MethodInfo(node.params, node.returns, node.requires, node.ensures, node.locals))
     program.body.foreach(verifyBody(_, methodInfos))
 
+  def verify(script: Script): Unit =
+    val types = Map.from(for p <- script.vars yield p.name -> p.typ)
+    val generator = VCGenerator(types, Map.empty)
+    val vc = generator.wlp(script.body, VCTrue, VCTrue, VCTrue, VCTrue)
+    val discharger = VCDischarger(Map.empty)
+    discharger.discharge(vc, types, Nil)
+
   private def verifyBody(node: MethodDef, methodInfos: Map[String, MethodInfo]): Unit =
     node.body match
       case None => // abstract method, nothing to verify

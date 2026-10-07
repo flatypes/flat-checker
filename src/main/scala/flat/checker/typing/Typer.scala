@@ -2,400 +2,218 @@ package flat.checker.typing
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
-import flat.checker.domain.StrREOps.NumStrFormat
-import flat.checker.domain.{CharSet, RegEx, StrRE, given}
 import flat.checker.flan.*
-import flat.checker.flan.Show.*
-import flat.checker.flan.TypeOps.*
+import flat.checker.flan.TypeOps.{:<:, erase}
 import flat.checker.flan.tpd.*
-import flat.checker.flan.untpd.{IntConst, IntRange}
-import flat.checker.verif.ReftNotProvedError
-import org.eclipse.lsp4j.{Position, Range as Span}
 
-import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class Typer(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
-  def normalize(node: untpd.Type, ctx: Ctx): Type = node match
-    case t@untpd.TypeRef(x) =>
-      ctx.lookup(x) match
-        case Some(TypeInfo(typ)) => typ
-        case Some(LangInfo(r)) => RefinedType(strType, StringInLang(Var("_"), r))
-        case Some(_) =>
-          reporter.reportNotType(t.range, x)
-          NoType
-        case None =>
-          x match
-            case "int" | "Int" => IntType
-            case "bool" | "Bool" => BoolType
-            case "char" | "Char" => CharType
-            case "str" | "Str" => strType
-            case _ =>
-              reporter.reportNameUndefined(t.range)
-              NoType
+class Typer(using reporter: Reporter) extends LazyLogging:
+  private val resolver = Resolver()
 
-    case untpd.GenericType(untpd.Ident("List"), List(t)) => ListType(normalize(t, ctx))
-    case untpd.GenericType(untpd.Ident("Set"), List(t)) => SetType(normalize(t, ctx))
-    case untpd.GenericType(untpd.Ident("Map"), List(tk, tv)) => DictType(normalize(tk, ctx), normalize(tv, ctx))
-    case t@untpd.GenericType(_, _) =>
-      reporter.reportNameUndefined(t.range)
-      NoType
+  def typeCheck(module: untpd.Module): List[Script] =
+    val ctx = resolver.resolve(module)
+    module.body.flatMap:
+      case node: untpd.FunDef => Some(checkMethod(node, ctx))
+      case _ => None
 
-    case untpd.TupleType(ts) => TupleType(ts.map(normalize(_, ctx)))
-    case untpd.FunType(ts, t) => FunType(ts.map(normalize(_, ctx)), normalize(t, ctx))
-    case untpd.OptType(t) => NullableType(normalize(t, ctx))
-    case untpd.RefinedType(untpd.Param(id, t), e) =>
-      val base = normalize(t, ctx)
-      val reft = check(e, BoolType, ctx.push().define(id.name, ValInfo(base)(id.range)))
-      RefinedType(base, reft.subst(Map(id.name -> Var("_"))))
+  private def checkMethod(node: untpd.FunDef, globalCtx: Ctx): Script =
+    val name = node.ident.name
+    var ctx = globalCtx.push()
+    val info = globalCtx.lookup(name).get.asInstanceOf[MethodInfo]
+    val locals = ListBuffer.empty[VarDecl]
+    val body = ListBuffer.empty[Stmt]
+    val typer = API(body)
+    // load parameters and check preconditions
+    for (x, paramInfo) <- info.paramInfos do
+      ctx = ctx.define(x, paramInfo)
+      locals += VarDecl(x, paramInfo.typ.erase)
+    // load return variables and check postconditions
+    for (x, paramInfo) <- info.returnInfos do
+      ctx = ctx.define(x, paramInfo)
+      locals += VarDecl(x, paramInfo.typ.erase)
+    // check body
+    if node.body.nonEmpty then
+      val (lcs, ss) = checkBlock(node.body, ctx, info)
+      locals ++= lcs
+      body ++= ss
+    Script(locals.toList, body.toList)
 
-  def translate(node: untpd.PExpr, ctx: Ctx): StrRE = node match
-    case untpd.PChar(c) => RegEx.symbolSet(CharSet(c))
-    case untpd.PStr(s) => RegEx.word(s.toList)
-    case n@untpd.PRef(x) =>
-      ctx.lookup(x) match
-        case Some(LangInfo(r)) => r
-        case Some(_) =>
-          reporter.reportNotLang(n.range, x)
-          RegEx.Zero()
-        case None =>
-          reporter.reportNameUndefined(n.range)
-          RegEx.Zero()
-    case untpd.PStar(l) => translate(l, ctx).star
-    case untpd.PPlus(l) => translate(l, ctx).plus
-    case untpd.POpt(l) => translate(l, ctx).opt
-    case untpd.PRep(e, i: BigInt) => translate(e, ctx) ^ i.toInt
-    case untpd.PRep(e, IntRange(i1, i2)) => translate(e, ctx).loop(i1.toInt, i2.map(_.toInt))
-    case untpd.PConcat(l1, l2) => translate(l1, ctx) * translate(l2, ctx)
-    case untpd.PUnion(l1, l2) => translate(l1, ctx) + translate(l2, ctx)
-    case untpd.PCharSet(neg, items) =>
-      val chars = items.flatMap:
-        case c: Char => List(c)
-        case untpd.CharRange(c1, c2) => (c1 to c2).toList
-      RegEx.symbolSet(new CharSet(neg, chars.toSet))
-    case untpd.PAllChar => RegEx.symbolSet(CharSet.full)
+  private def checkBlock(node: List[untpd.Stmt], ctx: Ctx, info: MethodInfo): (List[VarDecl], List[Stmt]) =
+    val visitor = BlockVisitor(ctx, info)
+    node.foreach(visitor.check)
+    (visitor.locals.toList, visitor.body.toList)
 
-  def infer(expr: untpd.Expr, ctx: Ctx): (Expr, Type) = expr match
-    case untpd.IntConst(v) => (IntLit(v)(expr.range), IntType)
-    case untpd.BoolConst(v) => (BoolLit(v)(expr.range), BoolType)
-    case untpd.CharConst(v) => (CharLit(v)(expr.range), CharType)
-    case untpd.StrConst(v) => (StrLit(v)(expr.range), strType)
-    case untpd.NullConst() => (NullLit()(expr.range), NullType)
+  private class BlockVisitor(localCtx: Ctx, info: MethodInfo):
+    val locals: ListBuffer[VarDecl] = ListBuffer.empty[VarDecl]
+    val body: ListBuffer[Stmt] = ListBuffer.empty[Stmt]
+    val typer = API(body)
+    private var ctx = localCtx
 
-    case untpd.TermRef(x) =>
-      ctx.lookup(x) match
-        case Some(ValInfo(t)) => (Var(x)(expr.range), ctx.getNarrowedType(x).getOrElse(t))
-        case Some(VarInfo(t)) => (Var(x)(expr.range), ctx.getNarrowedType(x).getOrElse(t))
-        case Some(ConstInfo(sort, value)) => (value, sort)
-        case Some(m: MethodInfo) => (MethodRef(x)(expr.range), m.funType)
-        case Some(_) =>
-          reporter.reportNotTerm(expr.range, x)
-          (NoExpr, NoType)
-        case None =>
-          reporter.reportNameUndefined(expr.range)
-          (NoExpr, NoType)
+    def check(stmt: untpd.Stmt): Unit = stmt match
+      case untpd.Pass() => // skip
+      case untpd.ExprStmt(e) =>
+        val (value, _) = typer.infer(e, ctx)
+        body += ExprStmt(value)
 
-    case untpd.ListExpr(Nil) =>
-      reporter.reportMissingTypeAnnot(expr.range)
-      (NoExpr, NoType)
-    case untpd.ListExpr(e :: es) =>
-      val (firstElem, elemType) = infer(e, ctx)
-      val elemSort = elemType.erase
-      val otherElems = es.map(check(_, elemSort, ctx))
-      (SeqLit(firstElem :: otherElems)(elemSort, expr.range), ListType(elemSort))
+      case untpd.VarStmt(id, Some(t), init) =>
+        val typ = typer.normalize(t, ctx)
+        declareVar(id, typ)
+        for e <- init do
+          val value = typer.check(e, typ, ctx)
+          body += Assign(id.name, value)
+      case untpd.VarStmt(id, None, Some(e)) =>
+        val (value, typ) = typer.infer(e, ctx)
+        declareVar(id, typ)
+        body += Assign(id.name, value)
+      case untpd.VarStmt(id, None, None) =>
+        reporter.reportMissingTypeAnnot(id.range)
 
-    case untpd.SetExpr(Nil) =>
-      reporter.reportMissingTypeAnnot(expr.range)
-      (NoExpr, NoType)
-    case untpd.SetExpr(e :: es) =>
-      val (firstElem, elemType) = infer(e, ctx)
-      val elemSort = elemType.erase
-      val otherElems = es.map(check(_, elemSort, ctx))
-      (SetLit(firstElem :: otherElems)(elemSort, expr.range), SetType(elemSort))
+      case untpd.Assign(x, e) => assign(x, e)
+      case untpd.AugAssign(x, op, e: untpd.Expr) =>
+        assign(untpd.LRef(x.name)(x.range),
+          untpd.BinaryExpr(untpd.TermRef(x.name)(x.range), untpd.Ident(op.name.init)(op.range), e))
 
-    case untpd.MapExpr(Nil) =>
-      reporter.reportMissingTypeAnnot(expr.range)
-      (NoExpr, NoType)
-    case untpd.MapExpr(items) =>
-      val (ek :: eks, ev :: evs) = items.unzip
-      val (firstKey, keyType) = infer(ek, ctx)
-      val otherKeys = eks.map(check(_, keyType, ctx))
-      val (firstVal, valType) = infer(ev, ctx)
-      val otherVals = evs.map(check(_, valType, ctx))
-      (MapLit(firstKey :: otherKeys, firstVal :: otherVals)(keyType, valType, expr.range),
-        DictType(keyType, valType))
+      case untpd.Assume(e) =>
+        val expr = typer.check(e, BoolType, ctx)
+        body += Assume(expr)
+      case untpd.Assert(e) =>
+        val expr = typer.check(e, BoolType, ctx)
+        body += Assert(expr)
+      case untpd.Abort(e) =>
+        typer.check(e, strType, ctx)
+        body += Abort()(e.range)
 
-    case untpd.TupleExpr(es) =>
-      val (elems, elemTypes) = es.map(infer(_, ctx)).unzip
-      (TupleExpr(elems)(expr.range), TupleType(elemTypes))
+      case untpd.If(e: untpd.Expr, List(untpd.Abort(em)), Nil) =>
+        typer.check(em, strType, ctx)
+        val cond = typer.check(e, BoolType, ctx)
+        body += Assert(Not(cond))
+      case untpd.If(g, b1, b2) =>
+        val cond = checkGuard(g)
+        val (thenLocals, thenBody) = checkBlock(b1, typer.assume(cond, ctx.push()), info)
+        val (elseLocals, elseBody) = checkBlock(b2, typer.assume(Not(cond), ctx.push()), info)
+        locals ++= thenLocals
+        locals ++= elseLocals
+        body += If(cond, thenBody, elseBody)
 
-    case untpd.BinaryExpr(e1, untpd.Ident("&&"), e2) =>
-      val left = check(e1, BoolType, ctx)
-      val right = check(e2, BoolType, assume(left, ctx))
-      (And(left, right)(expr.range), BoolType)
-    case untpd.BinaryExpr(e1, untpd.Ident("||"), e2) =>
-      val left = check(e1, BoolType, ctx)
-      val right = check(e2, BoolType, assume(Not(left), ctx))
-      (Or(left, right)(expr.range), BoolType)
-    case untpd.BinaryExpr(e1, untpd.Ident("==>"), e2) =>
-      val left = check(e1, BoolType, ctx)
-      val right = check(e2, BoolType, assume(left, ctx))
-      (Implies(left, right)(expr.range), BoolType)
+      case ret@untpd.Return(None) =>
+        body += Return()(ret.range)
+      case ret@untpd.Return(Some(e)) =>
+        val value = typer.check(e, info.returnType, ctx)
+        info.returnParams match
+          case List((id, _)) =>
+            body += Assign(id.name, value)
+          case ps =>
+            for (id, i) <- ps.map(_._1).zipWithIndex do
+              body += Assign(id.name, TupleSelect(i, value)(e.range))
+        body += Return()(ret.range)
 
-    case untpd.BinaryExpr(e1, untpd.Ident("=="), e2) =>
-      val (left, leftType) = infer(e1, ctx)
-      val (right, rightType) = infer(e2, ctx)
-      if !isSubtype(leftType, rightType) && !isSubtype(rightType, leftType) then
-        reporter.reportTypeMismatch(e2.range, leftType, rightType)
-      (Eq(left, right)(expr.range), BoolType)
-    case untpd.BinaryExpr(e1, untpd.Ident("!="), e2) =>
-      val (left, leftType) = infer(e1, ctx)
-      val (right, rightType) = infer(e2, ctx)
-      if !isSubtype(leftType, rightType) && !isSubtype(rightType, leftType) then
-        reporter.reportTypeMismatch(e2.range, leftType, rightType)
-      (Ne(left, right)(expr.range), BoolType)
+      case s@untpd.While(g, _, b) =>
+        val cond = checkGuard(g)
+        val invariants = s.invariants.map(typer.check(_, BoolType, ctx))
+        val (loopLocals, loopBody) = checkBlock(b, typer.assume(cond, ctx.push(isLoop = true)), info)
+        locals ++= loopLocals
+        body += While(cond, mkAnd(invariants), loopBody)
 
-    case untpd.BinaryExpr(e1, op@untpd.Ident("in"), e2) =>
-      resolveMethodCall(e2, untpd.Ident("contains")(op.range), List(e1), expr.range, ctx)
-    case untpd.BinaryExpr(e1, op@untpd.Ident("!in"), e2) =>
-      val (e, t) = resolveMethodCall(e2, untpd.Ident("contains")(op.range), List(e1), expr.range, ctx)
-      (Not(e)(expr.range), BoolType)
-
-    case untpd.BinaryExpr(untpd.StrConst(fmt), untpd.Ident("%"), e) =>
-      val args = e match
-        case untpd.TupleExpr(es) => es
-        case _ => List(e)
-      (checkStrFormat(fmt, args, expr.range, ctx), strType)
-
-    case untpd.UnaryExpr(op, e) => resolveMethodCallNullary(e, op, expr.range, ctx)
-    case untpd.BinaryExpr(e1, op, e2) => resolveMethodCall(e1, op, List(e2), expr.range, ctx)
-    case untpd.ChainedExpr(e, List((op, e2))) => resolveMethodCall(e, op, List(e2), expr.range, ctx)
-    case untpd.ChainedExpr(e, cmps) =>
-      val es = for i <- cmps.indices.toList yield
-        resolveMethodCall(if i == 0 then e else cmps(i - 1)._2, cmps(i)._1, List(cmps(i)._2), expr.range, ctx)._1
-      (mkAnd(es), BoolType)
-
-    case untpd.MemberAccess(e, m) => resolveMethodCallNullary(e, m, expr.range, ctx)
-    case untpd.IndexAccess(e, i) =>
-      resolveMethodCall(e, untpd.Ident("select")(i.range), List(i), expr.range, ctx)
-    case untpd.Slice(e, ei, ej) =>
-      resolveMethodCall(e, untpd.Ident("slice")(expr.range),
-        ei.getOrElse(IntConst(0)(null)) :: ej.toList, expr.range, ctx)
-
-    case untpd.Apply(untpd.MemberAccess(e, m), es) => resolveMethodCall(e, m, es, expr.range, ctx)
-    case untpd.Apply(e, es) =>
-      val (fun, typ) = infer(e, ctx)
-      typ match
-        case funType: FunType =>
-          val args = checkApply(es, funType, expr.range, 0, ctx)
-          (Apply(fun, args)(expr.range), funType.returnType)
-        case _ =>
-          if typ != NoType then
-            reporter.reportNotCallable(e.range, typ)
-          (NoExpr, NoType)
-
-    case untpd.Size(e) => resolveMethodCallNullary(e, untpd.Ident("size")(expr.range), expr.range, ctx)
-    case untpd.Ite(e, e1, e2) =>
-      val cond = check(e, BoolType, ctx)
-      val thenExpr = check(e1, BoolType, assume(cond, ctx))
-      val elseExpr = check(e2, BoolType, assume(Not(cond), ctx))
-      (Ite(cond, thenExpr, elseExpr)(expr.range), BoolType)
-
-    case _ =>
-      throw NotImplementedError(s"Type inference for ${expr.getClass.getSimpleName} is not implemented")
-
-  private def resolveMethodCallNullary(e: untpd.Expr, m: untpd.Ident, span: Span, ctx: Ctx): (Expr, Type) =
-    val (receiver, receiverType) = infer(e, ctx)
-    if receiverType == NoType then
-      return (NoExpr, NoType)
-
-    builtin.accessMember(receiverType, m.name) match
-      case Nil => // not found
-        reporter.reportMemberNotFound(m.range, m.name, receiverType.erase)
-        (NoExpr, NoType)
-      case List(m) => // unique
-        if m.funType.arity == 0 then
-          (m.apply(receiver, Nil, span), m.funType.returnType)
+      case node: untpd.Break =>
+        if ctx.insideLoop then
+          body += Break()(node.range)
         else
-          throw UnsupportedOperationException("lambda expression")
-      case ms => // ambiguous
-        reporter.reportAmbiguousOverload(span, m.name, receiverType.erase, ms.map(_.funType))
-        (NoExpr, NoType)
+          reporter.reportBreakOutOfLoop(node.range)
+      case node: untpd.Continue =>
+        if ctx.insideLoop then
+          body += Continue()(node.range)
+        else
+          reporter.reportContinueOutOfLoop(node.range)
 
-  private def resolveMethodCall(e: untpd.Expr, m: untpd.Ident, es: List[untpd.Expr], span: Span, ctx: Ctx): (Expr, Type) =
-    val (receiver, receiverType) = infer(e, ctx)
-    if receiverType == NoType then
-      return (NoExpr, NoType)
-
-    builtin.accessMember(receiverType, m.name) match
-      case Nil => // not found
-        reporter.reportMemberNotFound(m.range, m.name, receiverType)
-        (NoExpr, NoType)
-      case List(m) => // unique
-        val args = checkApply(es, m.funType, span, 0, ctx)
-        (m.apply(receiver, args, span), m.funType.returnType)
-      case ms => // overloaded
-        ms.filter(_.funType.arity == es.length) match
-          case List(info) => // unique with matching arity
-            val args = checkApply(es, info.funType, span, 0, ctx)
-            (info.apply(receiver, args, span), info.funType.returnType)
-          case candidates => // try candidates to see if any match the argument types
-            val (args, argTypes) = es.map(infer(_, ctx)).unzip
-            candidates.find(info => (argTypes.map(_.erase) zip info.funType.paramTypes).forall(_ :<: _)) match
-              case Some(info) =>
-                (info.apply(receiver, args, span), info.funType.returnType)
-              case None =>
-                reporter.reportNoMatchingOverload(m.range, m.name, receiverType.erase, ms.map(_.funType), argTypes)
-                (NoExpr, NoType)
-
-  def assume(cond: Expr, ctx: Ctx): Ctx = simplify(cond) match
-    case Ne(Var(x), NullLit()) =>
-      ctx.lookup(x) match
-        case Some(ValInfo(NullableType(t))) => ctx.narrow(x, t)
-        case Some(VarInfo(NullableType(t))) => ctx.narrow(x, t)
-        case _ => ctx
-    case And(e1, e2) =>
-      val ctx1 = assume(e1, ctx)
-      assume(e2, ctx1)
-    case _ => ctx
-
-  def simplify(cond: Expr): Expr = cond match
-    case Not(e) =>
-      simplify(e) match
-        case Not(e1) => e1
-        case Eq(e1, e2) => Ne(e1, e2)
-        case Ne(e1, e2) => Eq(e1, e2)
-        case And(e1, e2) => Or(simplify(Not(e1)), simplify(Not(e2)))
-        case Or(e1, e2) => And(simplify(Not(e1)), simplify(Not(e2)))
-        case e => Not(e)
-    case And(e1, e2) => And(simplify(e1), simplify(e2))
-    case Or(e1, e2) => Or(simplify(e1), simplify(e2))
-    case _ => cond
-
-  private def checkApply(argNodes: List[untpd.Expr], funType: FunType, range: Span, x: Int,
-                         ctx: Ctx): List[Expr] =
-    if argNodes.length < funType.arity then
-      val lastRange = Span(Position(range.getEnd.getLine, range.getEnd.getCharacter - 1), range.getEnd)
-      reporter.reportMissingArgs(lastRange, funType, argNodes.length)
-    else if argNodes.length > funType.arity then
-      reporter.reportTooManyArgs(range, funType)
-    argNodes.zip(funType.paramTypes).map(check(_, _, ctx))
-
-  private def checkStrFormat(fmt: String, args: List[untpd.Expr], range: Span, ctx: Ctx): Expr =
-    val parts = ListBuffer.empty[Expr]
-    var i = 0
-    var k = 0
-    while i < fmt.length do
-      if fmt.drop(i).startsWith("%%") then
-        parts += StrLit("%")
-        i += 2
-      else if fmt.drop(i).startsWith("%s") then
-        parts += check(args(k), strType, ctx)
-        k += 1
-        i += 2
-      else if fmt(i) == '%' then
-        parseFormatter(fmt.drop(i + 1), range) match
-          case Some((f, n)) if k < args.length =>
-            val e = check(args(k), IntType, ctx)
-            parts += StrFromInt(e, f)
-            i += 1 + n
-            k += 1
+      case s@untpd.For(id, e, _, b) =>
+        val (iter, iterSort) = typer.infer(e, ctx)
+        val elemSort = iterSort match
+          case `strType` => strType
+          case ListType(elemSort) => elemSort
           case _ =>
-            i = fmt.length
-      else
-        val s = fmt.drop(i).takeWhile(_ != '%')
-        parts += StrLit(s)
-        i += s.length
+            reporter.reportTypeMismatch(e.range, "list", iterSort)
+            NoType
+        val loopCtx = ctx.define(id.name, VarInfo(elemSort)(id.range)).push(isLoop = true)
+        val invariants = s.invariants.map(typer.check(_, BoolType, loopCtx))
+        val (loopLocals, loopBody) = checkBlock(b, loopCtx, info)
+        locals ++= loopLocals
+        body += For(id.name, iter, mkAnd(invariants), loopBody)
 
-    if parts.isEmpty then StrLit("") else parts.reduce(StrConcat(_, _)(range))
+    private def declareVar(ident: untpd.Ident, typ: Type): Unit =
+      ctx.getDefined(ident.name) match
+        case None =>
+          locals += VarDecl(ident.name, typ)
+          ctx = ctx.define(ident.name, VarInfo(typ)(ident.range))
+        case Some(conflict) =>
+          reporter.reportNameRedefined(ident.range, conflict.range)
 
-  private def parseFormatter(f: String, range: Span): Option[(NumStrFormat, Int)] =
-    // flag: 0 for zero-padded
-    val zeroPadded = f.startsWith("0")
-    var i = 0
-    if zeroPadded then
-      i += 1
-    // width
-    val width = f.drop(i).takeWhile(_.isDigit)
-    i += width.length
-    if zeroPadded && width.isEmpty then
-      reporter.reportSyntaxError("no width specified for zero-padded format", range)
-      return None
-    // conversion
-    if !Set('d', 'o', 'x', 'X').contains(f(i)) then
-      reporter.reportSyntaxError(s"invalid conversion specifier '${f(i)}'", range)
-      return None
-    val conv = f(i)
-    val formatter = NumStrFormat(zeroPadded = zeroPadded, width = if width.isEmpty then 0 else width.toInt,
-      conv = conv)
-    Some(formatter, i + 1)
+    private def assign(target: untpd.LExpr, expr: untpd.Expr): Unit = target match
+      case untpd.LRef("_") => // ignore
+      case untpd.LRef(x) =>
+        ctx.lookup(x) match
+          case Some(VarInfo(typ)) =>
+            val value = typer.check(expr, typ, ctx)
+            body += Assign(x, value)
+          case Some(_) =>
+            reporter.reportNotAssignable(target.range)
+          case None =>
+            reporter.reportNameUndefined(target.range)
 
-  def check(node: untpd.Expr, expectedType: Type, ctx: Ctx): Expr =
-    (node, expectedType) match
-      case (untpd.Ite(e, e1, e2), _) =>
-        val cond = check(e, BoolType, ctx)
-        val thenExpr = check(e1, expectedType, assume(cond, ctx))
-        val elseExpr = check(e2, expectedType, assume(Not(cond), ctx))
-        Ite(cond, thenExpr, elseExpr)(node.range)
-
-      case (untpd.ListExpr(es), ListType(t)) =>
-        val elems = es.map(check(_, t, ctx))
-        SeqLit(elems)(t, node.range)
-      case (untpd.SetExpr(es), SetType(t)) =>
-        val elems = es.map(check(_, t, ctx))
-        SetLit(elems)(t, node.range)
-      case (untpd.MapExpr(items), DictType(tk, tv)) =>
-        val (eks, evs) = items.unzip
-        val keys = eks.map(check(_, tk, ctx))
-        val values = evs.map(check(_, tv, ctx))
-        MapLit(keys, values)(tk, tv, node.range)
-
-      case (untpd.TupleExpr(es), TupleType(ts)) if es.length == ts.length =>
-        val elems = es.zip(ts).map((e, t) => check(e, t, ctx))
-        TupleExpr(elems)(node.range)
-
-      case (untpd.Lambda(id, e), FunType(List(t1), t2)) =>
-        val localCtx = ctx.push().define(id.name, ValInfo(t1)(id.range))
-        val value = check(e, t2, localCtx)
-        Lambda(List(VarDecl(id.name, t1)), value)(node.range)
-
-      case (_, expected) =>
-        val (expr, actual) = infer(node, ctx)
-        if isSubtype(actual, expected) then
-          return expr
-
-        if !isSubtype(actual, expected.erase) then
-          reporter.reportTypeMismatch(node.range, expected, actual)
-          return expr
-
-        expected match
-          case RefinedType(_, reft) =>
-            body += GAssert(reft.subst(Map("_" -> expr)), ReftNotProvedError(node.range))
+      case untpd.LTuple(xs) =>
+        expr match
+          case untpd.TupleExpr(es) if es.length == xs.length =>
+            for (x, e) <- xs zip es do
+              assign(x, e)
           case _ =>
-            throw NotImplementedError(s"Type checking for $node: ${actual.show} <: ${expected.show} is not implemented")
-        expr
+            val (value, typ) = typer.infer(expr, ctx)
+            assign(target, value, typ)
 
-  private def isSubtype(left: Type, right: Type): Boolean =
-    if left == right || left == NoType || right == NoType then true
-    else (left, right) match
-      case (ListType(t1), ListType(t2)) => isSubtype(t1, t2)
-      case (SetType(t1), SetType(t2)) => isSubtype(t1, t2)
-      case (DictType(k1, v1), DictType(k2, v2)) => isSubtype(k1, k2) && isSubtype(k2, k1) && isSubtype(v1, v2)
-      case (RefinedType(t1, _), t2) => isSubtype(t1, t2)
-      case (TupleType(ts1), TupleType(ts2)) => ts1.length == ts2.length && (ts1 zip ts2).forall(isSubtype)
-      case (FunType(ps1, r1), FunType(ps2, r2)) =>
-        ps1.length == ps2.length && (ps2 zip ps1).forall(isSubtype) && isSubtype(r1, r2)
-      case (NullableType(t1), NullableType(t2)) => isSubtype(t1, t2)
-      case (NullType, NullableType(_)) => true
-      case (t1, NullableType(t2)) => isSubtype(t1, t2)
-      case _ => false
+      case untpd.LList(_) =>
+        val (value, typ) = typer.infer(expr, ctx)
+        assign(target, value, typ)
 
-  def inferParamList(nodes: List[untpd.Param], ctx: Ctx): List[(untpd.Ident, Type)] =
-    val scope = mutable.Map.empty[String, Span]
-    for node <- nodes yield
-      val typ = normalize(node.typ, ctx)
-      if scope.contains(node.ident.name) then
-        reporter.reportNameRedefined(node.ident.range, scope(node.ident.name))
-      else
-        scope(node.ident.name) = node.ident.range
-      (node.ident, typ)
+    private def assign(target: untpd.LExpr, value: Expr, valueType: Type): Unit = target match
+      case untpd.LRef("_") => // ignore
+      case untpd.LRef(x) =>
+        ctx.lookup(x) match
+          case Some(VarInfo(t)) =>
+            if valueType.erase :<: t.erase then
+              body += Assign(x, value)
+            else
+              reporter.reportTypeMismatch(target.range, t.erase, valueType)
+          case Some(_) =>
+            reporter.reportNotAssignable(target.range)
+          case None =>
+            reporter.reportNameUndefined(target.range)
+
+      case untpd.LTuple(xs) => valueType match
+        case TupleType(ts) if ts.length == xs.length =>
+          val (fresh, ctx1) = ctx.defineFreshVal(valueType)
+          locals += VarDecl(fresh, valueType)
+          ctx = ctx1
+          body += Assign(fresh, value)
+          val tuple = Var(fresh)(value.range)
+          for (x, i) <- xs.zipWithIndex do
+            val e = TupleSelect(i, tuple)(value.range)
+            assign(x, e, ts(i))
+        case _ =>
+          reporter.reportTypeMismatch(value.range, s"${xs.length}-tuple", valueType)
+
+      case untpd.LList(xs) => valueType match
+        case ListType(s) =>
+          val (fresh, ctx1) = ctx.defineFreshVal(valueType)
+          locals += VarDecl(fresh, valueType)
+          ctx = ctx1
+          body += Assign(fresh, value)
+          val list = Var(fresh)(value.range)
+          for (x, i) <- xs.zipWithIndex do
+            val e = StrAt(list, IntLit(i)(value.range))(value.range)
+            assign(x, e, s)
+        case _ =>
+          reporter.reportTypeMismatch(value.range, "list", valueType)
+
+    private def checkGuard(guard: untpd.Expr): Expr = guard match
+      case e: untpd.Expr =>
+        typer.check(e, BoolType, ctx)
+      case _ => throw IllegalStateException()

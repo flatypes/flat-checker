@@ -9,7 +9,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class Resolver(using reporter: Reporter) extends LazyLogging:
-  private val typer = Typer(ListBuffer.empty)
+  private val typer = API(ListBuffer.empty)
 
   def resolve(module: untpd.Module): Ctx =
     var ctx = Ctx()

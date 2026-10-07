@@ -242,10 +242,10 @@ object Simplifier extends LazyLogging:
         e.simplify match
           case StrLit(s) => IntLit(s.toInt)(expr.range)
           case e => StrToInt(e)(expr.range)
-      case StrFromInt(e, fmt) =>
+      case IntFormat(e, fmt) =>
         e.simplify match
           case IntLit(i) => StrLit(i.toString)(expr.range)
-          case e => StrFromInt(e, fmt)(expr.range)
+          case e => IntFormat(e, fmt)(expr.range)
       case StrIsAscii(e) =>
         e.simplify match
           case StrLit(s) => BoolLit(s.forall(_.toInt <= 0x7F))(expr.range)

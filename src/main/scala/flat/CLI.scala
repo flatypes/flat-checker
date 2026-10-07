@@ -2,7 +2,8 @@ package flat
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.parsing.Parser
-import flat.checker.typing.Checker
+import flat.checker.typing.Typer
+import flat.checker.verif.Verifier
 import flat.checker.{Reporter, Source}
 import flat.util.{Aggregator, MetricCollector}
 import scopt.OParser
@@ -96,20 +97,22 @@ object CLI extends LazyLogging:
         reporter.printTo(Console.err)
         System.exit(1)
 
-      val typeChecker = Checker(using reporter)
-      val program = typeChecker.checkProgram(tree)
+      val typer = Typer(using reporter)
+      val scripts = typer.typeCheck(tree)
       if reporter.hasError then
         reporter.printTo(Console.err)
         System.exit(1)
 
-//      val verifier = Verifier(using reporter)
-//      verifier.verify(???)
-//      if reporter.hasError then
-//        reporter.printTo(Console.err)
-//        System.exit(1)
+      val verifier = Verifier(using reporter)
+      for script <- scripts do
+        //        script.body.foreach(stmt => logger.debug("{}", stmt))
+        verifier.verify(script)
+        if reporter.hasError then
+          reporter.printTo(Console.err)
+          System.exit(1)
 
       reporter.printTo(Console.err) // print warnings if any
-      Console.println("Typing success: " + path.toString)
+      logger.info("Checking passed: " + path.toString)
 
   private def collectFlan(path: os.Path): Seq[os.Path] =
     if os.isDir(path) then os.walk(path).filter(_.ext == "flan")

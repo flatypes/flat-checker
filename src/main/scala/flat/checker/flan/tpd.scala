@@ -401,10 +401,10 @@ object tpd:
       case List(e) => StrToInt(e)(range)
       case _ => throw IllegalArgumentException("StringToInt must have exactly 1 subtree")
 
-  final case class StrFromInt(int: Expr, fmt: NumStrFormat = NumStrFormat())
-                             (val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrFromInt = subtrees match
-      case List(e) => StrFromInt(e, fmt)(range)
+  final case class IntFormat(int: Expr, fmt: NumStrFormat = NumStrFormat())
+                            (val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): IntFormat = subtrees match
+      case List(e) => IntFormat(e, fmt)(range)
       case _ => throw IllegalArgumentException("StringFromInt must have exactly 1 subtree")
 
   @deprecated

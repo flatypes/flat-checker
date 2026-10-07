@@ -63,6 +63,7 @@ class Prover extends LazyLogging:
         inferer.infer(e) match
           case TStr(r1) =>
             logger.debug("Inferred: {} ∈ {}", e.show, r1.pp)
+            logger.debug("Expected: {}", r.pp)
             r1 == r || RESub.check(r1, r)
           case _ => ???
       case And(e1, e2) if e1.isInstanceOf[Or] | e2.isInstanceOf[Or] =>
