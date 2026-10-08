@@ -150,6 +150,10 @@ object StrREOps extends LazyLogging:
       if width <= s.length then s
       else (if zeroPadded then "0" else " ") * (width - s.length) + s
 
+    override def toString: String =
+      val pad = if zeroPadded then "0" else ""
+      s"%$pad$width$conv"
+
   def absFromInt(min: Int, max: Int, fmt: NumStrFormat): StrRE =
     NumConverter(fmt).convert(min, max)
 

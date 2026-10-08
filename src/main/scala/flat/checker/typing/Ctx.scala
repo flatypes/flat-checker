@@ -2,7 +2,6 @@ package flat.checker.typing
 
 import flat.checker.*
 import flat.checker.domain.StrRE
-import flat.checker.flan.TypeOps.erase
 import flat.checker.flan.tpd.*
 import flat.checker.flan.untpd
 import org.eclipse.lsp4j.Range
@@ -21,9 +20,9 @@ final case class ConstInfo(sort: Type, value: Expr)(val range: Range) extends In
 
 final case class MethodInfo(params: List[(untpd.Ident, Type)], returnParams: List[(untpd.Ident, Type)])
                            (val range: Range) extends Info:
-  def paramInfos: List[(String, ValInfo)] = for (id, t) <- params yield id.name -> ValInfo(t.erase)(id.range)
+  def paramInfos: List[(String, ValInfo)] = for (id, t) <- params yield id.name -> ValInfo(t)(id.range)
 
-  def returnInfos: List[(String, VarInfo)] = for (id, t) <- returnParams yield id.name -> VarInfo(t.erase)(id.range)
+  def returnInfos: List[(String, VarInfo)] = for (id, t) <- returnParams yield id.name -> VarInfo(t)(id.range)
 
   def returnType: Type =
     returnParams.map(_._2) match

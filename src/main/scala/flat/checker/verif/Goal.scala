@@ -13,8 +13,8 @@ final case class Goal(premises: List[Expr], conclusion: Expr)
   def have(sides: Expr*): Boolean =
     sides.forall: e =>
       e.simplify match
-        case BoolLit(true) => true
-        case BoolLit(false) => false
+        case BoolConst(true) => true
+        case BoolConst(false) => false
         case e =>
           if !solverSetup then
             premises.foreach(solver.add)

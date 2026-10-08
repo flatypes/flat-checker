@@ -57,7 +57,7 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def block[T](p: Parser[T]): Parser[T] = ":" ~> NEWLINE ~> INDENT ~> p <~ DEDENT
 
   // Types
-  private def typ: Parser[Type] = infixRight("->" ^^^ mkArrowType, optType)
+  private def typ: Parser[Type] = infixR("->" ^^^ mkArrowType, optType)
 
   private def mkArrowType(left: Type, right: Type): Type = left match
     case TupleType(ts) => FunType(ts, right)(left.range.getStart)
@@ -95,11 +95,11 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def binaryOp(op: Parser[Token]): Parser[(Expr, Expr) => Expr] =
     op ^^ { tk => (e1, e2) => BinaryExpr(e1, Ident(tk.value)(tk.span), e2) }
 
-  private def implies: Parser[Expr] = infixRight(binaryOp("==>"), or)
+  private def implies: Parser[Expr] = infixR(binaryOp("==>"), or)
 
-  private def or: Parser[Expr] = infixRight(binaryOp("||"), and)
+  private def or: Parser[Expr] = infixR(binaryOp("||"), and)
 
-  private def and: Parser[Expr] = infixRight(binaryOp("&&"), relational)
+  private def and: Parser[Expr] = infixR(binaryOp("&&"), relational)
 
   private def relational: Parser[Expr] =
     chainedRelational("<=" | "<") | chainedRelational(">=" | ">")
@@ -112,17 +112,17 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def notIn: Parser[Token] =
     "!" ~ "in" ^^ { case tk1 ~ tk2 => Token(KEYWORD, "!in", Span(tk1.span.getStart, tk2.span.getEnd)) }
 
-  private def bitOr: Parser[Expr] = infixLeft(binaryOp("|"), bitXor)
+  private def bitOr: Parser[Expr] = infixL(binaryOp("|"), bitXor)
 
-  private def bitXor: Parser[Expr] = infixLeft(binaryOp("^"), bitAnd)
+  private def bitXor: Parser[Expr] = infixL(binaryOp("^"), bitAnd)
 
-  private def bitAnd: Parser[Expr] = infixLeft(binaryOp("&"), bitShift)
+  private def bitAnd: Parser[Expr] = infixL(binaryOp("&"), bitShift)
 
-  private def bitShift: Parser[Expr] = infixLeft(binaryOp("<<" | ">>"), additive)
+  private def bitShift: Parser[Expr] = infixL(binaryOp("<<" | ">>"), additive)
 
-  private def additive: Parser[Expr] = infixLeft(binaryOp("+" | "-"), multiplicative)
+  private def additive: Parser[Expr] = infixL(binaryOp("+" | "-"), multiplicative)
 
-  private def multiplicative: Parser[Expr] = infixLeft(binaryOp("*" | "/" | "%"), unary)
+  private def multiplicative: Parser[Expr] = infixL(binaryOp("*" | "/" | "%"), unary)
 
   private def unaryOp(op: Parser[Token]): Parser[Expr => Expr] =
     op ^^ { tk => e => UnaryExpr(Ident("prefix_" + tk.value)(tk.span), e) }
@@ -212,9 +212,9 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     "|" ~ expr ~ "|" ^^ { case tk1 ~ e ~ tk2 => Size(e)(Span(tk1.span.getStart, tk2.span.getEnd)) }
 
   // Parsing expressions
-  private def pExpr: Parser[PExpr] = infixRight("|" ^^^ (PUnion(_, _)), pConcat)
+  private def pExpr: Parser[PExpr] = infixR("|" ^^^ (PUnion(_, _)), pConcat)
 
-  private def pConcat: Parser[PExpr] = infixRight(success(PConcat(_, _)), pTerm)
+  private def pConcat: Parser[PExpr] = infixR(success(PConcat(_, _)), pTerm)
 
   private def pTerm: Parser[PExpr] =
     postfix(pStr | pRStr | pRef | pParen, pStarOp | pPlusOp | pOptOp | pRepOp)

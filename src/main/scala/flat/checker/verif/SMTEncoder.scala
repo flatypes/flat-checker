@@ -19,27 +19,28 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
   def encodeSort(sort: Type): cvc5.Sort = sort match
     case IntType => tm.getIntegerSort
     case BoolType => tm.getBooleanSort
-    case CharType => tm.getStringSort
-    case `strType` => tm.getStringSort
+    case StrType => tm.getStringSort
     case ListType(t) => tm.mkSequenceSort(encodeSort(t))
     case SetType(t) => tm.mkSetSort(encodeSort(t))
-    case DictType(tk, tv) => encodeMapSort(tk, tv)
-    case RefinedType(t, _) => encodeSort(t)
+    case MapType(tk, tv) => encodeMapSort(tk, tv)
     case TupleType(ts) => tm.mkTupleSort(ts.map(encodeSort).toArray)
     case FunType(ps, r) => tm.mkFunctionSort(ps.map(encodeSort).toArray, encodeSort(r))
+    case RefinedType(t, _) => encodeSort(t)
     case _ => throw UnsupportedOperationException(s"encode sort ${sort.getClass.getSimpleName}")
 
   def encodeExpr(expr: Expr)(using ctx: Map[String, cvc5.Term]): cvc5.Term = expr match
-    case BoolLit(b) => tm.mkBoolean(b)
-    case IntLit(i) => tm.mkInteger(i.toString)
-    case CharLit(c) => tm.mkString(escapeSMTString(c.toString), true)
-    case StrLit(s) => tm.mkString(escapeSMTString(s), true)
+    case IntConst(i) => tm.mkInteger(i.toString)
+    case BoolConst(b) => tm.mkBoolean(b)
+    case StrConst(s) => tm.mkString(escapeSMTString(s), true)
+    case NullConst() => throw UnsupportedOperationException("encode null")
     case Var(x) =>
       ctx.get(x) match
         case Some(t) => t
         case None => encodeUninterpreted(expr, vars(x), x)
+    case Lambda(ps, e) =>
+      val vars = ps.map(p => tm.mkVar(encodeSort(p.typ)))
+      mkLambda(vars, encodeExpr(e)(using ctx ++ (ps.map(_.name) zip vars).toMap))
     case Apply(ef, es) => tm.mkTerm(APPLY_UF, (encodeExpr(ef) :: es.map(encodeExpr)).toArray)
-    case Lambda(ps, e) => ???
 
     // Basic
     case Eq(e1, e2) => tm.mkTerm(EQUAL, encodeExpr(e1), encodeExpr(e2))
@@ -64,81 +65,62 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
     case Le(e1, e2) => tm.mkTerm(LEQ, encodeExpr(e1), encodeExpr(e2))
     case Lt(e1, e2) => tm.mkTerm(LT, encodeExpr(e1), encodeExpr(e2))
 
-    // Char
-    case CharIn(cat, e) => encodeUninterpreted(expr, BoolType)
-    case CharToCode(e) => tm.mkTerm(STRING_TO_CODE, encodeExpr(e))
-    case CodeToChar(e) => tm.mkTerm(STRING_FROM_CODE, encodeExpr(e))
-    case CharToString(e) => encodeExpr(e)
-
-    // Seq
-    case e@SeqLit(es) =>
-      val elems = es.map(encodeExpr)
-      e.elemSort match
-        case CharType =>
-          if elems.isEmpty then tm.mkString("")
-          else tm.mkTerm(STRING_CONCAT, elems.toArray)
-        case _ =>
-          mkSeq(encodeSort(e.elemSort), elems)
-    case StrLength(e) =>
-      val seq = encodeExpr(e)
-      tm.mkTerm(if seq.getSort.isString then STRING_LENGTH else SEQ_LENGTH, seq)
-    case StrAt(e, ei) =>
-      val seq = encodeExpr(e)
-      tm.mkTerm(if seq.getSort.isString then STRING_CHARAT else SEQ_NTH, seq, encodeExpr(ei))
-    case SeqUpdate(e, ei, ex) =>
-      val seq = encodeExpr(e)
-      if seq.getSort.isString then
-        tm.mkTerm(STRING_UPDATE, seq, encodeExpr(ei), encodeExpr(ex))
-      else
-        tm.mkTerm(SEQ_UPDATE, seq, encodeExpr(ei), tm.mkTerm(SEQ_UNIT, encodeExpr(ex)))
-    case StrSlice(e, ei, ej) =>
-      val seq = encodeExpr(e)
+    // String: access
+    case StrLength(e) => tm.mkTerm(STRING_LENGTH, encodeExpr(e))
+    case CharAt(e, ei) => tm.mkTerm(STRING_CHARAT, encodeExpr(e), encodeExpr(ei))
+    case Substr(e, ei, ej) =>
       val start = encodeExpr(ei)
-      val end = ej match
-        case NoExpr => tm.mkTerm(if seq.getSort.isString then STRING_LENGTH else SEQ_LENGTH, seq)
-        case _ => encodeExpr(ej)
-      val count = tm.mkTerm(SUB, end, start)
-      tm.mkTerm(if seq.getSort.isString then STRING_SUBSTR else SEQ_EXTRACT, seq, start, count)
-    case StrConcat(e1, e2) =>
-      val seq1 = encodeExpr(e1)
-      tm.mkTerm(if seq1.getSort.isString then STRING_CONCAT else SEQ_CONCAT, seq1, encodeExpr(e2))
-    case StrReverse(e) =>
-      val seq = encodeExpr(e)
-      tm.mkTerm(if seq.getSort.isString then STRING_REV else SEQ_REV, seq)
-    case StrStartsWith(e, et) =>
-      val seq = encodeExpr(e)
-      tm.mkTerm(if seq.getSort.isString then STRING_PREFIX else SEQ_PREFIX, encodeExpr(et), seq)
-    case StrEndsWith(e, et) =>
-      val seq = encodeExpr(e)
-      tm.mkTerm(if seq.getSort.isString then STRING_SUFFIX else SEQ_SUFFIX, encodeExpr(et), seq)
+      val end = encodeExpr(ej)
+      tm.mkTerm(STRING_SUBSTR, encodeExpr(e), start, tm.mkTerm(SUB, end, start))
 
-    // Seq find
-    case ListContainsSlice(e, et) =>
-      val seq = encodeExpr(e)
-      tm.mkTerm(if seq.getSort.isString then STRING_CONTAINS else SEQ_CONTAINS, seq, encodeExpr(et))
-    case StrIndexOf(e, et, ei) =>
-      val seq = encodeExpr(e)
-      tm.mkTerm(if seq.getSort.isString then STRING_INDEXOF else SEQ_INDEXOF,
-        seq, encodeExpr(et), encodeExpr(ei))
-    case StrCount(e, et) =>
-      val seq = encodeExpr(e)
-      if seq.getSort.isString then
-        mkApplyUF(strCount, seq, encodeExpr(et))
-      else
-        encodeUninterpreted(expr, IntType)
-    case _: ListForall => encodeUninterpreted(expr, BoolType)
+    // String: construction
+    case StrConcat(e1, e2) => tm.mkTerm(STRING_CONCAT, encodeExpr(e1), encodeExpr(e2))
+    case StrReverse(e) => tm.mkTerm(STRING_REV, encodeExpr(e))
+    case _: StrJoin => encodeUninterpreted(expr, StrType)
 
-    // String-specific
-    case _: StrSplit => encodeUninterpreted(expr, ListType(strType))
-    case _: StrTrim => encodeUninterpreted(expr, strType)
+    // String: test
+    case StrStartsWith(e, et) => tm.mkTerm(STRING_PREFIX, encodeExpr(et), encodeExpr(e))
+    case StrEndsWith(e, et) => tm.mkTerm(STRING_SUFFIX, encodeExpr(et), encodeExpr(e))
+    case StrIs(_, _) => encodeUninterpreted(expr, BoolType)
+    case StrIn(_, _) => encodeUninterpreted(expr, BoolType)
+
+    // String: search
+    case StrContains(e, et) => tm.mkTerm(STRING_CONTAINS, encodeExpr(e), encodeExpr(et))
+    case StrIndexOf(e, et, ei) => tm.mkTerm(STRING_INDEXOF, encodeExpr(e), encodeExpr(et), encodeExpr(ei))
+    case StrCount(e, et) => mkApplyUF(strCount, encodeExpr(e), encodeExpr(et))
+    case _: StrSplit => encodeUninterpreted(expr, ListType(StrType))
+    case _: StrReplace => encodeUninterpreted(expr, StrType)
+
+    // String: conversion
+    case _: StrTrim => encodeUninterpreted(expr, StrType)
     case StrToLower(e) => tm.mkTerm(STRING_TO_LOWER, encodeExpr(e))
     case StrToUpper(e) => tm.mkTerm(STRING_TO_UPPER, encodeExpr(e))
     case StrToInt(e) => tm.mkTerm(STRING_TO_INT, encodeExpr(e))
-    case IntFormat(e, _) => tm.mkTerm(STRING_FROM_INT, encodeExpr(e))
-    case StrIsAscii(e) => encodeUninterpreted(expr, BoolType)
+    case _: IntFormat => encodeUninterpreted(expr, StrType)
+    case CharToCode(e) => tm.mkTerm(STRING_TO_CODE, encodeExpr(e))
+    case CodeToChar(e) => tm.mkTerm(STRING_FROM_CODE, encodeExpr(e))
+
+    // List
+    case e@ListExpr(es) => mkSeq(encodeSort(e.elemSort), es.map(encodeExpr))
+    case ListLength(e) => tm.mkTerm(SEQ_LENGTH, encodeExpr(e))
+    case ListSelect(e, ei) => tm.mkTerm(SEQ_NTH, encodeExpr(e), encodeExpr(ei))
+    case ListSlice(e, ei, ej) =>
+      val start = encodeExpr(ei)
+      val end = encodeExpr(ej)
+      tm.mkTerm(SEQ_EXTRACT, encodeExpr(e), start, tm.mkTerm(SUB, end, start))
+    case ListConcat(e1, e2) => tm.mkTerm(SEQ_CONCAT, encodeExpr(e1), encodeExpr(e2))
+    case ListUpdate(e, ei, ex) =>
+      tm.mkTerm(SEQ_UPDATE, encodeExpr(e), encodeExpr(ei), tm.mkTerm(SEQ_UNIT, encodeExpr(ex)))
+    case ListContains(e, ev) => tm.mkTerm(SEQ_CONTAINS, encodeExpr(e), encodeExpr(ev))
+
+    // List: higher-order
+    case _: ListForall => encodeUninterpreted(expr, BoolType)
+    case _: ListExists => encodeUninterpreted(expr, BoolType)
+    case _: ListMap => encodeUninterpreted(expr, ListType(StrType))
+    case _: ListFilter => encodeUninterpreted(expr, ListType(StrType))
 
     // Set
-    case e@SetLit(es) => mkSet(encodeSort(e.elemSort), es.map(encodeExpr))
+    case e@SetExpr(es) => mkSet(encodeSort(e.elemSort), es.map(encodeExpr))
     case SetSize(e) => tm.mkTerm(SET_CARD, encodeExpr(e))
     case SetContains(e, ev) => tm.mkTerm(SET_MEMBER, encodeExpr(ev), encodeExpr(e))
     case Subset(e1, e2) => tm.mkTerm(SET_SUBSET, encodeExpr(e1), encodeExpr(e2))
@@ -147,8 +129,8 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
     case SetDiff(e1, e2) => tm.mkTerm(SET_MINUS, encodeExpr(e1), encodeExpr(e2))
     case SetForall(e, ep) => tm.mkTerm(SET_ALL, encodeExpr(ep), encodeExpr(e))
 
-    // Map Operations
-    case e@MapLit(eks, evs) =>
+    // Map
+    case e@MapExpr(eks, evs) =>
       val keySort = encodeSort(e.keySort)
       val keys = eks.map(encodeExpr)
       val arrSort = tm.mkArraySort(keySort, encodeSort(e.valSort))
@@ -179,12 +161,11 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
       val key = encodeExpr(ek)
       tm.mkTuple(Array(tm.mkTerm(SET_INSERT, key, keys), tm.mkTerm(STORE, arr, key, encodeExpr(ev))))
 
-    // Tuple Operations
+    // Tuple
     case TupleExpr(es) => tm.mkTuple(es.map(encodeExpr).toArray)
     case TupleSelect(i, e) => encodeTupleSelect(i, e)
 
     // Others
-    case StringInLang(_, _) => encodeUninterpreted(expr, BoolType)
     case _ => throw UnsupportedOperationException(s"encode ${expr.getClass.getSimpleName}")
 
   // DSL

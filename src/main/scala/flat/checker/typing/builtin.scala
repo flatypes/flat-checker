@@ -3,7 +3,7 @@ package flat.checker.typing
 import flat.checker.domain.CharSet
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.flan.TypeOps.erase
-import flat.checker.flan.tpd.{BoolType as bool, CharType as char, IntType as int, strType as str, *}
+import flat.checker.flan.tpd.{BoolType as bool, IntType as int, StrType as str, *}
 import org.eclipse.lsp4j.Range
 
 final case class Member(funType: FunType, builder: PartialFunction[List[Expr], Range => Expr]):
@@ -19,7 +19,7 @@ object builtin:
     case `str` => accessStrMember(name)
     case ListType(t) => accessListMember(t, name)
     case SetType(t) => accessSetMember(t, name)
-    case DictType(tk, tv) => accessMapMember(tk, tv, name)
+    case MapType(tk, tv) => accessMapMember(tk, tv, name)
     case TupleType(ts) => accessTupleMember(ts, name)
     case _ => Nil
 
@@ -68,10 +68,10 @@ object builtin:
   private def accessStrMember(name: String): List[Member] = name match
     // access
     case "length" | "size" => List(Member(() -> int, { case List(s) => StrLength(s) }))
-    case "select" => List(Member(int -> str, { case List(s, i) => StrAt(s, i) }))
-    case "slice" => List(
-      Member(int -> str, { case List(s, i) => StrSlice(s, i) }),
-      Member((int, int) -> str, { case List(s, i, j) => StrSlice(s, i, j) }))
+    case "charAt" | "select" => List(Member(int -> str, { case List(s, i) => CharAt(s, i) }))
+    case "substr" | "slice" => List(
+      Member(int -> str, { case List(s, i) => Substr(s, i, StrLength(s)) }),
+      Member((int, int) -> str, { case List(s, i, j) => Substr(s, i, j) }))
     // construction
     case "+" => List(Member(str -> str, { case List(s1, s2) => StrConcat(s1, s2) }))
     case "reverse" => List(Member(() -> str, { case List(s) => StrReverse(s) }))
@@ -107,19 +107,19 @@ object builtin:
   private def accessListMember(t: Type, name: String): List[Member] = name match
     // access
     case "length" | "size" => List(Member(() -> int, { case List(s) => ListLength(s) }))
-    case "select" => List(Member(int -> t, { case List(s, i) => ListAt(s, i) }))
+    case "select" => List(Member(int -> t, { case List(s, i) => ListSelect(s, i) }))
     case "slice" => List(
       Member(int -> ListType(t), { case List(s, i) => ListSlice(s, i, ListLength(s)) }),
       Member((int, int) -> ListType(t), { case List(s, i, j) => ListSlice(s, i, j) }))
-    case "head" => List(Member(() -> t, { case List(s) => ListAt(s, IntLit(0)) }))
+    case "head" => List(Member(() -> t, { case List(s) => ListSelect(s, IntConst(0)) }))
     case "tail" => List(
-      Member(() -> ListType(t), { case List(s) => ListSlice(s, IntLit(1), ListLength(s)) }))
+      Member(() -> ListType(t), { case List(s) => ListSlice(s, IntConst(1), ListLength(s)) }))
     case "init" => List(
-      Member(() -> ListType(t), { case List(s) => ListSlice(s, IntLit(0), Sub(ListLength(s), IntLit(1))) }))
-    case "last" => List(Member(() -> t, { case List(s) => ListAt(s, Sub(ListLength(s), IntLit(1))) }))
+      Member(() -> ListType(t), { case List(s) => ListSlice(s, IntConst(0), Sub(ListLength(s), IntConst(1))) }))
+    case "last" => List(Member(() -> t, { case List(s) => ListSelect(s, Sub(ListLength(s), IntConst(1))) }))
     // construction
     case "+" => List(Member(ListType(t) -> ListType(t), { case List(s1, s2) => StrConcat(s1, s2) }))
-    case "update" => List(Member((int, t) -> ListType(t), { case List(s, i, x) => SeqUpdate(s, i, x) }))
+    case "update" => List(Member((int, t) -> ListType(t), { case List(s, i, x) => ListUpdate(s, i, x) }))
     // test
     case "contains" => List(Member(t -> bool, { case List(s, x) => ListContains(s, x) }))
     // higher-order functions
@@ -149,7 +149,7 @@ object builtin:
     case "size" => List(Member(() -> int, { case List(m) => MapSize(m) }))
     case "contains" => List(Member(k -> bool, { case List(m, x) => MapContains(m, x) }))
     case "select" => List(Member(k -> v, { case List(m, x) => MapSelect(m, x) }))
-    case "update" => List(Member((k, v) -> DictType(k, v), { case List(m, k, v) => MapUpdate(m, k, v) }))
+    case "update" => List(Member((k, v) -> MapType(k, v), { case List(m, k, v) => MapUpdate(m, k, v) }))
     case _ => Nil
 
   private def accessTupleMember(elemTypes: List[Type], name: String): List[Member] = name match

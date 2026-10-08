@@ -24,7 +24,7 @@ class Prover extends LazyLogging:
         logger.debug("Case if: {}", e.show)
         logger.debug("Subgoal 1:\n{}", showGoal(goal1))
         if prove(goal1) then
-          val goal2 = Goal(ps2 :+ Not(e), c2)(using goal.sorts)
+          val goal2 = Goal(ps2 :+ Not(e).simplify, c2)(using goal.sorts)
           logger.debug("Subgoal 2:\n{}", showGoal(goal2))
           prove(goal2)
         else
@@ -58,12 +58,11 @@ class Prover extends LazyLogging:
   def prove1(goal: Goal): Boolean =
     goal.conclusion match
       // refinement type checking
-      case StringInLang(e, r) =>
+      case StrIn(e, r) =>
         val inferer = Inferer(goal)
         inferer.infer(e) match
           case TStr(r1) =>
             logger.debug("Inferred: {} ∈ {}", e.show, r1.pp)
-            logger.debug("Expected: {}", r.pp)
             r1 == r || RESub.check(r1, r)
           case _ => ???
       case And(e1, e2) if e1.isInstanceOf[Or] | e2.isInstanceOf[Or] =>
@@ -87,10 +86,10 @@ class Prover extends LazyLogging:
   private def caseIf(cond: Expr, expr: Expr)(using sorts: Map[String, Type]): (Expr, Expr) =
     val e1 = expr.transform:
       case Ite(`cond`, e1, _) => e1
-      case `cond` => BoolLit(true)
+      case `cond` => BoolConst(true)
     val e2 = expr.transform:
       case Ite(`cond`, _, e2) => e2
-      case `cond` => BoolLit(false)
+      case `cond` => BoolConst(false)
     (e1.simplify, e2.simplify)
 
   private inline def isStrOrStrList(e: Expr)(using sorts: Map[String, Type]): Boolean =
@@ -101,50 +100,30 @@ class Prover extends LazyLogging:
     val inferer = Inferer(goal)
     val lemmas = ListBuffer.empty[Expr]
     goal.conclusion.collect:
-      case e: CharIn =>
-        inferer.infer(e) match
-          case TBool(set) =>
-            lemmas ++= inBoolSet(e, set)
-          case _ => ()
-      case e@StrLength(es) if isStrOrStrList(es)(using goal.sorts) =>
+      case e: StrLength =>
         inferer.infer(e) match
           case TNat(set) =>
             lemmas += inNatSet(e, set)
-          case _ => ()
-      case e@StrAt(es, _) if isStrOrStrList(es)(using goal.sorts) =>
+          case _ =>
+      case e: CharAt =>
         inferer.infer(e) match
           case TChar(set) =>
             lemmas += inCharSet(e, set)
           case _ => ()
-      case e@StrSlice(es, _, _) if isStrOrStrList(es)(using goal.sorts) =>
+      case e: Substr =>
         inferer.infer(e) match
           case TStr(r) =>
             lemmas += inRegEx(e, r)
           case _ => ()
-      case e@StrStartsWith(es, _) if isStrOrStrList(es)(using goal.sorts) =>
+      case e: (StrStartsWith | StrEndsWith | StrContains | StrIs) =>
         inferer.infer(e) match
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
           case _ => ()
-      case e@StrEndsWith(es, _) if isStrOrStrList(es)(using goal.sorts) =>
-        inferer.infer(e) match
-          case TBool(set) =>
-            lemmas ++= inBoolSet(e, set)
-          case _ => ()
-      case e@ListContainsSlice(es, _) if isStrOrStrList(es)(using goal.sorts) =>
-        inferer.infer(e) match
-          case TBool(set) =>
-            lemmas ++= inBoolSet(e, set)
-          case _ => ()
-      case e@StrIndexOf(es, _, IntLit(0)) if isStrOrStrList(es)(using goal.sorts) =>
+      case e@StrIndexOf(es, _, IntConst(0)) =>
         inferer.infer(e) match
           case TIndex(set) =>
             lemmas += inIndexSet(e, set)
-          case _ => ()
-      case e: StrIsAscii =>
-        inferer.infer(e) match
-          case TBool(set) =>
-            lemmas ++= inBoolSet(e, set)
           case _ => ()
       case e: StrToInt =>
         inferer.infer(e) match
@@ -152,44 +131,44 @@ class Prover extends LazyLogging:
             lemmas += inNatRange(e, range)
           case _ => ()
 
-      case e@Eq(_, StrLit(_)) =>
+      case e@Eq(_, StrConst(_)) =>
         inferer.infer(e) match
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
           case _ => ()
-      case e@Ne(_, StrLit(_)) =>
+      case e@Ne(_, StrConst(_)) =>
         inferer.infer(e) match
           case TBool(set) =>
             lemmas ++= inBoolSet(e, set)
           case _ => ()
 
       // Algebraic properties for count
-      case e@StrCount(StrSlice(es, ei, ej), StrLit(s)) if s.length == 1 && goal.have(Lt(ei, ej)) =>
+      case e@StrCount(Substr(es, ei, ej), StrConst(s)) if s.length == 1 && goal.have(Lt(ei, ej)) =>
         val c = s.head
         // If `i < j`, then `s[i:j].count(c) == s[i+1:j].count(c) + (if s[i] == c then 1 else 0)`
         goal.premises.collectFirst:
-          case Eq(StrAt(`es`, ek), CharLit(c)) if goal.have(Eq(ek, ei)) =>
-            lemmas += Eq(e, Add(StrCount(StrSlice(es, Add(ei, IntLit(1)), ej), StrLit(s)), IntLit(1)))
-          case Ne(StrAt(`es`, ek), CharLit(c)) if goal.have(Eq(ek, ei)) =>
-            lemmas += Eq(e, StrCount(StrSlice(es, Add(ei, IntLit(1)), ej), StrLit(s)))
+          case Eq(CharAt(`es`, ek), CharConst(c)) if goal.have(Eq(ek, ei)) =>
+            lemmas += Eq(e, Add(StrCount(Substr(es, Add(ei, IntConst(1)), ej), StrConst(s)), IntConst(1)))
+          case Ne(CharAt(`es`, ek), CharConst(c)) if goal.have(Eq(ek, ei)) =>
+            lemmas += Eq(e, StrCount(Substr(es, Add(ei, IntConst(1)), ej), StrConst(s)))
 
     lemmas.toList
 
   private def inNatSet(elem: Expr, set: CountingRE): Expr =
     if set.isFinite then
-      mkOr(for n <- set.toFinSet.toList.sorted yield Eq(elem, IntLit(n)))
+      mkOr(for n <- set.toFinSet.toList.sorted yield Eq(elem, IntConst(n)))
     else
-      Le(IntLit(set.min), elem)
+      Le(IntConst(set.min), elem)
 
   private def inCharSet(elem: Expr, set: CharSet): Expr =
-    if set.pos then mkOr(for c <- set.chars.toList.sorted yield Eq(elem, CharLit(c)))
-    else mkAnd(for c <- set.chars.toList.sorted yield Ne(elem, CharLit(c)))
+    if set.pos then mkOr(for c <- set.chars.toList.sorted yield Eq(elem, CharConst(c)))
+    else mkAnd(for c <- set.chars.toList.sorted yield Ne(elem, CharConst(c)))
 
   private def inRegEx(elem: Expr, r: StrRE): Expr = r match
     case RegEx.Lit(a) => inCharSet(elem, a)
     case _ =>
-      if r.isFiniteLang then mkOr(for s <- r.getLang.toList.sorted yield Eq(elem, StrLit(s)))
-      else StringInLang(elem, r)
+      if r.isFiniteLang then mkOr(for s <- r.getLang.toList.sorted yield Eq(elem, StrConst(s)))
+      else StrIn(elem, r)
 
   private def inBoolSet(elem: Expr, set: BoolSet): List[Expr] = set match
     case BoolSet.True => List(elem)
@@ -200,17 +179,17 @@ class Prover extends LazyLogging:
     val cases = ListBuffer.empty[Expr]
     if set.neg.nonEmpty then
       for i <- set.neg.toList.sorted do
-        cases += Eq(elem, IntLit(i))
+        cases += Eq(elem, IntConst(i))
     if set.pos.isFinite then
       for n <- set.pos.toFinSet.toList.sorted do
-        cases += Eq(elem, IntLit(n))
+        cases += Eq(elem, IntConst(n))
     else
-      cases += Le(IntLit(set.pos.min), elem)
+      cases += Le(IntConst(set.pos.min), elem)
     mkOr(cases.toList)
 
   private def inNatRange(elem: Expr, range: NatRange): Expr = range.max match
-    case Some(max) => And(Le(IntLit(range.min), elem), Le(elem, IntLit(max)))
-    case None => Le(IntLit(range.min), elem)
+    case Some(max) => And(Le(IntConst(range.min), elem), Le(elem, IntConst(max)))
+    case None => Le(IntConst(range.min), elem)
 
   private def showGoal(goal: Goal): String =
     val lines = for e <- goal.premises yield s"  ${e.show}\n"

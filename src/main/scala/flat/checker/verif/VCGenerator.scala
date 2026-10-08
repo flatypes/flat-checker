@@ -58,14 +58,14 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
   def wlp(stmt: Stmt, post: VC, returnPost: VC, breakPost: VC, continuePost: VC): VC =
     stmt match
       // Assignments
-      case Assign(x, Some(e)) => safetyCheck(e) && typeCheck(e, types(x)) && post.subst(Map(x -> e))
-      case Assign(x, None) => post.subst(Map(x -> Var(fresh(x))))
+      case Assign(x, e) => safetyCheck(e) && typeCheck(e, types(x)) && post.subst(Map(x -> e))
+      case Havoc(x) => post.subst(Map(x -> Var(fresh(x))))
       case ExprStmt(e) => safetyCheck(e) & post
       // Proof derivatives
       case Assume(e) => safetyCheck(e) && e -> post
       case Assert(e) => (safetyCheck(e) && mkVCAssert(e, e => AssertNotProvedError(e.range))) & post
       case GAssert(e, error) => VCAssert(e, error) & post
-      case s@Abort() => VCAssert(BoolLit(false), AssertNotProvedError(s.range))
+      case s@Abort() => VCAssert(BoolConst(false), AssertNotProvedError(s.range))
       // Conditional
       case If(e, thenBody, elseBody) =>
         val wlpThen = wlp(thenBody, post, returnPost, breakPost, continuePost)
@@ -97,18 +97,10 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
     case Or(e1, e2) => safetyCheck(e1) && Not(e1) -> safetyCheck(e2)
     case Ite(e, e1, e2) => safetyCheck(e1) && (e -> safetyCheck(e1) & Not(e) -> safetyCheck(e2))
     // List
-    case StrAt(e, ei) =>
-      VCAssert(And(Le(IntLit(0), ei), Lt(ei, StrLength(e))), IndexOutOfBoundsError(ei.range))
-    case StrSlice(_, ei, ej) =>
-      VCAssert(Le(IntLit(0), ei), IndexNegError(ei.range)) & VCAssert(Le(IntLit(0), ej), IndexNegError(ej.range))
-
-    // Method call
-    case Apply(MethodRef(f), es) =>
-      val m = methodInfos(f)
-      val vcType = mkVCAnd(for (e, VarDecl(_, t)) <- es zip m.params yield typeCheck(e, t))
-      val pre = mkAnd(m.requires).subst((m.paramNames zip es).toMap)
-      val vcPre = mkVCAssert(pre, e => PreNotProvedError(e.range))
-      vcType & vcPre
+    case CharAt(e, ei) =>
+      VCAssert(And(Le(IntConst(0), ei), Lt(ei, StrLength(e))), IndexOutOfBoundsError(ei.range))
+    case Substr(_, ei, ej) =>
+      VCAssert(Le(IntConst(0), ei), IndexNegError(ei.range)) & VCAssert(Le(IntConst(0), ej), IndexNegError(ej.range))
 
     // others
     case _ =>
@@ -146,19 +138,17 @@ class VCDischarger(methodInfos: Map[String, MethodInfo])(using reporter: Reporte
     case VCAnd(vc1, vc2) => discharge(vc1, types, premises) & discharge(vc2, types, premises)
     case VCAndSC(vc1, vc2) => discharge(vc1, types, premises) && discharge(vc2, types, premises)
     case VCImplies(e, vc) =>
-      val cond = e.simplify
-      val newPremises = cond.conjuncts ++ extractPost(cond)
-      val newTypes = newPremises.collect { case Ne(Var(x), NullLit()) => x -> narrowNotNull(types(x)) }
+      val newPremises = e.simplify.conjuncts
+      val newTypes = newPremises.collect { case Ne(Var(x), NullConst()) => x -> narrowNotNull(types(x)) }
       discharge(vc, types ++ newTypes, premises ++ newPremises)
-    case VCAssert(e, error) =>
-      val cond = e.simplify
-      assert(cond, types, premises ++ extractPost(cond), error)
+    case VCAssert(e, error) => assert(e, types, premises, error)
 
+  @deprecated
   private def extractPost(expr: Expr): List[Expr] = expr match
     case Apply(MethodRef(f), es) =>
       val m = methodInfos(f)
       mkAnd(m.ensures) match
-        case BoolLit(true) => Nil
+        case BoolConst(true) => Nil
         case e =>
           val m1 = (for (x, e) <- m.paramNames zip es yield x -> e).toMap
           val m2 = m.returnNames match
@@ -181,8 +171,8 @@ class VCDischarger(methodInfos: Map[String, MethodInfo])(using reporter: Reporte
 
   private def assert(cond: Expr, types: Map[String, Type], premises: List[Expr],
                      error: => VerifError): Boolean =
+    logger.info("Goal {}:\n{}", goalCounter.incrementAndGet(), showGoal(premises, cond))
     val conclusion = cond.simplify
-    logger.info("Goal {}:\n{}", goalCounter.incrementAndGet(), showGoal(premises, conclusion))
     if prover.prove(Goal(premises, conclusion.simplify)(using types)) then
       logger.info("PROVED")
       true

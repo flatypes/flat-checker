@@ -2,10 +2,10 @@ type Year = {y: Int | 0 <= y <= 9999}
 type Month = {m: Int | 1 <= m <= 12}
 type Day = {d: Int | 1 <= d <= 31}
 
-lang Y = r"[0-9]{4}"
-lang M = r"0[1-9]|1[0-2]"
-lang D = r"0[1-9]|[12][0-9]|3[01]"
-lang ISODate = Y "-" M "-" D
+lang Y = r'[0-9]{4}'
+lang M = r'0[1-9]|1[0-2]'
+lang D = r'0[1-9]|[12][0-9]|3[01]'
+lang ISODate = Y '-' M '-' D
 
 /** Return the date formatted according to ISO.
     This is 'YYYY-MM-DD'.
@@ -13,4 +13,4 @@ lang ISODate = Y "-" M "-" D
     - https://www.w3.org/TR/NOTE-datetime
     - https://www.cl.cam.ac.uk/~mgk25/iso-time.html */
 def format_iso_date(year: Year, month: Month, day: Day) -> ISODate:
-    return "%04d-%02d-%02d" % (year, month, day)
+    return '%04d-%02d-%02d' % (year, month, day)

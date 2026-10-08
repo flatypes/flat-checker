@@ -24,11 +24,15 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     val locals = ListBuffer.empty[VarDecl]
     val body = ListBuffer.empty[Stmt]
     val typer = API(body)
-    // load parameters and check preconditions
+    // load parameters
     for (x, paramInfo) <- info.paramInfos do
       ctx = ctx.define(x, paramInfo)
       locals += VarDecl(x, paramInfo.typ.erase)
-    // load return variables and check postconditions
+      paramInfo.typ match
+        case RefinedType(_, p) =>
+          body += Assume(p.subst(Map("_" -> Var(x))))
+        case _ =>
+    // load return variables
     for (x, paramInfo) <- info.returnInfos do
       ctx = ctx.define(x, paramInfo)
       locals += VarDecl(x, paramInfo.typ.erase)
@@ -81,11 +85,11 @@ class Typer(using reporter: Reporter) extends LazyLogging:
         val expr = typer.check(e, BoolType, ctx)
         body += Assert(expr)
       case untpd.Abort(e) =>
-        typer.check(e, strType, ctx)
+        typer.check(e, StrType, ctx)
         body += Abort()(e.range)
 
       case untpd.If(e: untpd.Expr, List(untpd.Abort(em)), Nil) =>
-        typer.check(em, strType, ctx)
+        typer.check(em, StrType, ctx)
         val cond = typer.check(e, BoolType, ctx)
         body += Assert(Not(cond))
       case untpd.If(g, b1, b2) =>
@@ -100,12 +104,6 @@ class Typer(using reporter: Reporter) extends LazyLogging:
         body += Return()(ret.range)
       case ret@untpd.Return(Some(e)) =>
         val value = typer.check(e, info.returnType, ctx)
-        info.returnParams match
-          case List((id, _)) =>
-            body += Assign(id.name, value)
-          case ps =>
-            for (id, i) <- ps.map(_._1).zipWithIndex do
-              body += Assign(id.name, TupleSelect(i, value)(e.range))
         body += Return()(ret.range)
 
       case s@untpd.While(g, _, b) =>
@@ -129,7 +127,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       case s@untpd.For(id, e, _, b) =>
         val (iter, iterSort) = typer.infer(e, ctx)
         val elemSort = iterSort match
-          case `strType` => strType
+          case StrType => StrType
           case ListType(elemSort) => elemSort
           case _ =>
             reporter.reportTypeMismatch(e.range, "list", iterSort)
@@ -208,7 +206,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
           body += Assign(fresh, value)
           val list = Var(fresh)(value.range)
           for (x, i) <- xs.zipWithIndex do
-            val e = StrAt(list, IntLit(i)(value.range))(value.range)
+            val e = CharAt(list, IntConst(i)(value.range))(value.range)
             assign(x, e, s)
         case _ =>
           reporter.reportTypeMismatch(value.range, "list", valueType)

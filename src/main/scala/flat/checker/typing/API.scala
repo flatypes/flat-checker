@@ -8,7 +8,6 @@ import flat.checker.flan.*
 import flat.checker.flan.Show.*
 import flat.checker.flan.TypeOps.*
 import flat.checker.flan.tpd.*
-import flat.checker.flan.untpd.{IntConst, IntRange}
 import flat.checker.verif.ReftNotProvedError
 import org.eclipse.lsp4j.{Position, Range as Span}
 
@@ -20,7 +19,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
     case t@untpd.TypeRef(x) =>
       ctx.lookup(x) match
         case Some(TypeInfo(typ)) => typ
-        case Some(LangInfo(r)) => RefinedType(strType, StringInLang(Var("_"), r))
+        case Some(LangInfo(r)) => RefinedType(StrType, StrIn(Var("_"), r))
         case Some(_) =>
           reporter.reportNotType(t.range, x)
           NoType
@@ -28,14 +27,14 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
           x match
             case "int" | "Int" => IntType
             case "bool" | "Bool" => BoolType
-            case "str" | "Str" => strType
+            case "str" | "Str" => StrType
             case _ =>
               reporter.reportNameUndefined(t.range)
               NoType
 
     case untpd.GenericType(untpd.Ident("List"), List(t)) => ListType(normalize(t, ctx))
     case untpd.GenericType(untpd.Ident("Set"), List(t)) => SetType(normalize(t, ctx))
-    case untpd.GenericType(untpd.Ident("Map"), List(tk, tv)) => DictType(normalize(tk, ctx), normalize(tv, ctx))
+    case untpd.GenericType(untpd.Ident("Map"), List(tk, tv)) => MapType(normalize(tk, ctx), normalize(tv, ctx))
     case t@untpd.GenericType(_, _) =>
       reporter.reportNameUndefined(t.range)
       NoType
@@ -64,7 +63,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
     case untpd.PPlus(l) => translate(l, ctx).plus
     case untpd.POpt(l) => translate(l, ctx).opt
     case untpd.PRep(e, i: BigInt) => translate(e, ctx) ^ i.toInt
-    case untpd.PRep(e, IntRange(i1, i2)) => translate(e, ctx).loop(i1.toInt, i2.map(_.toInt))
+    case untpd.PRep(e, untpd.IntRange(i1, i2)) => translate(e, ctx).loop(i1.toInt, i2.map(_.toInt))
     case untpd.PConcat(l1, l2) => translate(l1, ctx) * translate(l2, ctx)
     case untpd.PUnion(l1, l2) => translate(l1, ctx) + translate(l2, ctx)
     case untpd.PCharSet(neg, items) =>
@@ -75,11 +74,10 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
     case untpd.PAllChar => RegEx.symbolSet(CharSet.full)
 
   def infer(expr: untpd.Expr, ctx: Ctx): (Expr, Type) = expr match
-    case untpd.IntConst(v) => (IntLit(v)(expr.range), IntType)
-    case untpd.BoolConst(v) => (BoolLit(v)(expr.range), BoolType)
-    case untpd.CharConst(v) => (CharLit(v)(expr.range), CharType)
-    case untpd.StrConst(v) => (StrLit(v)(expr.range), strType)
-    case untpd.NullConst() => (NullLit()(expr.range), NullType)
+    case untpd.IntConst(v) => (IntConst(v)(expr.range), IntType)
+    case untpd.BoolConst(v) => (BoolConst(v)(expr.range), BoolType)
+    case untpd.StrConst(v) => (StrConst(v)(expr.range), StrType)
+    case untpd.NullConst() => (NullConst()(expr.range), NullType)
 
     case untpd.TermRef(x) =>
       ctx.lookup(x) match
@@ -101,7 +99,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       val (firstElem, elemType) = infer(e, ctx)
       val elemSort = elemType.erase
       val otherElems = es.map(check(_, elemSort, ctx))
-      (SeqLit(firstElem :: otherElems)(elemSort, expr.range), ListType(elemSort))
+      (ListExpr(firstElem :: otherElems)(elemSort, expr.range), ListType(elemSort))
 
     case untpd.SetExpr(Nil) =>
       reporter.reportMissingTypeAnnot(expr.range)
@@ -110,7 +108,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       val (firstElem, elemType) = infer(e, ctx)
       val elemSort = elemType.erase
       val otherElems = es.map(check(_, elemSort, ctx))
-      (SetLit(firstElem :: otherElems)(elemSort, expr.range), SetType(elemSort))
+      (SetExpr(firstElem :: otherElems)(elemSort, expr.range), SetType(elemSort))
 
     case untpd.MapExpr(Nil) =>
       reporter.reportMissingTypeAnnot(expr.range)
@@ -121,8 +119,8 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       val otherKeys = eks.map(check(_, keyType, ctx))
       val (firstVal, valType) = infer(ev, ctx)
       val otherVals = evs.map(check(_, valType, ctx))
-      (MapLit(firstKey :: otherKeys, firstVal :: otherVals)(keyType, valType, expr.range),
-        DictType(keyType, valType))
+      (MapExpr(firstKey :: otherKeys, firstVal :: otherVals)(keyType, valType, expr.range),
+        MapType(keyType, valType))
 
     case untpd.TupleExpr(es) =>
       val (elems, elemTypes) = es.map(infer(_, ctx)).unzip
@@ -164,7 +162,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       val args = e match
         case untpd.TupleExpr(es) => es
         case _ => List(e)
-      (checkStrFormat(fmt, args, expr.range, ctx), strType)
+      (checkStrFormat(fmt, args, expr.range, ctx), StrType)
 
     case untpd.UnaryExpr(op, e) => resolveMethodCallNullary(e, op, expr.range, ctx)
     case untpd.BinaryExpr(e1, op, e2) => resolveMethodCall(e1, op, List(e2), expr.range, ctx)
@@ -178,8 +176,8 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
     case untpd.IndexAccess(e, i) =>
       resolveMethodCall(e, untpd.Ident("select")(i.range), List(i), expr.range, ctx)
     case untpd.Slice(e, ei, ej) =>
-      resolveMethodCall(e, untpd.Ident("slice")(expr.range),
-        ei.getOrElse(IntConst(0)(null)) :: ej.toList, expr.range, ctx)
+      val start = ei.getOrElse(untpd.IntConst(0)(null))
+      resolveMethodCall(e, untpd.Ident("slice")(expr.range), start :: ej.toList, expr.range, ctx)
 
     case untpd.Apply(untpd.MemberAccess(e, m), es) => resolveMethodCall(e, m, es, expr.range, ctx)
     case untpd.Apply(e, es) =>
@@ -248,7 +246,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
                 (NoExpr, NoType)
 
   def assume(cond: Expr, ctx: Ctx): Ctx = simplify(cond) match
-    case Ne(Var(x), NullLit()) =>
+    case Ne(Var(x), NullConst()) =>
       ctx.lookup(x) match
         case Some(ValInfo(NullableType(t))) => ctx.narrow(x, t)
         case Some(VarInfo(NullableType(t))) => ctx.narrow(x, t)
@@ -286,10 +284,10 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
     var k = 0
     while i < fmt.length do
       if fmt.drop(i).startsWith("%%") then
-        parts += StrLit("%")
+        parts += StrConst("%")
         i += 2
       else if fmt.drop(i).startsWith("%s") then
-        parts += check(args(k), strType, ctx)
+        parts += check(args(k), StrType, ctx)
         k += 1
         i += 2
       else if fmt(i) == '%' then
@@ -303,10 +301,10 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
             i = fmt.length
       else
         val s = fmt.drop(i).takeWhile(_ != '%')
-        parts += StrLit(s)
+        parts += StrConst(s)
         i += s.length
 
-    if parts.isEmpty then StrLit("") else parts.reduce(StrConcat(_, _)(range))
+    if parts.isEmpty then StrConst("") else parts.reduce(StrConcat(_, _)(range))
 
   private def parseFormatter(f: String, range: Span): Option[(NumStrFormat, Int)] =
     // flag: 0 for zero-padded
@@ -339,15 +337,15 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
 
       case (untpd.ListExpr(es), ListType(t)) =>
         val elems = es.map(check(_, t, ctx))
-        SeqLit(elems)(t, node.range)
+        ListExpr(elems)(t, node.range)
       case (untpd.SetExpr(es), SetType(t)) =>
         val elems = es.map(check(_, t, ctx))
-        SetLit(elems)(t, node.range)
-      case (untpd.MapExpr(items), DictType(tk, tv)) =>
+        SetExpr(elems)(t, node.range)
+      case (untpd.MapExpr(items), MapType(tk, tv)) =>
         val (eks, evs) = items.unzip
         val keys = eks.map(check(_, tk, ctx))
         val values = evs.map(check(_, tv, ctx))
-        MapLit(keys, values)(tk, tv, node.range)
+        MapExpr(keys, values)(tk, tv, node.range)
 
       case (untpd.TupleExpr(es), TupleType(ts)) if es.length == ts.length =>
         val elems = es.zip(ts).map((e, t) => check(e, t, ctx))
@@ -379,7 +377,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
     else (left, right) match
       case (ListType(t1), ListType(t2)) => isSubtype(t1, t2)
       case (SetType(t1), SetType(t2)) => isSubtype(t1, t2)
-      case (DictType(k1, v1), DictType(k2, v2)) => isSubtype(k1, k2) && isSubtype(k2, k1) && isSubtype(v1, v2)
+      case (MapType(k1, v1), MapType(k2, v2)) => isSubtype(k1, k2) && isSubtype(k2, k1) && isSubtype(v1, v2)
       case (RefinedType(t1, _), t2) => isSubtype(t1, t2)
       case (TupleType(ts1), TupleType(ts2)) => ts1.length == ts2.length && (ts1 zip ts2).forall(isSubtype)
       case (FunType(ps1, r1), FunType(ps2, r2)) =>

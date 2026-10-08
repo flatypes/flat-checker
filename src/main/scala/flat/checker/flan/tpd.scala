@@ -20,11 +20,8 @@ object tpd:
   // Statements
   sealed trait Stmt
 
-  final case class Assign(variable: String, value: Option[Expr]) extends Stmt
+  final case class Assign(variable: String, value: Expr) extends Stmt
 
-  def Assign(variable: String, value: Expr): Assign = Assign(variable, Some(value))
-
-  @deprecated
   final case class Havoc(lhs: String) extends Stmt
 
   final case class ExprStmt(expr: Expr) extends Stmt
@@ -56,18 +53,13 @@ object tpd:
 
   case object BoolType extends Type
 
-  @deprecated case object CharType extends Type
+  case object StrType extends Type
 
   final case class ListType(elemType: Type) extends Type
 
-  val strType: Type = ListType(CharType)
-
   final case class SetType(elemType: Type) extends Type
 
-  final case class DictType(keyType: Type, valType: Type) extends Type
-
-  final case class RefinedType(base: Type, reft: Expr) extends Type:
-    var name: String = ""
+  final case class MapType(keyType: Type, valType: Type) extends Type
 
   final case class TupleType(elemTypes: List[Type]) extends Type
 
@@ -79,6 +71,9 @@ object tpd:
   case object NullType extends Type
 
   final case class NullableType(valType: Type) extends Type
+
+  final case class RefinedType(base: Type, reft: Expr) extends Type:
+    var name: String = ""
 
   case object NoType extends Type
 
@@ -113,20 +108,24 @@ object tpd:
 
   given Conversion[Range => Expr, Expr] = f => f(noRange)
 
-  final case class NullLit()(val range: Range) extends Expr:
-    override def rebuild(subtrees: List[Expr]): NullLit = this
+  final case class IntConst(value: BigInt)(val range: Range) extends Expr:
+    override def rebuild(subtrees: List[Expr]): IntConst = this
 
-  final case class IntLit(value: BigInt)(val range: Range) extends Expr:
-    override def rebuild(subtrees: List[Expr]): IntLit = this
+  final case class BoolConst(value: Boolean)(val range: Range) extends Expr:
+    override def rebuild(subtrees: List[Expr]): BoolConst = this
 
-  final case class BoolLit(value: Boolean)(val range: Range) extends Expr:
-    override def rebuild(subtrees: List[Expr]): BoolLit = this
+  final case class StrConst(value: String)(val range: Range) extends Expr:
+    override def rebuild(subtrees: List[Expr]): StrConst = this
 
-  final case class CharLit(value: Char)(val range: Range) extends Expr:
-    override def rebuild(subtrees: List[Expr]): CharLit = this
+  object CharConst:
+    def apply(value: Char): StrConst = StrConst(value.toString)(noRange)
 
-  final case class StrLit(value: String)(val range: Range) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrLit = this
+    def unapply(e: Expr): Option[Char] = e match
+      case StrConst(s) if s.length == 1 => Some(s.head)
+      case _ => None
+
+  final case class NullConst()(val range: Range) extends Expr:
+    override def rebuild(subtrees: List[Expr]): NullConst = this
 
   final case class Var(name: String)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Var = this
@@ -134,19 +133,19 @@ object tpd:
   final case class MethodRef(name: String)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): MethodRef = this
 
-  final case class Apply(fun: Expr, args: List[Expr])(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): Apply = subtrees match
-      case ef :: es => Apply(ef, es)(range)
-      case _ => throw IllegalArgumentException("Apply must have at least 1 subtree")
-
-  def mkApply(fun: Expr, args: Expr*): Apply = Apply(fun, args.toList)()
-
   final case class Lambda(params: List[VarDecl], body: Expr)(val range: Range = noRange) extends Expr:
     def paramNames: List[String] = params.map(_.name)
 
     override def rebuild(subtrees: List[Expr]): Lambda = subtrees match
       case List(b) => Lambda(params, b)(range)
       case _ => throw IllegalArgumentException("Lambda must have exactly 1 subtree")
+
+  final case class Apply(fun: Expr, args: List[Expr])(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): Apply = subtrees match
+      case ef :: es => Apply(ef, es)(range)
+      case _ => throw IllegalArgumentException("Apply must have at least 1 subtree")
+
+  def mkApply(fun: Expr, args: Expr*): Apply = Apply(fun, args.toList)()
 
   final case class Eq(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Eq = subtrees match
@@ -170,7 +169,7 @@ object tpd:
       case _ => throw IllegalArgumentException("And must have exactly 2 subtrees")
 
   def mkAnd(exprs: List[Expr]): Expr =
-    if exprs.isEmpty then BoolLit(true) else exprs.reduce(And(_, _)())
+    if exprs.isEmpty then BoolConst(true) else exprs.reduce(And(_, _)())
 
   final case class Or(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Or = subtrees match
@@ -178,7 +177,7 @@ object tpd:
       case _ => throw IllegalArgumentException("Or must have exactly 2 subtrees")
 
   def mkOr(exprs: List[Expr]): Expr =
-    if exprs.isEmpty then BoolLit(false) else exprs.reduce(Or(_, _)())
+    if exprs.isEmpty then BoolConst(false) else exprs.reduce(Or(_, _)())
 
   final case class Not(cond: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Not = subtrees match
@@ -261,49 +260,26 @@ object tpd:
       case List(e1, e2) => BitShR(e1, e2)(range)
       case _ => throw IllegalArgumentException("BitShR must have exactly 2 subtrees")
 
-  // Char operations
-  @deprecated
-  final case class CharIn(chr: Expr, a: CharSet)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): CharIn = subtrees match
-      case List(e) => CharIn(e, a)(range)
-      case _ => throw IllegalArgumentException("CharIn must have exactly 1 subtree")
-
-  final case class CharToCode(chr: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): CharToCode = subtrees match
-      case List(e) => CharToCode(e)(range)
-      case _ => throw IllegalArgumentException("CharToInt must have exactly 1 subtree")
-
-  final case class CodeToChar(int: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): CodeToChar = subtrees match
-      case List(e) => CodeToChar(e)(range)
-      case _ => throw IllegalArgumentException("CharFromInt must have exactly 1 subtree")
-
-  @deprecated
-  final case class CharToString(chr: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): CharToString = subtrees match
-      case List(e) => CharToString(e)(range)
-      case _ => throw IllegalArgumentException("CharToString must have exactly 1 subtree")
-
   // String operations: access
   final case class StrLength(str: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrLength = subtrees match
       case List(s) => StrLength(s)(range)
       case _ => throw IllegalArgumentException("SeqLength must have exactly 1 subtree")
 
-  final case class StrAt(str: Expr, idx: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrAt = subtrees match
-      case List(s, i) => StrAt(s, i)(range)
+  final case class CharAt(str: Expr, idx: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): CharAt = subtrees match
+      case List(s, i) => CharAt(s, i)(range)
       case _ => throw IllegalArgumentException("SeqSelect must have exactly 2 subtrees")
 
-  final case class StrSlice(str: Expr, start: Expr, end: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrSlice = subtrees match
-      case List(e, ei, ej) => StrSlice(e, ei, ej)(range)
+  final case class Substr(str: Expr, start: Expr, end: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): Substr = subtrees match
+      case List(e, ei, ej) => Substr(e, ei, ej)(range)
       case _ => throw IllegalArgumentException("SeqSlice must have 3 subtrees")
 
-  object StrSlice:
-    def apply(seq: Expr, start: Expr)(range: Range): StrSlice = StrSlice(seq, start, StrLength(seq))(range)
+  object Substr:
+    def apply(seq: Expr, start: Expr)(range: Range): Substr = Substr(seq, start, StrLength(seq))(range)
 
-  // String operations: construction
+  // String: construction
   final case class StrConcat(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrConcat = subtrees match
       case List(e1, e2) => StrConcat(e1, e2)(range)
@@ -319,7 +295,7 @@ object tpd:
       case List(e1, e2) => StrJoin(e1, e2)(range)
       case _ => throw IllegalArgumentException("StrJoin must have exactly 2 subtrees")
 
-  // String operations: test
+  // String: test
   final case class StrStartsWith(str: Expr, prefix: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrStartsWith = subtrees match
       case List(e, et) => StrStartsWith(e, et)(range)
@@ -335,9 +311,9 @@ object tpd:
       case List(e) => StrIs(e, a)(range)
       case _ => throw IllegalArgumentException("StrIs must have exactly 1 subtree")
 
-  final case class StringInLang(str: Expr, regEx: StrRE)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StringInLang = subtrees match
-      case List(e) => StringInLang(e, regEx)(range)
+  final case class StrIn(str: Expr, regEx: StrRE)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): StrIn = subtrees match
+      case List(e) => StrIn(e, regEx)(range)
       case _ => throw IllegalArgumentException("StringInRegEx must have exactly 1 subtree")
 
   // String operations: search
@@ -346,13 +322,7 @@ object tpd:
       case List(e, et) => StrContains(e, et)(range)
       case _ => throw IllegalArgumentException("ListContains must have exactly 2 subtrees")
 
-  @deprecated
-  final case class ListContainsSlice(seq: Expr, sub: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): ListContainsSlice = subtrees match
-      case List(e, et) => ListContainsSlice(e, et)(range)
-      case _ => throw IllegalArgumentException("ListContainsSlice must have exactly 2 subtrees")
-
-  final case class StrIndexOf(str: Expr, sub: Expr, start: Expr = IntLit(0))
+  final case class StrIndexOf(str: Expr, sub: Expr, start: Expr = IntConst(0))
                              (val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrIndexOf = subtrees match
       case List(e, et) => StrIndexOf(e, et)(range)
@@ -370,6 +340,7 @@ object tpd:
       case List(e, et, em) => StrSplit(e, et, Some(em))(range)
       case _ => throw IllegalArgumentException("StringSplit must have exactly 2 subtrees")
 
+  @deprecated
   final case class StrPartition(str: Expr, sep: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrPartition = subtrees match
       case List(e, et) => StrPartition(e, et)(range)
@@ -380,7 +351,7 @@ object tpd:
       case List(e, et, er) => StrReplace(e, et, er)(range)
       case _ => throw IllegalArgumentException("StrReplace must have exactly 3 subtrees")
 
-  // String operations: conversion
+  // String: conversion
   final case class StrTrim(str: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrTrim = subtrees match
       case List(e) => StrTrim(e)(range)
@@ -407,24 +378,28 @@ object tpd:
       case List(e) => IntFormat(e, fmt)(range)
       case _ => throw IllegalArgumentException("StringFromInt must have exactly 1 subtree")
 
-  @deprecated
-  final case class StrIsAscii(str: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrIsAscii = subtrees match
-      case List(e) => StrIsAscii(e)(range)
-      case _ => throw IllegalArgumentException("StrIsAscii must have exactly 1 subtree")
+  final case class CharToCode(chr: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): CharToCode = subtrees match
+      case List(e) => CharToCode(e)(range)
+      case _ => throw IllegalArgumentException("CharToInt must have exactly 1 subtree")
+
+  final case class CodeToChar(int: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): CodeToChar = subtrees match
+      case List(e) => CodeToChar(e)(range)
+      case _ => throw IllegalArgumentException("CharFromInt must have exactly 1 subtree")
 
   // List operations
-  final case class SeqLit(elems: List[Expr])(val elemSort: Type, val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): SeqLit = SeqLit(subtrees)(elemSort, range)
+  final case class ListExpr(elems: List[Expr])(val elemSort: Type, val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): ListExpr = ListExpr(subtrees)(elemSort, range)
 
   final case class ListLength(lst: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): ListLength = subtrees match
       case List(e) => ListLength(e)(range)
       case _ => throw IllegalArgumentException("ListLength must have exactly 1 subtree")
 
-  final case class ListAt(lst: Expr, idx: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): ListAt = subtrees match
-      case List(e, ei) => ListAt(e, ei)(range)
+  final case class ListSelect(lst: Expr, idx: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): ListSelect = subtrees match
+      case List(e, ei) => ListSelect(e, ei)(range)
       case _ => throw IllegalArgumentException("ListAt must have exactly 2 subtrees")
 
   final case class ListSlice(lst: Expr, start: Expr, end: Expr)(val range: Range = noRange) extends Expr:
@@ -437,9 +412,9 @@ object tpd:
       case List(e1, e2) => ListConcat(e1, e2)(range)
       case _ => throw IllegalArgumentException("ListConcat must have exactly 2 subtrees")
 
-  final case class SeqUpdate(seq: Expr, idx: Expr, elem: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): SeqUpdate = subtrees match
-      case List(e, ei, ex) => SeqUpdate(e, ei, ex)(range)
+  final case class ListUpdate(seq: Expr, idx: Expr, elem: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): ListUpdate = subtrees match
+      case List(e, ei, ex) => ListUpdate(e, ei, ex)(range)
       case _ => throw IllegalArgumentException("SeqUpdate must have exactly 3 subtrees")
 
   final case class ListContains(lst: Expr, elem: Expr)(val range: Range = noRange) extends Expr:
@@ -452,6 +427,11 @@ object tpd:
       case List(e, ep) => ListForall(e, ep)(range)
       case _ => throw IllegalArgumentException("SeqForall must have exactly 2 subtrees")
 
+  final case class ListExists(lst: Expr, pred: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): ListExists = subtrees match
+      case List(e, ep) => ListExists(e, ep)(range)
+      case _ => throw IllegalArgumentException("SeqExists must have exactly 2 subtrees")
+
   final case class ListMap(lst: Expr, func: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): ListMap = subtrees match
       case List(e, ef) => ListMap(e, ef)(range)
@@ -463,10 +443,10 @@ object tpd:
       case _ => throw IllegalArgumentException("SeqFilter must have exactly 2 subtrees")
 
   // Set Operations
-  final case class SetLit(elems: List[Expr])(val elemSort: Type, val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): SetLit = SetLit(subtrees)(elemSort, range)
+  final case class SetExpr(elems: List[Expr])(val elemSort: Type, val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): SetExpr = SetExpr(subtrees)(elemSort, range)
 
-  def singletonSet(elem: Expr, elemSort: Type): SetLit = SetLit(List(elem))(elemSort, elem.range)
+  def singletonSet(elem: Expr, elemSort: Type): SetExpr = SetExpr(List(elem))(elemSort, elem.range)
 
   final case class SetSize(set: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): SetSize = subtrees match
@@ -504,12 +484,12 @@ object tpd:
       case _ => throw IllegalArgumentException("SetForall must have exactly 2 subtrees")
 
   // Map operations
-  final case class MapLit(keys: List[Expr], vals: List[Expr])
-                         (val keySort: Type, val valSort: Type, val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): MapLit =
+  final case class MapExpr(keys: List[Expr], vals: List[Expr])
+                          (val keySort: Type, val valSort: Type, val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): MapExpr =
       require(subtrees.length % 2 == 0, "MapLit must have an even number of subtrees")
       val (keys, vals) = subtrees.splitAt(subtrees.length / 2)
-      MapLit(keys, vals)(keySort, valSort, range)
+      MapExpr(keys, vals)(keySort, valSort, range)
 
   final case class MapKeys(map: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): MapKeys = subtrees match

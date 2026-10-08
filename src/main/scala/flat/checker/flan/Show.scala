@@ -10,11 +10,10 @@ object Show extends LazyLogging:
     def show: String = typ match
       case IntType => "int"
       case BoolType => "bool"
-      case CharType => "char"
-      case `strType` => "str"
+      case StrType => "str"
       case ListType(t) => s"list[${t.show}]"
       case SetType(t) => s"set[${t.show}]"
-      case DictType(tk, tv) => s"dict[${tk.show}, ${tv.show}]"
+      case MapType(tk, tv) => s"dict[${tk.show}, ${tv.show}]"
       case t: RefinedType =>
         if t.name.nonEmpty then t.name
         else s"{${t.base.show} | ${t.reft.show}}"
@@ -77,11 +76,10 @@ object Show extends LazyLogging:
   private def showExpr(expr: Expr, paren: Boolean = false): String =
     val s = expr match
       // Constants and variables
-      case NullLit() => "null"
-      case BoolLit(b) => b.toString
-      case IntLit(i) => i.toString
-      case CharLit(c) => s"'${escapeChar(c)}'"
-      case StrLit(s) => s"\"${escapeString(s)}\""
+      case IntConst(i) => i.toString
+      case BoolConst(b) => b.toString
+      case StrConst(s) => s"'${escapeString(s)}'"
+      case NullConst() => "null"
       case Var(x) => showVar(x)
       case MethodRef(f) => f
 
@@ -119,23 +117,20 @@ object Show extends LazyLogging:
       case BitShR(e1, e2) => showInfix(">>", LEVEL_BIT, ASSOC_LEFT, e1, e2)
 
       // Char
-      case CharToCode(e) => showMemberApply(e, "toInt")
+      case CharToCode(e) => showMemberApply(e, "toCode")
       case CodeToChar(e) => showMemberApply(e, "toChar")
-      case CharToString(e) => showMemberApply(e, "toString")
-      case CharIn(e, a) => s"${showExpr(e)} ∈ $a"
 
       // Seq
-      case SeqLit(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
+      case ListExpr(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
       case StrLength(e) => s"|${showExpr(e)}|"
-      case StrAt(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
-      case SeqUpdate(e, ei, ev) => s"${showTighter(e)}[${showExpr(ei)} = ${showExpr(ev)}]"
-      case StrSlice(e, ei, ej) if ej == NoExpr || ej == StrLength(e) => s"${showTighter(e)}[${showExpr(ei)}:]"
-      case StrSlice(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
+      case CharAt(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
+      case ListUpdate(e, ei, ev) => s"${showTighter(e)}[${showExpr(ei)} = ${showExpr(ev)}]"
+      case Substr(e, ei, ej) if ej == NoExpr || ej == StrLength(e) => s"${showTighter(e)}[${showExpr(ei)}:]"
+      case Substr(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
       case StrConcat(e1, e2) => showInfix("++", LEVEL_ADD, ASSOC_LEFT, e1, e2)
       case StrReverse(e) => showMemberApply(e, "reverse")
-      case StrIndexOf(e, et, IntLit(0)) => showMemberApply(e, "indexOf", et)
+      case StrIndexOf(e, et, IntConst(0)) => showMemberApply(e, "indexOf", et)
       case StrIndexOf(e, et, ei) => showMemberApply(e, "indexOf", et, ei)
-      case ListContainsSlice(e, et) => showMemberApply(e, "contains", et)
       case StrStartsWith(e, et) => showMemberApply(e, "startsWith", et)
       case StrEndsWith(e, et) => showMemberApply(e, "endsWith", et)
       case StrCount(e, ep) => showMemberApply(e, "count", ep)
@@ -150,11 +145,11 @@ object Show extends LazyLogging:
       case StrToLower(e) => showMemberApply(e, "toLower")
       case StrToUpper(e) => showMemberApply(e, "toUpper")
       case StrToInt(e) => showMemberApply(e, "toInt")
-      case IntFormat(e, _) => showMemberApply(e, "toString")
-      case StrIsAscii(e) => showMemberApply(e, "isAscii")
+      case IntFormat(e, fmt) => showMemberApply(e, s"format($fmt)")
+      case StrIs(e, _) => showMemberApply(e, "is")
 
       // Set
-      case SetLit(es) => es.map(showExpr(_)).mkString("{", ", ", "}")
+      case SetExpr(es) => es.map(showExpr(_)).mkString("{", ", ", "}")
       case SetSize(e) => s"|${showExpr(e)}|"
       case SetContains(e, et) => showMemberApply(e, "contains", et)
       case Subset(e1, e2) => showInfix("⊆", LEVEL_REL, ASSOC_NONE, e1, e2)
@@ -164,7 +159,7 @@ object Show extends LazyLogging:
       case SetForall(e, ep) => showMemberApply(e, "forall", ep)
 
       // Map
-      case MapLit(eks, evs) =>
+      case MapExpr(eks, evs) =>
         (for (ek, ev) <- (eks zip evs) yield s"${showExpr(ek)}: ${showExpr(ev)}").mkString("{", ", ", "}")
       case MapKeys(e) => showMemberApply(e, "keys")
       case MapValues(e) => showMemberApply(e, "values")
@@ -179,7 +174,7 @@ object Show extends LazyLogging:
       case TupleSelect(i, e) => showMemberApply(e, "_" + (i + 1))
 
       // Domain
-      case StringInLang(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
+      case StrIn(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
 
       // Other
       case NoExpr => "?"
@@ -216,3 +211,31 @@ object Show extends LazyLogging:
 
   extension (expr: Expr)
     def show: String = showExpr(expr)
+
+  // Statements
+  private def showStmt(stmt: Stmt, level: Int): String =
+    val s = stmt match
+      case ExprStmt(e) => showExpr(e) + "\n"
+      case Assign(x, e) => s"${showVar(x)} = ${showExpr(e)}\n"
+      case Havoc(x) => s"${showVar(x)} = *\n"
+      case Assume(e) => s"assume ${showExpr(e)}\n"
+      case Assert(e) => s"assert ${showExpr(e)}\n"
+      case GAssert(e, _) => s"assert ${showExpr(e)}\n"
+      case Abort() => "abort\n"
+      case If(e, b1, b2) =>
+        val s1 = b1.map(showStmt(_, level + 1)).mkString("\n")
+        val s2 = b2.map(showStmt(_, level + 1)).mkString("\n")
+        s"if ${showExpr(e)} then\n$s1\nelse\n$s2"
+      case Return() => "return\n"
+      case While(e, _, b) =>
+        val body = b.map(showStmt(_, level + 1)).mkString("\n")
+        s"while ${showExpr(e)} do\n$body"
+      case Break() => "break\n"
+      case Continue() => "continue\n"
+      case For(x, e, _, b) =>
+        val body = b.map(showStmt(_, level + 1)).mkString("\n")
+        s"for ${showVar(x)} in ${showExpr(e)} do\n$body"
+    "  " * level + s
+
+  extension (stmt: Stmt)
+    def show: String = showStmt(stmt, 0)

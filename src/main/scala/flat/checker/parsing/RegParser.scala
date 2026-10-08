@@ -13,9 +13,9 @@ class RegParser(uri: String, start: Position)(using reporter: Reporter) extends 
 
   private def decInt: Parser[BigInt] = """[0-9]+""".r ^^ (BigInt(_))
 
-  private def expr: Parser[PExpr] = infixRight('|' ^^^ (PUnion(_, _)), concat)
+  private def expr: Parser[PExpr] = infixR('|' ^^^ (PUnion(_, _)), concat)
 
-  private def concat: Parser[PExpr] = infixRight(success(PConcat(_, _)), term) | success(PStr(""))
+  private def concat: Parser[PExpr] = infixR(success(PConcat(_, _)), term) | success(PStr(""))
 
   private def term: Parser[PExpr] = postfix(rChar | allChar | charSet | paren, quantifier)
 

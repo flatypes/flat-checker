@@ -1,6 +1,6 @@
 from iso_date_format import Y, M, D
-lang CalendarDate = Y M D | Y '-' M '-' D
 
+lang CalendarDate = Y M D | Y '-' M '-' D
 lang W = r'W(0[1-9]|[1-4][0-9]|5[0-3])'
 lang Wd = r'[1-7]'
 lang WeekDate = Y W Wd? | Y '-' W ('-' Wd)?
@@ -11,10 +11,10 @@ from iso_date_format import Year, Month, Day
 /** Construct a date from a string in ISO 8601 format. */
 def parse_iso_date(date_string: ISODate) -> (Year, Month, Day):
     if !date_string.isAscii:
-        raise "Argument must be an ASCII str"
+        raise 'Argument must be an ASCII str'
 
     if |date_string| !in {7, 8, 10}:
-        raise "Invalid iso format string"
+        raise 'Invalid iso format string'
 
     return _parse_iso_format_date(date_string)
 
@@ -34,10 +34,9 @@ def _parse_iso_format_date(dtstr: ISODate) -> (Year, Month, Day):
         var dayno = 1
         if |dtstr| > pos:
             if (dtstr[pos:pos + 1] == '-') != has_sep:
-                raise "Inconsistent use of dash separator"
+                raise 'Inconsistent use of dash separator'
 
             pos += has_sep ? 1 : 0
-
             dayno = dtstr[pos:pos + 1].toInt
 
         return _iso_week_to_gregorian(year, weekno, dayno)
@@ -45,11 +44,10 @@ def _parse_iso_format_date(dtstr: ISODate) -> (Year, Month, Day):
         var month = dtstr[pos:pos + 2].toInt
         pos += 2
         if (dtstr[pos:pos + 1] == '-') != has_sep:
-            raise "Inconsistent use of dash separator"
+            raise 'Inconsistent use of dash separator'
 
         pos += has_sep ? 1 : 0
         var day = dtstr[pos:pos + 2].toInt
-
         return (year, month, day)
 
 type Week = {w: Int | 1 <= w && w <= 53}

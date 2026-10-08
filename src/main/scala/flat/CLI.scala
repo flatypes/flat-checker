@@ -1,6 +1,7 @@
 package flat
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.flan.Show.show
 import flat.checker.parsing.Parser
 import flat.checker.typing.Typer
 import flat.checker.verif.Verifier
@@ -105,7 +106,7 @@ object CLI extends LazyLogging:
 
       val verifier = Verifier(using reporter)
       for script <- scripts do
-        //        script.body.foreach(stmt => logger.debug("{}", stmt))
+        logger.debug("{}", script.body.map(_.show).mkString)
         verifier.verify(script)
         if reporter.hasError then
           reporter.printTo(Console.err)

@@ -9,7 +9,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class Resolver(using reporter: Reporter) extends LazyLogging:
-  private val typer = API(ListBuffer.empty)
+  private val api = API(ListBuffer.empty)
 
   def resolve(module: untpd.Module): Ctx =
     var ctx = Ctx()
@@ -26,27 +26,27 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
               reporter.reportNameUndefined(id.range)
 
       case untpd.TypeAlias(id, t) =>
-        val value = typer.normalize(t, ctx)
+        val value = api.normalize(t, ctx)
         ctx = define(ctx, id, TypeInfo(value)(id.range))
 
       case untpd.ValDef(id, Some(t), e) =>
-        val typ = typer.normalize(t, ctx)
-        val value = typer.check(e, typ, ctx)
+        val typ = api.normalize(t, ctx)
+        val value = api.check(e, typ, ctx)
         ctx = define(ctx, id, ConstInfo(typ, value)(id.range))
       case untpd.ValDef(id, None, e) =>
-        val (value, sort) = typer.infer(e, ctx)
+        val (value, sort) = api.infer(e, ctx)
         ctx = define(ctx, id, ConstInfo(sort, value)(id.range))
 
       case untpd.LangDef(id, e) =>
-        val regEx = typer.translate(e, ctx)
+        val regEx = api.translate(e, ctx)
         regEx.name = id.name
         ctx = define(ctx, id, LangInfo(regEx)(id.range))
 
       case untpd.FunDef(id, ps1, t, _) =>
-        val params = typer.inferParamList(ps1, ctx)
+        val params = api.inferParamList(ps1, ctx)
         val returnParams = t match
           case Some(rt) =>
-            val returnType = typer.normalize(rt, ctx)
+            val returnType = api.normalize(rt, ctx)
             List((untpd.Ident("return")(rt.range), returnType))
           case None =>
             Nil
