@@ -10,13 +10,10 @@ object Simplifier extends LazyLogging:
   extension (expr: Expr)
     private def isConst: Boolean = expr match
       case IntConst(_) | BoolConst(_) | StrConst(_) | NullConst() => true
-      case ListExpr(es) => es.forall(_.isConst)
-      case SetExpr(es) => es.forall(_.isConst) && es.distinct.size == es.size
-      case MapExpr(eks, _) => eks.forall(_.isConst) && eks.distinct.size == eks.size
       case _ => false
 
     def simplify: Expr = expr match
-      case IntConst(_) | BoolConst(_) | CharConst(_) | StrConst(_) | NullConst() => expr
+      case IntConst(_) | BoolConst(_) | StrConst(_) | NullConst() => expr
       case Var(_) | MethodRef(_) => expr
 
       // Functional

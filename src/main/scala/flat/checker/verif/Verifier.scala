@@ -26,7 +26,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
           Map.from(for l <- node.locals yield l.name -> l.typ)
         val generator = VCGenerator(types, methodInfos)
         val post = mkVCAssert(mkAnd(node.ensures), e => PostNotProvedError(e.range))
-        val vc = mkAnd(node.requires) -> generator.wlp(body, post, post, VCTrue, VCTrue)
+        val vc = mkAnd(node.requires) ==> generator.wlp(body, post, post, VCTrue, VCTrue)
         val discharger = VCDischarger(methodInfos)
         discharger.discharge(vc, types, Nil)
 //

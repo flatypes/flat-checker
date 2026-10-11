@@ -40,7 +40,7 @@ final case class VCImplies(left: Expr, right: VC) extends VC:
   override def subst(m: Map[String, Expr]): VC = VCImplies(left.subst(m), right.subst(m))
 
 extension (cond: Expr)
-  def ->(right: VC): VC = VCImplies(cond, right)
+  def ==>(right: VC): VC = VCImplies(cond, right)
 
 final case class VCAssert(cond: Expr, error: VerifError) extends VC:
   override def subst(m: Map[String, Expr]): VC = copy(cond.subst(m))
@@ -62,7 +62,7 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
       case Havoc(x) => post.subst(Map(x -> Var(fresh(x))))
       case ExprStmt(e) => safetyCheck(e) & post
       // Proof derivatives
-      case Assume(e) => safetyCheck(e) && e -> post
+      case Assume(e) => safetyCheck(e) && e ==> post
       case Assert(e) => (safetyCheck(e) && mkVCAssert(e, e => AssertNotProvedError(e.range))) & post
       case GAssert(e, error) => VCAssert(e, error) & post
       case s@Abort() => VCAssert(BoolConst(false), AssertNotProvedError(s.range))
@@ -70,7 +70,7 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
       case If(e, thenBody, elseBody) =>
         val wlpThen = wlp(thenBody, post, returnPost, breakPost, continuePost)
         val wlpElse = wlp(elseBody, post, returnPost, breakPost, continuePost)
-        safetyCheck(e) && (e -> wlpThen & Not(e) -> wlpElse)
+        safetyCheck(e) && (e ==> wlpThen & Not(e) ==> wlpElse)
       // Loops
       case While(e, inv, loopBody) =>
         val loopPost = mkVCAssert(inv, e => InvNotMaintainedError(e.range))
@@ -78,14 +78,14 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
         val m = Map.from[String, Expr](for x <- collectModifiedVars(loopBody) yield x -> Var(fresh(x)))
         (safetyCheck(e) & safetyCheck(inv)) &&
           (mkVCAssert(inv, e => InvNotProvedOnEntryError(e.range)) &
-            (inv -> (e -> wlpLoop & Not(e) -> post)).subst(m))
+            (inv ==> (e ==> wlpLoop & Not(e) ==> post)).subst(m))
       case For(x, e, inv, loopBody) =>
         val loopPost = mkVCAssert(inv, e => InvNotMaintainedError(e.range))
         val wlpLoop = wlp(loopBody, loopPost, returnPost, post, loopPost)
         val m = Map.from[String, Expr](for x <- collectModifiedVars(loopBody) yield x -> Var(fresh(x)))
         (safetyCheck(e) & safetyCheck(inv)) &&
           (mkVCAssert(inv, e => InvNotProvedOnEntryError(e.range)) &
-            (inv -> (StrContains(e, Var(x)) -> wlpLoop & post)).subst(m))
+            (inv ==> (StrContains(e, Var(x)) ==> wlpLoop & post)).subst(m))
       // Jumps
       case Return() => returnPost
       case Break() => breakPost
@@ -93,9 +93,9 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
 
   private def safetyCheck(expr: Expr): VC = expr match
     // Boolean
-    case And(e1, e2) => safetyCheck(e1) && e1 -> safetyCheck(e2)
-    case Or(e1, e2) => safetyCheck(e1) && Not(e1) -> safetyCheck(e2)
-    case Ite(e, e1, e2) => safetyCheck(e1) && (e -> safetyCheck(e1) & Not(e) -> safetyCheck(e2))
+    case And(e1, e2) => safetyCheck(e1) && e1 ==> safetyCheck(e2)
+    case Or(e1, e2) => safetyCheck(e1) && Not(e1) ==> safetyCheck(e2)
+    case Ite(e, e1, e2) => safetyCheck(e1) && (e ==> safetyCheck(e1) & Not(e) ==> safetyCheck(e2))
     // List
     case CharAt(e, ei) =>
       VCAssert(And(Le(IntConst(0), ei), Lt(ei, StrLength(e))), IndexOutOfBoundsError(ei.range))
