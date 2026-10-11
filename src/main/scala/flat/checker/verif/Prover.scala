@@ -3,61 +3,76 @@ package flat.checker.verif
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.*
 import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.StrREOps.*
+import flat.checker.domain.StrREOps.{getLang, isFiniteLang}
 import flat.checker.flan.Show.show
-import flat.checker.flan.TypeOps.sort
 import flat.checker.flan.tpd.*
-import flat.checker.flan.{strListSort, stringSort}
+import flat.checker.verif.ExprOps.conjuncts
 import flat.checker.verif.Simplifier.simplify
 import flat.checker.verif.Type.*
 
-import scala.collection.mutable
+import scala.Function.unlift
 import scala.collection.mutable.ListBuffer
 
-class Prover extends LazyLogging:
-  def prove(goal: Goal): Boolean =
-    collectIfCond(goal.conclusion) match
-      case Some(e) =>
-        val (ps1, ps2) = goal.premises.map(caseIf(e, _)(using goal.sorts)).unzip
-        val (c1, c2) = caseIf(e, goal.conclusion)(using goal.sorts)
-        val goal1 = Goal(ps1 :+ e, c1)(using goal.sorts)
-        logger.debug("Case if: {}", e.show)
-        logger.debug("Subgoal 1:\n{}", showGoal(goal1))
-        if prove(goal1) then
-          val goal2 = Goal(ps2 :+ Not(e).simplify, c2)(using goal.sorts)
-          logger.debug("Subgoal 2:\n{}", showGoal(goal2))
-          prove(goal2)
-        else
-          logger.warn("❌ Subgoal 1 FAILED")
-          false
+object Prover extends LazyLogging:
+  def prove(goal: Goal, path: String = ""): Boolean =
+    val simplifiedGoal = simplify(goal)
+    splitIf(simplifiedGoal) match
+      case Some((trueGoal, trueCond), (falseGoal, falseCond)) =>
+        prove(trueGoal, s"$path if (true) ${trueCond.show}")
+          && prove(falseGoal, s"$path if (false) ${falseCond.show}")
       case None =>
-        if prove1(goal) then
-          true
-        else
-          val i = goal.premises.indexWhere(_.isInstanceOf[Or])
-          if i >= 0 then
-            val Or(e1, e2) = goal.premises(i).asInstanceOf[Or]
-            logger.debug("Case left: {}", e1.show)
-            val goal1 = Goal(goal.premises.updated(i, e1), goal.conclusion)(using goal.sorts)
-            logger.debug("Subgoal 1:\n{}", showGoal(goal1))
-            if prove1(goal1) then
-              val goal2 = Goal(goal.premises.updated(i, e2), goal.conclusion)(using goal.sorts)
-              logger.debug("Case right: {}", e2.show)
-              logger.debug("Subgoal 2:\n{}", showGoal(goal2))
-              prove1(goal2)
+        splitOr(simplifiedGoal) match
+          case Some((leftGoal, leftCond), (rightGoal, rightCond)) =>
+            prove(leftGoal, s"$path if (left) ${leftCond.show}")
+              && prove(rightGoal, s"$path if (right) ${rightCond.show}")
+          case None =>
+            if path.isEmpty then
+              logger.debug("Simplified:\n{}", simplifiedGoal.pp)
             else
-              logger.warn("❌ Subgoal 1 FAILED")
-              false
-          else
-            false
+              logger.debug("Case{}:\n{}", path, simplifiedGoal.pp)
+            val success = solve(simplifiedGoal)
+            if !success then
+              logger.warn("Failed to prove goal:\n{}", simplifiedGoal.pp)
+            success
 
-  private def collectIfCond(expr: Expr): Option[Expr] =
-    expr.collectFirst:
-      case Ite(e, _, _) => collectIfCond(e).getOrElse(e)
+  private def simplify(goal: Goal): Goal =
+    val conclusion = goal.conclusion.simplify
+    val premises = goal.premises.flatMap(_.simplify.conjuncts)
+    // Eliminate implications
+    val premises1 = premises.map:
+      case Implies(e1, e2) if premises.contains(e1) => e2
+      case Ite(e, e1, _) if premises.contains(e) => e1
+      case Ite(e, _, e2) if premises.contains(Not(e)) => e2
+      case e => e
+    goal.copy(conclusion = conclusion, premises = premises1)
 
-  def prove1(goal: Goal): Boolean =
+  private def splitIf(goal: Goal): Option[((Goal, Expr), (Goal, Expr))] =
+    for e <- (goal.conclusion :: goal.premises).collectFirst(unlift(collectFirstIfCond)) yield
+      val ne = Not(e).simplify
+      ((intro(e, goal), e), (intro(ne, goal), ne))
+
+  private def collectFirstIfCond: Expr => Option[Expr] = _.collectFirst { case Ite(e, _, _) => e }
+
+  private def splitOr(goal: Goal): Option[((Goal, Expr), (Goal, Expr))] =
+    goal.premises.collectFirst:
+      case e@Or(e1, e2) =>
+        val goal1 = goal.copy(premises = goal.premises.filterNot(_ == e))
+        ((intro(e1, goal1), e1), (intro(e2, intro(Not(e1).simplify, goal1)), e2))
+
+  private def intro(cond: Expr, goal: Goal): Goal =
+    val conclusion = apply(goal.conclusion, cond)
+    val premises = goal.premises.map(apply(_, cond))
+    goal.copy(conclusion = conclusion, premises = premises :+ cond)
+
+  private def apply(expr: Expr, cond: Expr): Expr = expr match
+    case Implies(`cond`, e) => e
+    case Ite(`cond`, e1, _) => e1
+    case Ite(e, _, e2) if Not(cond).simplify == e => e2
+    case _ => expr
+
+  private def solve(goal: Goal): Boolean =
     goal.conclusion match
-      // refinement type checking
+      case BoolConst(true) => true
       case StrIn(e, r) =>
         val inferer = Inferer(goal)
         inferer.infer(e) match
@@ -65,36 +80,17 @@ class Prover extends LazyLogging:
             logger.debug("Inferred: {} ∈ {}", e.show, r1.pp)
             r1 == r || RESub.check(r1, r)
           case _ => ???
-      case And(e1, e2) if e1.isInstanceOf[Or] | e2.isInstanceOf[Or] =>
-        prove1(Goal(goal.premises, e1)(using goal.sorts)) && prove1(Goal(goal.premises, e2)(using goal.sorts))
-      case Or(e1, e2) =>
-        prove1(Goal(goal.premises :+ Not(e1).simplify, e2)(using goal.sorts))
       case _ =>
-        val solver = SMTSolver(using goal.sorts)
+        val lemmas = synthesizeLemmas(goal)
+        if lemmas.nonEmpty then
+          logger.debug(s"Lemmas: ${lemmas.map(_.show).mkString(", ")}")
+        if lemmas.contains(goal.conclusion) then
+          return true
+
+        val solver = new SMTSolver(using goal.ctx)
         goal.premises.foreach(solver.add)
-        if solver.prove(goal.conclusion) then
-          true
-        else
-          val lemmas = synthesizeLemmas(goal)
-          if lemmas.nonEmpty then
-            logger.debug(s"Lemmas: ${lemmas.map(_.show).mkString(", ")}")
-            lemmas.foreach(solver.add)
-            solver.prove(goal.conclusion)
-          else
-            false
-
-  private def caseIf(cond: Expr, expr: Expr)(using sorts: Map[String, Type]): (Expr, Expr) =
-    val e1 = expr.transform:
-      case Ite(`cond`, e1, _) => e1
-      case `cond` => BoolConst(true)
-    val e2 = expr.transform:
-      case Ite(`cond`, _, e2) => e2
-      case `cond` => BoolConst(false)
-    (e1.simplify, e2.simplify)
-
-  private inline def isStrOrStrList(e: Expr)(using sorts: Map[String, Type]): Boolean =
-    val s = e.sort
-    s == stringSort || s == strListSort
+        lemmas.foreach(solver.add)
+        solver.prove(goal.conclusion)
 
   private def synthesizeLemmas(goal: Goal): List[Expr] =
     val inferer = Inferer(goal)
@@ -190,7 +186,3 @@ class Prover extends LazyLogging:
   private def inNatRange(elem: Expr, range: NatRange): Expr = range.max match
     case Some(max) => And(Le(IntConst(range.min), elem), Le(elem, IntConst(max)))
     case None => Le(IntConst(range.min), elem)
-
-  private def showGoal(goal: Goal): String =
-    val lines = for e <- goal.premises yield s"  ${e.show}\n"
-    lines.mkString + s" ⇒ ${goal.conclusion.show}"

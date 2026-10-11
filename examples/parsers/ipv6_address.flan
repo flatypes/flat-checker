@@ -1,0 +1,14 @@
+from ipv4_address import IPv4Address
+
+// https://www.rfc-editor.org/info/rfc3986/#appendix-A
+lang H16 = r'[0-9a-fA-F]{1,4}'
+lang LS32 = (H16 ":" H16) | IPv4Address
+lang IPv6Address =                            (H16 ":"){6} LS32     \
+                 |                       "::" (H16 ":"){5} LS32     \
+                 |                  H16? "::" (H16 ":"){4} LS32     \
+                 | ((H16 ":"){0,1} H16)? "::" (H16 ":"){3} LS32     \
+                 | ((H16 ":"){0,2} H16)? "::" (H16 ":"){2} LS32     \
+                 | ((H16 ":"){0,3} H16)? "::"  H16 ":"     LS32     \
+                 | ((H16 ":"){0,4} H16)? "::"              LS32     \
+                 | ((H16 ":"){0,5} H16)? "::"              H16      \
+                 | ((H16 ":"){0,6} H16)? "::"

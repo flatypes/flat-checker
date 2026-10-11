@@ -20,7 +20,7 @@ object Show extends LazyLogging:
       case TupleType(ts) => ts.map(_.show).mkString("(", ", ", ")")
       case FunType(ts, t) => ts.map(_.show).mkString("(", ", ", ")") + " -> " + t.show
       case NullType => "null"
-      case NullableType(t) => s"${t.show}?"
+      case OptType(t) => s"${t.show}?"
       case NoType => "∅"
 
   extension (sort: Sort)
@@ -75,30 +75,24 @@ object Show extends LazyLogging:
 
   private def showExpr(expr: Expr, paren: Boolean = false): String =
     val s = expr match
-      // Constants and variables
       case IntConst(i) => i.toString
       case BoolConst(b) => b.toString
       case StrConst(s) => s"'${escapeString(s)}'"
       case NullConst() => "null"
       case Var(x) => showVar(x)
       case MethodRef(f) => f
-
-      // Functional
-      case Apply(ef, es) => showTighter(ef) + es.map(showExpr(_)).mkString("(", ", ", ")")
       case Lambda(ps, e) => s"λ ${showParamList(ps)}, ${showExpr(e)}"
+      case Apply(ef, es) => showTighter(ef) + es.map(showExpr(_)).mkString("(", ", ", ")")
+
+      // Tuple
+      case TupleExpr(es) => es.map(showExpr(_)).mkString("(", ", ", ")")
+      case TupleSelect(i, e) => showMemberApply(e, "_" + (i + 1))
 
       // Universal
       case Eq(e1, e2) => showInfix("==", LEVEL_REL, ASSOC_NONE, e1, e2)
       case Ne(e1, e2) => showInfix("≠", LEVEL_REL, ASSOC_NONE, e1, e2)
-      case Ite(e, e1, e2) => s"${showExpr(e)} ? ${showExpr(e1)} : ${showExpr(e2)}"
 
-      // Bool
-      case And(e1, e2) => showInfix("∧", LEVEL_AND, ASSOC_RIGHT, e1, e2)
-      case Or(e1, e2) => showInfix("∨", LEVEL_OR, ASSOC_RIGHT, e1, e2)
-      case Not(e) => showPrefix("¬", e)
-      case Implies(e1, e2) => showInfix("⇒", LEVEL_ARROW, ASSOC_RIGHT, e1, e2)
-
-      // Int arithmetic and relational
+      // Int: arithmetic and relational
       case Negate(e) => showPrefix("-", e)
       case Add(e1, e2) => showInfix("+", LEVEL_ADD, ASSOC_LEFT, e1, e2)
       case Sub(e1, e2) => showInfix("-", LEVEL_ADD, ASSOC_LEFT, e1, e2)
@@ -108,7 +102,7 @@ object Show extends LazyLogging:
       case Le(e1, e2) => showInfix("≤", LEVEL_REL, ASSOC_NONE, e1, e2)
       case Lt(e1, e2) => showInfix("<", LEVEL_REL, ASSOC_NONE, e1, e2)
 
-      // Int bitwise
+      // Int: bitwise
       case BitAnd(e1, e2) => showInfix("&", LEVEL_BIT_AND, ASSOC_LEFT, e1, e2)
       case BitOr(e1, e2) => showInfix("|", LEVEL_BIT_OR, ASSOC_LEFT, e1, e2)
       case BitXor(e1, e2) => showInfix("^", LEVEL_BIT, ASSOC_LEFT, e1, e2)
@@ -116,37 +110,63 @@ object Show extends LazyLogging:
       case BitShL(e1, e2) => showInfix("<<", LEVEL_BIT, ASSOC_LEFT, e1, e2)
       case BitShR(e1, e2) => showInfix(">>", LEVEL_BIT, ASSOC_LEFT, e1, e2)
 
-      // Char
-      case CharToCode(e) => showMemberApply(e, "toCode")
-      case CodeToChar(e) => showMemberApply(e, "toChar")
+      // Bool
+      case And(e1, e2) => showInfix("∧", LEVEL_AND, ASSOC_RIGHT, e1, e2)
+      case Or(e1, e2) => showInfix("∨", LEVEL_OR, ASSOC_RIGHT, e1, e2)
+      case Not(e) => showPrefix("¬", e)
+      case Implies(e1, e2) => showInfix("⇒", LEVEL_ARROW, ASSOC_RIGHT, e1, e2)
+      case Ite(e, e1, e2) => s"${showExpr(e)} ? ${showExpr(e1)} : ${showExpr(e2)}"
 
-      // Seq
-      case ListExpr(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
+      // String: access
       case StrLength(e) => s"|${showExpr(e)}|"
       case CharAt(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
-      case ListUpdate(e, ei, ev) => s"${showTighter(e)}[${showExpr(ei)} = ${showExpr(ev)}]"
-      case Substr(e, ei, ej) if ej == NoExpr || ej == StrLength(e) => s"${showTighter(e)}[${showExpr(ei)}:]"
+      case Substr(e, ei, StrLength(e1)) if e1 == e => s"${showTighter(e)}[${showExpr(ei)}:]"
       case Substr(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
-      case StrConcat(e1, e2) => showInfix("++", LEVEL_ADD, ASSOC_LEFT, e1, e2)
+
+      // String: construction
+      case StrConcat(e1, e2) => showInfix("+", LEVEL_ADD, ASSOC_LEFT, e1, e2)
       case StrReverse(e) => showMemberApply(e, "reverse")
-      case StrIndexOf(e, et, IntConst(0)) => showMemberApply(e, "indexOf", et)
-      case StrIndexOf(e, et, ei) => showMemberApply(e, "indexOf", et, ei)
+      case StrJoin(e, es) => showMemberApply(e, "join", es)
+
+      // String: test
       case StrStartsWith(e, et) => showMemberApply(e, "startsWith", et)
       case StrEndsWith(e, et) => showMemberApply(e, "endsWith", et)
-      case StrCount(e, ep) => showMemberApply(e, "count", ep)
-      case ListForall(e, ep) => showMemberApply(e, "forall", ep)
+      case StrIs(e, _) => showMemberApply(e, "is")
+      case StrIn(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
 
-      // String
-      case StrReplace(e, e1, e2) => showMemberApply(e, "replace", e1, e2)
+      // String: search
+      case StrContains(e, et) => showMemberApply(e, "contains", et)
+      case StrIndexOf(e, et, IntConst(0)) => showMemberApply(e, "indexOf", et)
+      case StrIndexOf(e, et, ei) => showMemberApply(e, "indexOf", et, ei)
+      case StrCount(e, ep) => showMemberApply(e, "count", ep)
       case StrSplit(e, et, None) => showMemberApply(e, "split", et)
       case StrSplit(e, et, Some(em)) => showMemberApply(e, "split", et, em)
-      case StrJoin(e, es) => showMemberApply(e, "join", es)
+      case StrReplace(e, e1, e2) => showMemberApply(e, "replace", e1, e2)
+
+      // String: conversion
       case StrTrim(e) => showMemberApply(e, "trim")
       case StrToLower(e) => showMemberApply(e, "toLower")
       case StrToUpper(e) => showMemberApply(e, "toUpper")
       case StrToInt(e) => showMemberApply(e, "toInt")
       case IntFormat(e, fmt) => showMemberApply(e, s"format($fmt)")
-      case StrIs(e, _) => showMemberApply(e, "is")
+      case CharToCode(e) => showMemberApply(e, "toCode")
+      case CodeToChar(e) => showMemberApply(e, "toChar")
+
+      // List
+      case ListExpr(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
+      case ListLength(e) => s"|${showExpr(e)}|"
+      case ListSelect(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
+      case ListSlice(e, ei, ListLength(e1)) if e1 == e => s"${showTighter(e)}[${showExpr(ei)}:]"
+      case ListSlice(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
+      case ListConcat(e1, e2) => showInfix("+", LEVEL_ADD, ASSOC_LEFT, e1, e2)
+      case ListUpdate(e, ei, ev) => s"${showTighter(e)}[${showExpr(ei)} = ${showExpr(ev)}]"
+      case ListContains(e, ev) => showMemberApply(e, "contains", ev)
+
+      // List: higher-order
+      case ListForall(e, ep) => showMemberApply(e, "forall", ep)
+      case ListExists(e, ep) => showMemberApply(e, "exists", ep)
+      case ListMap(e, ep) => showMemberApply(e, "map", ep)
+      case ListFilter(e, ep) => showMemberApply(e, "filter", ep)
 
       // Set
       case SetExpr(es) => es.map(showExpr(_)).mkString("{", ", ", "}")
@@ -168,13 +188,6 @@ object Show extends LazyLogging:
       case MapContains(e, ek) => showMemberApply(e, "contains", ek)
       case MapSelect(e, ek) => s"${showTighter(e)}[${showExpr(ek)}]"
       case MapUpdate(e, ek, ev) => s"${showTighter(e)}[${showExpr(ek)} = ${showExpr(ev)}]"
-
-      // Tuple
-      case TupleExpr(es) => es.map(showExpr(_)).mkString("(", ", ", ")")
-      case TupleSelect(i, e) => showMemberApply(e, "_" + (i + 1))
-
-      // Domain
-      case StrIn(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
 
       // Other
       case NoExpr => "?"

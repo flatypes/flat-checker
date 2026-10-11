@@ -18,7 +18,8 @@ final case class LangInfo(regEx: StrRE)(val range: Range) extends Info
 
 final case class ConstInfo(sort: Type, value: Expr)(val range: Range) extends Info
 
-final case class MethodInfo(params: List[(untpd.Ident, Type)], returnParams: List[(untpd.Ident, Type)])
+final case class MethodInfo(params: List[(untpd.Ident, Type)], returnParams: List[(untpd.Ident, Type)],
+                            requires: List[Expr])
                            (val range: Range) extends Info:
   def paramInfos: List[(String, ValInfo)] = for (id, t) <- params yield id.name -> ValInfo(t)(id.range)
 

@@ -41,7 +41,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
 
     case untpd.TupleType(ts) => TupleType(ts.map(normalize(_, ctx)))
     case untpd.FunType(ts, t) => FunType(ts.map(normalize(_, ctx)), normalize(t, ctx))
-    case untpd.OptType(t) => NullableType(normalize(t, ctx))
+    case untpd.OptType(t) => OptType(normalize(t, ctx))
     case untpd.RefinedType(untpd.Param(id, t), e) =>
       val base = normalize(t, ctx)
       val reft = check(e, BoolType, ctx.push().define(id.name, ValInfo(base)(id.range)))
@@ -139,19 +139,28 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       val right = check(e2, BoolType, assume(left, ctx))
       (Implies(left, right)(expr.range), BoolType)
 
-    case untpd.BinaryExpr(e1, untpd.Ident("=="), e2) =>
+    case untpd.BinaryExpr(e@untpd.TermRef(x), op@untpd.Ident("==" | "!="), untpd.NullConst()) =>
+      val (left, leftType) = infer(e, ctx)
+      leftType match
+        case OptType(_) =>
+          val expr = if op.name == "==" then Not(Var(x + "?")) else Var(x + "?")
+          (expr, BoolType)
+        case _ =>
+          reporter.reportTypeMismatch(e.range, "optional type", leftType)
+          (NoExpr, NoType)
+    case untpd.BinaryExpr(e1, op@untpd.Ident("==" | "!="), e2) =>
       val (left, leftType) = infer(e1, ctx)
       val (right, rightType) = infer(e2, ctx)
       if !isSubtype(leftType, rightType) && !isSubtype(rightType, leftType) then
         reporter.reportTypeMismatch(e2.range, leftType, rightType)
-      (Eq(left, right)(expr.range), BoolType)
-    case untpd.BinaryExpr(e1, untpd.Ident("!="), e2) =>
-      val (left, leftType) = infer(e1, ctx)
-      val (right, rightType) = infer(e2, ctx)
-      if !isSubtype(leftType, rightType) && !isSubtype(rightType, leftType) then
-        reporter.reportTypeMismatch(e2.range, leftType, rightType)
-      (Ne(left, right)(expr.range), BoolType)
+      val expr = if op.name == "==" then Eq(left, right) else Ne(left, right)
+      (expr, BoolType)
 
+    case untpd.BinaryExpr(e, op@untpd.Ident("in"), untpd.TermRef(x))
+      if ctx.lookup(x).exists(_.isInstanceOf[LangInfo]) =>
+      val str = check(e, StrType, ctx)
+      val re = ctx.lookup(x).get.asInstanceOf[LangInfo].regEx
+      (StrIn(str, re)(expr.range), BoolType)
     case untpd.BinaryExpr(e1, op@untpd.Ident("in"), e2) =>
       resolveMethodCall(e2, untpd.Ident("contains")(op.range), List(e1), expr.range, ctx)
     case untpd.BinaryExpr(e1, op@untpd.Ident("!in"), e2) =>
@@ -246,10 +255,11 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
                 (NoExpr, NoType)
 
   def assume(cond: Expr, ctx: Ctx): Ctx = simplify(cond) match
-    case Ne(Var(x), NullConst()) =>
+    case Var(y) if y.endsWith("?") =>
+      val x = y.dropRight(1)
       ctx.lookup(x) match
-        case Some(ValInfo(NullableType(t))) => ctx.narrow(x, t)
-        case Some(VarInfo(NullableType(t))) => ctx.narrow(x, t)
+        case Some(ValInfo(OptType(t))) => ctx.narrow(x, t)
+        case Some(VarInfo(OptType(t))) => ctx.narrow(x, t)
         case _ => ctx
     case And(e1, e2) =>
       val ctx1 = assume(e1, ctx)
@@ -368,8 +378,10 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
         expected match
           case RefinedType(_, reft) =>
             body += GAssert(reft.subst(Map("_" -> expr)), ReftNotProvedError(node.range))
+          case OptType(RefinedType(_, reft)) =>
+            body += GAssert(reft.subst(Map("_" -> expr)), ReftNotProvedError(node.range))
           case _ =>
-            throw NotImplementedError(s"Type checking for $node: ${actual.show} <: ${expected.show} is not implemented")
+            throw NotImplementedError(s"Type checking for ${node}: ${actual.show} <: ${expected.show} is not implemented")
         expr
 
   private def isSubtype(left: Type, right: Type): Boolean =
@@ -382,9 +394,9 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       case (TupleType(ts1), TupleType(ts2)) => ts1.length == ts2.length && (ts1 zip ts2).forall(isSubtype)
       case (FunType(ps1, r1), FunType(ps2, r2)) =>
         ps1.length == ps2.length && (ps2 zip ps1).forall(isSubtype) && isSubtype(r1, r2)
-      case (NullableType(t1), NullableType(t2)) => isSubtype(t1, t2)
-      case (NullType, NullableType(_)) => true
-      case (t1, NullableType(t2)) => isSubtype(t1, t2)
+      case (OptType(t1), OptType(t2)) => isSubtype(t1, t2)
+      case (NullType, OptType(_)) => true
+      case (t1, OptType(t2)) => isSubtype(t1, t2)
       case _ => false
 
   def inferParamList(nodes: List[untpd.Param], ctx: Ctx): List[(untpd.Ident, Type)] =

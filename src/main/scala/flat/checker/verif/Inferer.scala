@@ -29,7 +29,7 @@ class Inferer(goal: Goal) extends LazyLogging:
         .collectFirst:
           case StrIn(`expr`, r) => TStr(narrow(expr, r))
         .getOrElse:
-          goal.sorts(x) match
+          goal.ctx(x) match
             case StrType => TStr(narrow(expr, RegEx.full))
             case ListType(StrType) => TStrSeq(RegEx.Lit(RegEx.full).star)
             case _ => throw new Exception(s"Cannot infer type for ${expr.show}")
@@ -178,7 +178,9 @@ class Inferer(goal: Goal) extends LazyLogging:
   private def narrowBy(e: Expr, r: StrRE, premise: Expr): Option[StrRE] = premise match
     // prefix, suffix
     case StrStartsWith(`e`, StrConst(t)) => Some(r.filterStartsWith(t.toList))
+    case Eq(Substr(`e`, IntConst(0), IntConst(n)), StrConst(t)) if t.length == n => Some(r.filterStartsWith(t.toList))
     case Not(StrStartsWith(`e`, StrConst(t))) => Some(r.filterNotStartWith(t.toList))
+    case Ne(Substr(`e`, IntConst(0), IntConst(n)), StrConst(t)) if t.length == n => Some(r.filterNotStartWith(t.toList))
     case StrEndsWith(`e`, StrConst(t)) => Some(r.filterEndsWith(t.toList))
     case Not(StrEndsWith(`e`, StrConst(t))) => Some(r.filterNotEndWith(t.toList))
     // equality

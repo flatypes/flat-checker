@@ -58,7 +58,7 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
   def wlp(stmt: Stmt, post: VC, returnPost: VC, breakPost: VC, continuePost: VC): VC =
     stmt match
       // Assignments
-      case Assign(x, e) => safetyCheck(e) && typeCheck(e, types(x)) && post.subst(Map(x -> e))
+      case Assign(x, e) => safetyCheck(e) && post.subst(Map(x -> e))
       case Havoc(x) => post.subst(Map(x -> Var(fresh(x))))
       case ExprStmt(e) => safetyCheck(e) & post
       // Proof derivatives
@@ -108,6 +108,7 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
         case Nil => VCTrue
         case es => es.map(safetyCheck).reduce(_ & _)
 
+  @deprecated
   private def typeCheck(expr: Expr, typ: Type): VC = (expr, typ) match
     case (Var(x), _) if types(x) == typ => VCTrue
     case (_, t) if t.isSort => VCTrue
@@ -131,16 +132,13 @@ class VCGenerator(types: Map[String, Type], methodInfos: Map[String, MethodInfo]
     s"$x:$n"
 
 class VCDischarger(methodInfos: Map[String, MethodInfo])(using reporter: Reporter) extends LazyLogging:
-  private val prover = Prover()
+  private val prover = Prover
 
   def discharge(vc: VC, types: Map[String, Type], premises: List[Expr]): Boolean = vc match
     case VCTrue => true
     case VCAnd(vc1, vc2) => discharge(vc1, types, premises) & discharge(vc2, types, premises)
     case VCAndSC(vc1, vc2) => discharge(vc1, types, premises) && discharge(vc2, types, premises)
-    case VCImplies(e, vc) =>
-      val newPremises = e.simplify.conjuncts
-      val newTypes = newPremises.collect { case Ne(Var(x), NullConst()) => x -> narrowNotNull(types(x)) }
-      discharge(vc, types ++ newTypes, premises ++ newPremises)
+    case VCImplies(e, vc) => discharge(vc, types, premises :+ e)
     case VCAssert(e, error) => assert(e, types, premises, error)
 
   @deprecated
@@ -159,7 +157,7 @@ class VCDischarger(methodInfos: Map[String, MethodInfo])(using reporter: Reporte
       expr.subtrees.flatMap(extractPost)
 
   private def narrowNotNull(typ: Type): Type = typ match
-    case NullableType(t) => t
+    case OptType(t) => t
     case _ => typ
 
   private def splitAndAssert(cond: Expr, types: Map[String, Type], premises: List[Expr],
@@ -171,16 +169,14 @@ class VCDischarger(methodInfos: Map[String, MethodInfo])(using reporter: Reporte
 
   private def assert(cond: Expr, types: Map[String, Type], premises: List[Expr],
                      error: => VerifError): Boolean =
-    logger.info("Goal {}:\n{}", goalCounter.incrementAndGet(), showGoal(premises, cond))
-    val conclusion = cond.simplify
-    if prover.prove(Goal(premises, conclusion.simplify)(using types)) then
-      logger.info("PROVED")
+    val goal = Goal(cond, premises, types)
+    val number = goalCounter.incrementAndGet()
+    logger.info("Goal {}:\n{}", number, goal.pp)
+    if prover.prove(goal) then
+      logger.info("Goal {} PROVED", number)
       true
     else
       reporter.report(error)
-      logger.error("❌ NOT PROVED")
+      logger.warn("Goal {} ❌", number)
+      System.exit(1)
       false
-
-  private def showGoal(premises: List[Expr], conclusion: Expr): String =
-    val premiseStr = (for e <- premises yield s"  ${e.show}\n").mkString
-    s"$premiseStr ⇒ ${conclusion.show}"

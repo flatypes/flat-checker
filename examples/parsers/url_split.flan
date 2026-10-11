@@ -1,21 +1,16 @@
-val scheme_chars: str = ""
+val scheme_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-."
 
-def url_split(url: str) -> (str?, str?, str, str?, str?):
+def url_split(url: URL) -> (Scheme?, Authority?, str, Query?, Fragment?):
     var s = url
-    var scheme: str? = null
-    var netloc: str? = null
-    var query: str? = null
-    var fragment: str? = null
+    var scheme: Scheme? = null
+    var netloc: Authority? = null
+    var query: Query? = null
+    var fragment: Fragment? = null
 
     var i = s.indexOf(':')
     if i > 0 && url[0].isAsciiLetter:
-        var exit = false
-        for c in s[:i]:
-            if c !in scheme_chars:
-                exit = true
-                break
-        if !exit:
-            (scheme, s) = (s[:i].toLower, s[i+1:])
+        // TODO: check scheme chars
+        (scheme, s) = (s[:i].toLower, s[i+1:])
     if s[:2] == '//':
         var domain: str
         (domain, s) = _split_netloc(s)
@@ -31,7 +26,10 @@ def url_split(url: str) -> (str?, str?, str, str?, str?):
         [s, query] = url.split('?', 1)
     return (scheme, netloc, s, query, fragment)
 
-def _split_netloc(url: str) -> (str, str):
+lang RelativeRefNLRest = PathAbEmpty ("?" Query)? ("#" Fragment)?
+lang RelativeRefNL = "//" Authority RelativeRefNLRest
+
+def _split_netloc(url: RelativeRefNL) -> (Authority, RelativeRefNLRest):
     var delim = |url|   // position of end of domain part of url, default is end
     for c in '/?#': // look for delimiters; the order is NOT important
         var wdelim = url.indexOf(c, 2)        // find first of this delim
@@ -39,7 +37,9 @@ def _split_netloc(url: str) -> (str, str):
             delim = delim < wdelim ? delim : wdelim     // use earliest delim position
     return (url[2:delim], url[delim:])   // return (domain, rest)
 
-def _check_bracketed_netloc(netloc: str):
+lang BrNetLoc = (UserInfo "@")? IPLiteral (":" Port)?
+
+def _check_bracketed_netloc(netloc: BrNetLoc):
     var hostname_and_port = netloc.partition('@')._3 // right partition
     var before_bracket: str
     var open_br: str
@@ -59,6 +59,8 @@ def _check_bracketed_netloc(netloc: str):
         (hostname, _, port) = hostname_and_port.partition(':')
     _check_bracketed_host(hostname)
 
+lang BrHost = IPv6Address | IPvFuture
+
 // Valid bracketed hosts are defined in
 // https://www.rfc-editor.org/rfc/rfc3986#page-49 and https://url.spec.whatwg.org/
 def _check_bracketed_host(hostname: str):
@@ -68,4 +70,4 @@ def _check_bracketed_host(hostname: str):
     else:
         parse_ipv6_address(hostname)
 
-def parse_ipv6_address(address: str)
+def parse_ipv6_address(address: IPv6Address)

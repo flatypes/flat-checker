@@ -1,6 +1,7 @@
 package flat.checker.typing
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.flan.tpd.BoolType
 import flat.checker.flan.untpd
 import flat.checker.parsing.Parser
 import flat.checker.{Reporter, Source}
@@ -42,15 +43,19 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
         regEx.name = id.name
         ctx = define(ctx, id, LangInfo(regEx)(id.range))
 
-      case untpd.FunDef(id, ps1, t, _) =>
+      case untpd.FunDef(id, ps1, t, es, _) =>
         val params = api.inferParamList(ps1, ctx)
+        var localCtx = ctx.push()
+        for (id, typ) <- params do
+          localCtx = define(localCtx, id, ValInfo(typ)(id.range))
         val returnParams = t match
           case Some(rt) =>
             val returnType = api.normalize(rt, ctx)
             List((untpd.Ident("return")(rt.range), returnType))
           case None =>
             Nil
-        ctx = define(ctx, id, MethodInfo(params, returnParams)(id.range))
+        val requires = es.map(api.check(_, BoolType, localCtx))
+        ctx = define(ctx, id, MethodInfo(params, returnParams, requires)(id.range))
 
     ctx
 

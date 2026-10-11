@@ -23,7 +23,8 @@ object untpd:
 
   final case class LangDef(ident: Ident, value: PExpr) extends TopStmt
 
-  final case class FunDef(ident: Ident, params: List[Param], returnType: Option[Type], body: List[Stmt])
+  final case class FunDef(ident: Ident, params: List[Param], returnType: Option[Type],
+                          requires: List[Expr], body: List[Stmt])
                          (val endRange: Range) extends TopStmt
 
   final case class Param(ident: Ident, typ: Type)

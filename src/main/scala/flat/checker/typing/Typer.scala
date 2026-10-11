@@ -27,11 +27,21 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     // load parameters
     for (x, paramInfo) <- info.paramInfos do
       ctx = ctx.define(x, paramInfo)
-      locals += VarDecl(x, paramInfo.typ.erase)
+      paramInfo.typ.erase match
+        case OptType(t) =>
+          locals += VarDecl(x + "?", BoolType)
+          locals += VarDecl(x, t)
+        case t =>
+          locals += VarDecl(x, t)
       paramInfo.typ match
         case RefinedType(_, p) =>
           body += Assume(p.subst(Map("_" -> Var(x))))
+        case OptType(RefinedType(_, p)) =>
+          body += Assume(Implies(Var(x + "?"), p.subst(Map("_" -> Var(x)))))
         case _ =>
+    // load preconditions
+    for e <- info.requires do
+      body += Assume(e)
     // load return variables
     for (x, paramInfo) <- info.returnInfos do
       ctx = ctx.define(x, paramInfo)
@@ -68,7 +78,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
           body += Assign(id.name, value)
       case untpd.VarStmt(id, None, Some(e)) =>
         val (value, typ) = typer.infer(e, ctx)
-        declareVar(id, typ)
+        declareVar(id, typ.erase)
         body += Assign(id.name, value)
       case untpd.VarStmt(id, None, None) =>
         reporter.reportMissingTypeAnnot(id.range)

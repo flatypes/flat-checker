@@ -70,7 +70,7 @@ object tpd:
 
   case object NullType extends Type
 
-  final case class NullableType(valType: Type) extends Type
+  final case class OptType(valType: Type) extends Type
 
   final case class RefinedType(base: Type, reft: Expr) extends Type:
     var name: String = ""

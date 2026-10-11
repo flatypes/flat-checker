@@ -12,7 +12,7 @@ object TypeOps:
       case MapType(k, v) => k.isSort && v.isSort
       case TupleType(ts) => ts.forall(_.isSort)
       case FunType(ts, r) => ts.forall(_.isSort) && r.isSort
-      case NullableType(t) => t.isSort
+      case OptType(t) => t.isSort
 
     def erase: Type = typ match
       case IntType | BoolType | StrType | NullType | NoType => typ
@@ -22,7 +22,7 @@ object TypeOps:
       case RefinedType(t, _) => t.erase
       case TupleType(ts) => TupleType(ts.map(_.erase))
       case FunType(ps, r) => FunType(ps.map(_.erase), r.erase)
-      case NullableType(t) => NullableType(t.erase)
+      case OptType(t) => OptType(t.erase)
 
     infix def :<:(right: Type): Boolean =
       if typ == right then true
@@ -37,8 +37,8 @@ object TypeOps:
             ss1.length == ss2.length && (ss1 zip ss2).forall(_ :<: _)
           case (FunType(ss1, s1), FunType(ss2, s2)) =>
             ss1.length == ss2.length && (ss2 zip ss1).forall(_ :<: _) && s1 :<: s2
-          case (NullType, NullableType(_)) => true
-          case (t1, NullableType(t2)) => t1 :<: t2
+          case (NullType, OptType(_)) => true
+          case (t1, OptType(t2)) => t1 :<: t2
           case _ => false
 
   extension (expr: Expr)
