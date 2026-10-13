@@ -18,17 +18,10 @@ final case class LangInfo(regEx: StrRE)(val range: Range) extends Info
 
 final case class ConstInfo(sort: Type, value: Expr)(val range: Range) extends Info
 
-final case class MethodInfo(params: List[(untpd.Ident, Type)], returnParams: List[(untpd.Ident, Type)],
-                            requires: List[Expr])
+final case class MethodInfo(params: List[(untpd.Ident, Type)], returnType: Type,
+                            requires: List[Expr], ensures: List[Expr], sw: ScriptWriter, ctx: Ctx)
                            (val range: Range) extends Info:
   def paramInfos: List[(String, ValInfo)] = for (id, t) <- params yield id.name -> ValInfo(t)(id.range)
-
-  def returnInfos: List[(String, VarInfo)] = for (id, t) <- returnParams yield id.name -> VarInfo(t)(id.range)
-
-  def returnType: Type =
-    returnParams.map(_._2) match
-      case List(t) => t
-      case ts => TupleType(ts)
 
   def funType: FunType = FunType(params.map(_._2), returnType)
 

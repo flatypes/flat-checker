@@ -14,7 +14,7 @@ import org.eclipse.lsp4j.{Position, Range as Span}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
+class API(using reporter: Reporter) extends LazyLogging:
   def normalize(node: untpd.Type, ctx: Ctx): Type = node match
     case t@untpd.TypeRef(x) =>
       ctx.lookup(x) match
@@ -44,7 +44,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
     case untpd.OptType(t) => OptType(normalize(t, ctx))
     case untpd.RefinedType(untpd.Param(id, t), e) =>
       val base = normalize(t, ctx)
-      val reft = check(e, BoolType, ctx.push().define(id.name, ValInfo(base)(id.range)))
+      val reft = check(e, BoolType, ctx.push().define(id.name, ValInfo(base)(id.range)))(using null)
       RefinedType(base, reft.subst(Map(id.name -> Var("_"))))
 
   def translate(node: untpd.PExpr, ctx: Ctx): StrRE = node match
@@ -73,7 +73,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       RegEx.symbolSet(new CharSet(neg, chars.toSet))
     case untpd.PAllChar => RegEx.symbolSet(CharSet.full)
 
-  def infer(expr: untpd.Expr, ctx: Ctx): (Expr, Type) = expr match
+  def infer(expr: untpd.Expr, ctx: Ctx)(using sw: ScriptWriter): (Expr, Type) = expr match
     case untpd.IntConst(v) => (IntConst(v)(expr.range), IntType)
     case untpd.BoolConst(v) => (BoolConst(v)(expr.range), BoolType)
     case untpd.StrConst(v) => (StrConst(v)(expr.range), StrType)
@@ -81,8 +81,10 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
 
     case untpd.TermRef(x) =>
       ctx.lookup(x) match
-        case Some(ValInfo(t)) => (Var(x)(expr.range), ctx.getNarrowedType(x).getOrElse(t))
-        case Some(VarInfo(t)) => (Var(x)(expr.range), ctx.getNarrowedType(x).getOrElse(t))
+        case Some(ValInfo(t)) =>
+          val name = if sw != null && sw.isDefined(x) then sw.getId(x) else x
+          (Var(name)(expr.range), ctx.getNarrowedType(x).getOrElse(t))
+        case Some(VarInfo(t)) => (Var(sw.getId(x))(expr.range), ctx.getNarrowedType(x).getOrElse(t))
         case Some(ConstInfo(sort, value)) => (value, sort)
         case Some(m: MethodInfo) => (MethodRef(x)(expr.range), m.funType)
         case Some(_) =>
@@ -189,6 +191,13 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       resolveMethodCall(e, untpd.Ident("slice")(expr.range), start :: ej.toList, expr.range, ctx)
 
     case untpd.Apply(untpd.MemberAccess(e, m), es) => resolveMethodCall(e, m, es, expr.range, ctx)
+//    case untpd.Apply(untpd.TermRef(f), es) if ctx.lookup(f).exists(_.isInstanceOf[MethodInfo]) =>
+//      val info = ctx.lookup(f).get.asInstanceOf[MethodInfo]
+//      val args = checkApply(es, info.funType, expr.range, 0, ctx)
+//      for e <- info.requires do
+//        body += GAssert(e, PreNotProvedError(expr.range))
+//      ???
+
     case untpd.Apply(e, es) =>
       val (fun, typ) = infer(e, ctx)
       typ match
@@ -210,7 +219,8 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
     case _ =>
       throw NotImplementedError(s"Type inference for ${expr.getClass.getSimpleName} is not implemented")
 
-  private def resolveMethodCallNullary(e: untpd.Expr, m: untpd.Ident, span: Span, ctx: Ctx): (Expr, Type) =
+  private def resolveMethodCallNullary(e: untpd.Expr, m: untpd.Ident, span: Span, ctx: Ctx)
+                                      (using sw: ScriptWriter): (Expr, Type) =
     val (receiver, receiverType) = infer(e, ctx)
     if receiverType == NoType then
       return (NoExpr, NoType)
@@ -228,7 +238,8 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
         reporter.reportAmbiguousOverload(span, m.name, receiverType.erase, ms.map(_.funType))
         (NoExpr, NoType)
 
-  private def resolveMethodCall(e: untpd.Expr, m: untpd.Ident, es: List[untpd.Expr], span: Span, ctx: Ctx): (Expr, Type) =
+  private def resolveMethodCall(e: untpd.Expr, m: untpd.Ident, es: List[untpd.Expr], span: Span, ctx: Ctx)
+                               (using sw: ScriptWriter): (Expr, Type) =
     val (receiver, receiverType) = infer(e, ctx)
     if receiverType == NoType then
       return (NoExpr, NoType)
@@ -280,15 +291,27 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
     case _ => cond
 
   private def checkApply(argNodes: List[untpd.Expr], funType: FunType, range: Span, x: Int,
-                         ctx: Ctx): List[Expr] =
+                         ctx: Ctx)(using sw: ScriptWriter): List[Expr] =
     if argNodes.length < funType.arity then
       val lastRange = Span(Position(range.getEnd.getLine, range.getEnd.getCharacter - 1), range.getEnd)
       reporter.reportMissingArgs(lastRange, funType, argNodes.length)
     else if argNodes.length > funType.arity then
       reporter.reportTooManyArgs(range, funType)
     argNodes.zip(funType.paramTypes).map(check(_, _, ctx))
+//
+//  private def mkFresh(typ: Type): (Expr, List[Expr]) = typ match
+//    case IntType | BoolType | StrType =>
+//      (Var(???), Nil)
+//    case TupleType(ts) => ???
+//    case OptType(t) =>
+//      val (e, ps) = mkFresh(t)
+//
+//    case RefinedType(t, p) =>
+//      val e = mkFresh(t)
+//      body += Assume(p.subst(Map("_" -> e)))
 
-  private def checkStrFormat(fmt: String, args: List[untpd.Expr], range: Span, ctx: Ctx): Expr =
+  private def checkStrFormat(fmt: String, args: List[untpd.Expr], range: Span, ctx: Ctx)
+                            (using sw: ScriptWriter): Expr =
     val parts = ListBuffer.empty[Expr]
     var i = 0
     var k = 0
@@ -337,7 +360,7 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       conv = conv)
     Some(formatter, i + 1)
 
-  def check(node: untpd.Expr, expectedType: Type, ctx: Ctx): Expr =
+  def check(node: untpd.Expr, expectedType: Type, ctx: Ctx)(using sw: ScriptWriter): Expr =
     (node, expectedType) match
       case (untpd.Ite(e, e1, e2), _) =>
         val cond = check(e, BoolType, ctx)
@@ -361,10 +384,18 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
         val elems = es.zip(ts).map((e, t) => check(e, t, ctx))
         TupleExpr(elems)(node.range)
 
-      case (untpd.Lambda(id, e), FunType(List(t1), t2)) =>
-        val localCtx = ctx.push().define(id.name, ValInfo(t1)(id.range))
+      case (untpd.Lambda(ids, e), FunType(ts, t2)) if ids.length == ts.length =>
+        var localCtx = ctx.push()
+        for (id, t) <- ids.zip(ts) do
+          localCtx = localCtx.define(id.name, ValInfo(t)(id.range))
         val value = check(e, t2, localCtx)
-        Lambda(List(VarDecl(id.name, t1)), value)(node.range)
+        Lambda(ids.zip(ts).map((id, t) => VarDecl(id.name, t)), value)(node.range)
+      case (untpd.Lambda(ids, e), FunType(List(TupleType(ts)), t2)) if ids.length == ts.length =>
+        var localCtx = ctx.push()
+        for (id, t) <- ids.zip(ts) do
+          localCtx = localCtx.define(id.name, ValInfo(t)(id.range))
+        val value = check(e, t2, localCtx)
+        Lambda(ids.zip(ts).map((id, t) => VarDecl(id.name, t)), value)(node.range)
 
       case (_, expected) =>
         val (expr, actual) = infer(node, ctx)
@@ -377,9 +408,9 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
 
         expected match
           case RefinedType(_, reft) =>
-            body += GAssert(reft.subst(Map("_" -> expr)), ReftNotProvedError(node.range))
+            sw += GAssert(reft.subst(Map("_" -> expr)), ReftNotProvedError(node.range))
           case OptType(RefinedType(_, reft)) =>
-            body += GAssert(reft.subst(Map("_" -> expr)), ReftNotProvedError(node.range))
+            sw += GAssert(reft.subst(Map("_" -> expr)), ReftNotProvedError(node.range))
           case _ =>
             throw NotImplementedError(s"Type checking for ${node}: ${actual.show} <: ${expected.show} is not implemented")
         expr
@@ -398,6 +429,15 @@ class API(body: ListBuffer[Stmt])(using reporter: Reporter) extends LazyLogging:
       case (NullType, OptType(_)) => true
       case (t1, OptType(t2)) => isSubtype(t1, t2)
       case _ => false
+
+  def let(expr: Expr, typ: Type, ctx: Ctx): Option[Expr] = typ match
+    case IntType | BoolType | StrType => None
+    case TupleType(ts) =>
+      val conds = ts.zipWithIndex.flatMap { (t, i) => let(TupleSelect(i, expr), t, ctx) }
+      if conds.isEmpty then None else Some(mkAnd(conds))
+    case OptType(t) => for cond <- let(expr, t, ctx) yield Implies(Ne(expr, NullConst()), cond)
+    case RefinedType(_, p) => Some(p.subst(Map("_" -> expr)))
+    case _ => throw NotImplementedError(s"let for ${typ.show} is not implemented")
 
   def inferParamList(nodes: List[untpd.Param], ctx: Ctx): List[(untpd.Ident, Type)] =
     val scope = mutable.Map.empty[String, Span]

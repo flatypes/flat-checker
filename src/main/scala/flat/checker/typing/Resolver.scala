@@ -1,16 +1,16 @@
 package flat.checker.typing
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.flan.tpd.BoolType
+import flat.checker.flan.TypeOps.erase
+import flat.checker.flan.tpd.{BoolType, FunType, TupleType}
 import flat.checker.flan.untpd
 import flat.checker.parsing.Parser
 import flat.checker.{Reporter, Source}
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 
 class Resolver(using reporter: Reporter) extends LazyLogging:
-  private val api = API(ListBuffer.empty)
+  private val api = API()
 
   def resolve(module: untpd.Module): Ctx =
     var ctx = Ctx()
@@ -32,10 +32,10 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
 
       case untpd.ValDef(id, Some(t), e) =>
         val typ = api.normalize(t, ctx)
-        val value = api.check(e, typ, ctx)
+        val value = api.check(e, typ, ctx)(using null)
         ctx = define(ctx, id, ConstInfo(typ, value)(id.range))
       case untpd.ValDef(id, None, e) =>
-        val (value, sort) = api.infer(e, ctx)
+        val (value, sort) = api.infer(e, ctx)(using null)
         ctx = define(ctx, id, ConstInfo(sort, value)(id.range))
 
       case untpd.LangDef(id, e) =>
@@ -43,19 +43,17 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
         regEx.name = id.name
         ctx = define(ctx, id, LangInfo(regEx)(id.range))
 
-      case untpd.FunDef(id, ps1, t, es, _) =>
-        val params = api.inferParamList(ps1, ctx)
+      case untpd.FunDef(id, in, out, pre, post, _) =>
+        val sw = new ScriptWriter
+        val params = api.inferParamList(in, ctx)
         var localCtx = ctx.push()
         for (id, typ) <- params do
           localCtx = define(localCtx, id, ValInfo(typ)(id.range))
-        val returnParams = t match
-          case Some(rt) =>
-            val returnType = api.normalize(rt, ctx)
-            List((untpd.Ident("return")(rt.range), returnType))
-          case None =>
-            Nil
-        val requires = es.map(api.check(_, BoolType, localCtx))
-        ctx = define(ctx, id, MethodInfo(params, returnParams, requires)(id.range))
+          sw.declare(id.name, typ.erase)
+        val returnType = out.map(api.normalize(_, ctx)).getOrElse(TupleType(Nil))
+        val requires = pre.map(api.check(_, BoolType, localCtx)(using sw))
+        val ensures = post.map(api.check(_, FunType(List(returnType), BoolType), localCtx)(using sw))
+        ctx = define(ctx, id, MethodInfo(params, returnType, requires, ensures, sw, localCtx)(id.range))
 
     ctx
 

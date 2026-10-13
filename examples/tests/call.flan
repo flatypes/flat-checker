@@ -1,0 +1,21 @@
+lang AStar = r'a*'
+lang APlus = r'a+'
+
+def f(s: AStar) -> APlus:
+    return s + 'a'
+
+type Nat = {n: Int | n >= 0}
+
+def g(x: Nat, y: Nat) -> (Nat, Nat):
+    requires x >= y
+    return (x + y, x - y)
+
+lang Lower = r'[a-z]+'
+lang Upper = r'[A-Z]+'
+lang Word = Lower | Upper
+lang Input = '0' Lower | '1' Upper
+lang Bit = r'0|1'
+
+def h(s: Input) -> (Bit, Word):
+    ensures lambda (bit, word) -> bit == '0' ? word in Lower : word in Upper
+    return (s[0], s[1:])

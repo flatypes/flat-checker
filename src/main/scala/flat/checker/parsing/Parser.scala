@@ -47,8 +47,9 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     "lang" ~>! ident ~ ("=" ~> pExpr) <~ NEWLINE ^^ { case id ~ e => LangDef(id, e) }
 
   private def funDef: Parser[FunDef] =
-    "def" ~>! ident ~ params ~ ("->" ~> typ).? ~ (NEWLINE ^^^ new~(Nil, Nil) | block(requireSpec.* ~ stmt.+))
-      ^^ { case id ~ ps ~ t ~ (pre ~ body) => FunDef(id, ps, t, pre, body)(id.range) }
+    "def" ~>! ident ~ params ~ ("->" ~> typ).?
+      ~ (NEWLINE ^^^ new~(new~(Nil, Nil), Nil) | block(requireSpec.* ~ ensureSpec.* ~ stmt.+))
+      ^^ { case id ~ ps ~ t ~ (pre ~ post ~ body) => FunDef(id, ps, t, pre, post, body)(id.range) }
 
   private def params: Parser[List[Param]] = "(" ~> repsep(param, ",") <~ ")"
 
@@ -57,6 +58,8 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def block[T](p: Parser[T]): Parser[T] = ":" ~> NEWLINE ~> INDENT ~> p <~ DEDENT
 
   private def requireSpec: Parser[Expr] = "requires" ~>! expr <~ NEWLINE
+
+  private def ensureSpec: Parser[Expr] = "ensures" ~>! expr <~ NEWLINE
 
   // Types
   private def typ: Parser[Type] = infixR("->" ^^^ mkArrowType, optType)
@@ -88,7 +91,10 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def expr: Parser[Expr] = lambda | ite | implies
 
   private def lambda: Parser[Expr] =
-    "lambda" ~ ident ~ ("->" ~> expr) ^^ { case tk ~ x ~ e => Lambda(x, e)(Span(tk.span.getStart, e.range.getEnd)) }
+    "lambda" ~ lambdaParams ~ ("->" ~> expr)
+      ^^ { case tk ~ ids ~ e => Lambda(ids, e)(Span(tk.span.getStart, e.range.getEnd)) }
+
+  private def lambdaParams: Parser[List[Ident]] = ident ^^ (List(_)) | "(" ~> repsep(ident, ",") <~ ")"
 
   private def ite: Parser[Expr] =
     implies ~ ("?" ~>! implies) ~ (":" ~> implies) ^^ { case e ~ e1 ~ e2 => Ite(e, e1, e2) }

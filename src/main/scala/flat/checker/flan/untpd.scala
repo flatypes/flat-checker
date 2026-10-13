@@ -24,7 +24,7 @@ object untpd:
   final case class LangDef(ident: Ident, value: PExpr) extends TopStmt
 
   final case class FunDef(ident: Ident, params: List[Param], returnType: Option[Type],
-                          requires: List[Expr], body: List[Stmt])
+                          requires: List[Expr], ensures: List[Expr], body: List[Stmt])
                          (val endRange: Range) extends TopStmt
 
   final case class Param(ident: Ident, typ: Type)
@@ -76,7 +76,7 @@ object untpd:
 
   final case class TupleExpr(elems: List[Expr])(val range: Range) extends Expr
 
-  final case class Lambda(param: Ident, value: Expr)(val range: Range) extends Expr
+  final case class Lambda(params: List[Ident], value: Expr)(val range: Range) extends Expr
 
   final case class UnaryExpr(op: Ident, expr: Expr) extends Expr:
     override val range: Range = Range(op.range.getStart, expr.range.getEnd)

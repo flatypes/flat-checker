@@ -1,29 +1,30 @@
-def url_split(url: str) -> (str?, str?, str, str?, str?)
-def url_unsplit(scheme: str?, netloc: str?, path: str, query: str?, fragment: str?) -> str
+from url_unsplit import Scheme, Authority, Path, Query, Fragment, URL, url_unsplit
 
-val uses_relative: List[Str] = []
-val uses_netloc: List[Str] = []
+val uses_relative: List[Str] = ['', 'ftp', 'http']
+val uses_netloc: List[Str] = ['', 'ftp', 'http']
+
+def url_split(url: URL) -> (Scheme?, Authority?, Path, Query?, Fragment?)
 
 /** Join a base URL and a possibly relative URL to form an absolute
     interpretation of the latter. */
-def url_join(base: str, url: str) -> str:
+def url_join(base: URL, url: URL) -> URL:
     if base == '':
         return url
     if url == '':
         return base
 
-    var bscheme: str?
-    var bnetloc: str?
-    var bpath: str
-    var bquery: str?
-    var bfragment: str?
-    var scheme: str?
-    var netloc: str?
-    var path: str
-    var query: str?
-    var fragment: str?
-    (bscheme, bnetloc, bpath, bquery, bfragment) = url_split(base)
-    (scheme, netloc, path, query, fragment) = url_split(url)
+    var bscheme: Scheme?
+    var bnetloc: Authority?
+    var bpath: Path
+    var bquery: Query?
+    var bfragment: Fragment?
+    var scheme: Scheme?
+    var netloc: Authority?
+    var path: Path
+    var query: Query?
+    var fragment: Fragment?
+    // (bscheme, bnetloc, bpath, bquery, bfragment) = url_split(base)
+    // (scheme, netloc, path, query, fragment) = url_split(url)
 
     if scheme == null:
         scheme = bscheme
