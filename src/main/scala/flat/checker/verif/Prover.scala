@@ -14,6 +14,7 @@ import scala.Function.unlift
 object Prover extends LazyLogging:
   def prove(goal: Goal, path: String = ""): Boolean =
     val simplifiedGoal = simplify(goal)
+    logger.debug("Simplified:\n{}", simplifiedGoal.pp)
     if simplifiedGoal.conclusion == BoolConst(true) || simplifiedGoal.premises.contains(BoolConst(false)) then
       return true
 
@@ -27,9 +28,7 @@ object Prover extends LazyLogging:
             prove(leftGoal, s"$path if (left) ${leftCond.show}")
               && prove(rightGoal, s"$path if (right) ${rightCond.show}")
           case None =>
-            if path.isEmpty then
-              logger.debug("Simplified:\n{}", simplifiedGoal.pp)
-            else
+            if path.nonEmpty then
               logger.debug("Case{}:\n{}", path, simplifiedGoal.pp)
             val success = solve(simplifiedGoal)
             if !success then

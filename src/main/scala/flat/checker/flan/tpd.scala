@@ -2,49 +2,42 @@ package flat.checker.flan
 
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{CharSet, StrRE}
-import flat.checker.verif.VerifError
+import flat.checker.verif.ProofError
 import org.eclipse.lsp4j.{Position, Range}
 
 object tpd:
-  final case class Program(body: List[MethodDef])
-
-  final case class MethodDef(name: String, params: List[VarDecl], returns: List[VarDecl],
-                             requires: List[Expr], ensures: List[Expr],
-                             locals: List[VarDecl], body: Option[List[Stmt]])
-                            (val endRange: Range)
-
-  final case class VarDecl(name: String, typ: Type)
-
-  final case class Script(vars: List[VarDecl], body: List[Stmt])
+  final case class Script(uri: String, body: List[Stmt])
 
   // Statements
   sealed trait Stmt
+
+  final case class ExprStmt(expr: Expr) extends Stmt
+
+  final case class Declare(name: String, sort: Type) extends Stmt
 
   final case class Assign(variable: String, value: Expr) extends Stmt
 
   final case class Havoc(lhs: String) extends Stmt
 
-  final case class ExprStmt(expr: Expr) extends Stmt
+  // Proof derivatives
+  final case class Assume(cond: Expr) extends Stmt
 
+  final case class Assert(cond: Expr, err: () => ProofError) extends Stmt
+
+  final case class Abort()(val range: Range) extends Stmt
+
+  // Control flow
   final case class If(cond: Expr, thenBody: List[Stmt], elseBody: List[Stmt]) extends Stmt
 
-  final case class While(cond: Expr, inv: Expr, body: List[Stmt]) extends Stmt
+  final case class Return()(val range: Range) extends Stmt
 
-  final case class For(name: String, iter: Expr, inv: Expr, body: List[Stmt]) extends Stmt
+  final case class While(cond: Expr, invariants: List[(Expr, Range)], body: List[Stmt]) extends Stmt
 
   final case class Break()(val range: Range) extends Stmt
 
   final case class Continue()(val range: Range) extends Stmt
 
-  final case class Return()(val range: Range) extends Stmt
-
-  final case class Assume(cond: Expr) extends Stmt
-
-  final case class Assert(cond: Expr) extends Stmt
-
-  final case class GAssert(cond: Expr, error: VerifError) extends Stmt
-
-  final case class Abort()(val range: Range) extends Stmt
+  final case class For(name: String, iter: Expr, inv: Expr, body: List[Stmt]) extends Stmt
 
   // Types
   sealed trait Type
@@ -65,6 +58,8 @@ object tpd:
 
   def mkTupleType(elemTypes: Type*): TupleType = TupleType(elemTypes.toList)
 
+  val unitType: TupleType = TupleType(Nil)
+
   final case class FunType(paramTypes: List[Type], returnType: Type) extends Type:
     def arity: Int = paramTypes.length
 
@@ -72,8 +67,7 @@ object tpd:
 
   final case class OptType(valType: Type) extends Type
 
-  final case class RefinedType(base: Type, reft: Expr) extends Type:
-    var name: String = ""
+  final case class RefinedType(name: String, base: Type, reft: Expr) extends Type
 
   case object NoType extends Type
 
@@ -133,8 +127,8 @@ object tpd:
   final case class MethodRef(name: String)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): MethodRef = this
 
-  final case class Lambda(params: List[VarDecl], body: Expr)(val range: Range = noRange) extends Expr:
-    def paramNames: List[String] = params.map(_.name)
+  final case class Lambda(params: List[(String, Type)], body: Expr)(val range: Range = noRange) extends Expr:
+    def paramNames: List[String] = params.map(_._1)
 
     override def rebuild(subtrees: List[Expr]): Lambda = subtrees match
       case List(b) => Lambda(params, b)(range)

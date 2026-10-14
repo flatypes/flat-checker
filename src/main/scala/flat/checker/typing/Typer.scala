@@ -3,206 +3,149 @@ package flat.checker.typing
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
 import flat.checker.flan.*
-import flat.checker.flan.TypeOps.{:<:, erase}
+import flat.checker.flan.Show.show
+import flat.checker.flan.TypeOps.erase
 import flat.checker.flan.tpd.*
+import flat.checker.verif.{AssertNotProved, PostNotProved}
+
+import scala.collection.mutable.ListBuffer
 
 class Typer(using reporter: Reporter) extends LazyLogging:
-  private val resolver = Resolver()
+  private val resolver = new Resolver
 
-  def typeCheck(module: untpd.Module): List[Script] =
-    val ctx = resolver.resolve(module)
+  def typeCheck(uri: String, module: untpd.Module): List[Script] =
+    val ctx = resolver.resolve(uri, module)
     module.body.flatMap:
-      case node: untpd.FunDef => Some(checkMethod(node, ctx))
+      case node: untpd.FunDef if node.body.nonEmpty => Some(checkMethod(node, ctx))
       case _ => None
 
-  private def checkMethod(node: untpd.FunDef, globalCtx: Ctx): Script =
+  private def checkMethod(node: untpd.FunDef, globalCtx: TypingCtx): Script =
     val name = node.ident.name
-    val info = globalCtx.lookup(name).get.asInstanceOf[MethodInfo]
-    val typer = API()
-    val ctx = Ctx(globalCtx.globalScope, info.ctx.localStack)
-    val sw = info.sw
-    // load parameters
-    for (x, paramInfo) <- info.paramInfos do
-      for cond <- typer.let(Var(sw.getId(x)), paramInfo.typ, ctx) do
-        sw += Assume(cond)
-    // load preconditions
+    val info = globalCtx.get(name).get.asInstanceOf[MethodInfo]
+    val body = ListBuffer.empty[Stmt]
+    for (x, t) <- info.params do
+      body += Declare(x, t.erase)
+      body += Havoc(x)
+      if t != t.erase then
+        body += Assume(resolver.coreAPIs.hasType(Var(x), t))
     for e <- info.requires do
-      sw += Assume(e)
-    // check body
-    if node.body.nonEmpty then
-      checkBlock(node.body, ctx, info)(using sw)
-    sw.toScript
+      body += Assume(e)
+    body ++= checkBlock(node.body, info.localCtx, info, 0)
+    Script(globalCtx.uri, body.toList)
 
-  private def checkBlock(node: List[untpd.Stmt], ctx: Ctx, info: MethodInfo)(using sw: ScriptWriter): Unit =
-    val visitor = BlockVisitor(ctx, info)
-    node.foreach(visitor.check)
+  private def checkBlock(nodes: List[untpd.Stmt], localCtx: TypingCtx,
+                         methodInfo: MethodInfo, loopLevel: Int): List[Stmt] =
+    var ctx = localCtx
+    val body = ListBuffer.empty[Stmt]
+    for node <- nodes do
+      val (stmts, newCtx) = checkStmt(node, ctx, methodInfo, loopLevel)
+      ctx = newCtx
+      body ++= stmts
+    body.toList
 
-  private class BlockVisitor(localCtx: Ctx, info: MethodInfo)(using sw: ScriptWriter):
-    private val typer = API()
-    private var ctx = localCtx
+  private def checkStmt(node: untpd.Stmt, ctx: TypingCtx,
+                        methodInfo: MethodInfo, loopLevel: Int): (List[Stmt], TypingCtx) = node match
+    case untpd.Pass() => (Nil, ctx)
+    case untpd.ExprStmt(e) =>
+      val (typ, expr, side) = resolver.coreAPIs.infer(e, ctx)
+      (side :+ ExprStmt(expr), ctx)
 
-    def check(stmt: untpd.Stmt): Unit = stmt match
-      case untpd.Pass() => // skip
-      case untpd.ExprStmt(e) =>
-        val (value, _) = typer.infer(e, ctx)
-        sw += ExprStmt(value)
+    case untpd.VarDecl(untpd.PatternVar(id, Some(t)), e) if id.name != "_" =>
+      val typ = resolver.coreAPIs.unfold(t, ctx)
+      val (value, side) = resolver.coreAPIs.check(e, typ, ctx)
+      val info = VarInfo(id, typ)
+      (side ++ List(Declare(id.name, typ), Assign(id.name, value)), resolver.coreAPIs.define(id, info, ctx))
+    case untpd.VarDecl(p, e) =>
+      val (typ, value, side) = resolver.coreAPIs.infer(e, ctx)
+      val (stmts, newCtx) = checkVarDecl(p, value, typ, ctx)
+      (side ++ stmts, newCtx)
 
-      case untpd.VarStmt(id, Some(t), init) =>
-        val typ = typer.normalize(t, ctx)
-        declareVar(id, typ)
-        for e <- init do
-          val value = typer.check(e, typ, ctx)
-          sw += Assign(sw.getId(id.name), value)
-      case untpd.VarStmt(id, None, Some(e)) =>
-        val (value, typ) = typer.infer(e, ctx)
-        declareVar(id, typ.erase)
-        sw += Assign(sw.getId(id.name), value)
-      case untpd.VarStmt(id, None, None) =>
-        reporter.reportMissingTypeAnnot(id.range)
-
-      case untpd.Assign(x, e) => assign(x, e)
-      case untpd.AugAssign(x, op, e: untpd.Expr) =>
-        assign(untpd.LRef(x.name)(x.range),
-          untpd.BinaryExpr(untpd.TermRef(x.name)(x.range), untpd.Ident(op.name.init)(op.range), e))
-
-      case untpd.Assume(e) =>
-        val expr = typer.check(e, BoolType, ctx)
-        sw += Assume(expr)
-      case untpd.Assert(e) =>
-        val expr = typer.check(e, BoolType, ctx)
-        sw += Assert(expr)
-      case untpd.Abort(e) =>
-        typer.check(e, StrType, ctx)
-        sw += Abort()(e.range)
-
-      case untpd.If(e: untpd.Expr, List(untpd.Abort(em)), Nil) =>
-        typer.check(em, StrType, ctx)
-        val cond = typer.check(e, BoolType, ctx)
-        sw += Assert(Not(cond))
-      case untpd.If(g, b1, b2) =>
-        val cond = checkGuard(g)
-        sw.enter()
-        checkBlock(b1, typer.assume(cond, ctx.push()), info)
-        val thenBody = sw.exit()
-        sw.enter()
-        checkBlock(b2, typer.assume(Not(cond), ctx.push()), info)
-        val elseBody = sw.exit()
-        sw += If(cond, thenBody, elseBody)
-
-      case ret@untpd.Return(None) =>
-        sw += Return()(ret.range)
-      case ret@untpd.Return(Some(e)) =>
-        val value = typer.check(e, info.returnType, ctx)
-        sw += Return()(ret.range)
-
-      case s@untpd.While(g, _, b) =>
-        val cond = checkGuard(g)
-        val invariants = s.invariants.map(typer.check(_, BoolType, ctx))
-        sw.enter()
-        checkBlock(b, typer.assume(cond, ctx.push(isLoop = true)), info)
-        val loopBody = sw.exit()
-        sw += While(cond, mkAnd(invariants), loopBody)
-
-      case node: untpd.Break =>
-        if ctx.insideLoop then
-          sw += Break()(node.range)
-        else
-          reporter.reportBreakOutOfLoop(node.range)
-      case node: untpd.Continue =>
-        if ctx.insideLoop then
-          sw += Continue()(node.range)
-        else
-          reporter.reportContinueOutOfLoop(node.range)
-
-      case s@untpd.For(id, e, _, b) =>
-        val (iter, iterSort) = typer.infer(e, ctx)
-        val elemSort = iterSort match
-          case StrType => StrType
-          case ListType(s) => s
-          case _ =>
-            reporter.reportTypeMismatch(e.range, "list", iterSort)
-            NoType
-        val loopCtx = ctx.define(id.name, VarInfo(elemSort)(id.range)).push(isLoop = true)
-        val invariants = s.invariants.map(typer.check(_, BoolType, loopCtx))
-        sw.enter()
-        checkBlock(b, loopCtx, info)
-        val loopBody = sw.exit()
-        sw += For(id.name, iter, mkAnd(invariants), loopBody)
-
-    private def declareVar(ident: untpd.Ident, typ: Type): Unit =
-      ctx.getDefined(ident.name) match
+    case untpd.Assign(id, e) =>
+      ctx.lookup(id.name) match
+        case Some(VarInfo(_, typ)) =>
+          val (value, side) = resolver.coreAPIs.check(e, typ, ctx)
+          (side :+ Assign(id.name, value), ctx)
+        case Some(_) =>
+          reporter.report(ctx.uri, NotAssignable(id.range))
+          (Nil, ctx)
         case None =>
-          sw.declare(ident.name, typ)
-          ctx = ctx.define(ident.name, VarInfo(typ)(ident.range))
-        case Some(conflict) =>
-          reporter.reportNameRedefined(ident.range, conflict.range)
+          reporter.report(ctx.uri, UndefinedName(id.range, id.name))
+          (Nil, ctx)
 
-    private def assign(target: untpd.LExpr, expr: untpd.Expr): Unit = target match
-      case untpd.LRef("_") => // ignore
-      case untpd.LRef(x) =>
-        ctx.lookup(x) match
-          case Some(VarInfo(typ)) =>
-            val value = typer.check(expr, typ, ctx)
-            sw += Assign(sw.getId(x), value)
-          case Some(_) =>
-            reporter.reportNotAssignable(target.range)
-          case None =>
-            reporter.reportNameUndefined(target.range)
+    // Proof derivatives
+    case untpd.Assume(e) =>
+      val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
+      (side :+ Assume(cond), ctx)
+    case untpd.Assert(e) =>
+      val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
+      (side :+ Assert(cond, () => AssertNotProved(e.range)), ctx)
+    case untpd.Abort(em) =>
+      resolver.coreAPIs.check(em, StrType, ctx)
+      (List(Abort()(em.range)), ctx)
+    case untpd.If(e, List(untpd.Abort(em)), Nil) =>
+      resolver.coreAPIs.check(em, StrType, ctx)
+      val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
+      (side :+ Assert(Not(cond), () => AssertNotProved(em.range)), ctx)
 
-      case untpd.LTuple(xs) =>
-        expr match
-          case untpd.TupleExpr(es) if es.length == xs.length =>
-            for (x, e) <- xs zip es do
-              assign(x, e)
-          case _ =>
-            val (value, typ) = typer.infer(expr, ctx)
-            assign(target, value, typ)
+    // Control flow
+    case untpd.If(e, bd1, bd2) =>
+      val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
+      val thenBody = checkBlock(bd1, ctx.pushed, methodInfo, loopLevel)
+      val elseBody = checkBlock(bd2, ctx.pushed, methodInfo, loopLevel)
+      (side :+ If(cond, thenBody, elseBody), ctx)
 
-      case untpd.LList(_) =>
-        val (value, typ) = typer.infer(expr, ctx)
-        assign(target, value, typ)
+    case s@untpd.Return(Some(e)) =>
+      val (value, side) = resolver.coreAPIs.check(e, methodInfo.returnType, ctx)
+      val post = methodInfo.ensures.map(ep => Assert(Apply(ep, List(value)), () => PostNotProved(s.range)))
+      (side ++ post ++ List(Return()(s.range)), ctx)
+    case s@untpd.Return(None) =>
+      if methodInfo.returnType != unitType then
+        reporter.report(ctx.uri, MissingReturnValue(s.range))
+      (List(Return()(s.range)), ctx)
 
-    private def assign(target: untpd.LExpr, value: Expr, valueType: Type): Unit = target match
-      case untpd.LRef("_") => // ignore
-      case untpd.LRef(x) =>
-        ctx.lookup(x) match
-          case Some(VarInfo(t)) =>
-            if valueType.erase :<: t.erase then
-              sw += Assign(sw.getId(x), value)
-            else
-              reporter.reportTypeMismatch(target.range, t.erase, valueType)
-          case Some(_) =>
-            reporter.reportNotAssignable(target.range)
-          case None =>
-            reporter.reportNameUndefined(target.range)
+    case s@untpd.While(e, _, bd) =>
+      val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
+      assert(side.isEmpty, "Side effects are not allowed in loop guards")
+      val (invariants, side1) = s.invariants.map(resolver.coreAPIs.check(_, BoolType, ctx)).unzip
+      assert(side1.flatten.isEmpty, "Side effects are not allowed in loop invariants")
+      val loopBody = checkBlock(bd, ctx.pushed, methodInfo, loopLevel + 1)
+      (List(While(cond, for (e, i) <- invariants.zipWithIndex yield (e, s.invariants(i).range), loopBody)), ctx)
 
-      case untpd.LTuple(xs) => valueType match
-        case TupleType(ts) if ts.length == xs.length =>
-          val (fresh, ctx1) = ctx.defineFreshVal(valueType)
-          sw.declare(fresh, valueType)
-          ctx = ctx1
-          sw += Assign(sw.getId(fresh), value)
-          val tuple = Var(fresh)(value.range)
-          for (x, i) <- xs.zipWithIndex do
-            val e = TupleSelect(i, tuple)(value.range)
-            assign(x, e, ts(i))
-        case _ =>
-          reporter.reportTypeMismatch(value.range, s"${xs.length}-tuple", valueType)
+    case s@untpd.Break() =>
+      if loopLevel > 0 then
+        (List(Break()(s.range)), ctx)
+      else
+        reporter.report(ctx.uri, BreakOutOfLoop(s.range))
+        (Nil, ctx)
 
-      case untpd.LList(xs) => valueType match
-        case ListType(s) =>
-          val (fresh, ctx1) = ctx.defineFreshVal(valueType)
-          sw.declare(fresh, valueType)
-          ctx = ctx1
-          sw += Assign(sw.getId(fresh), value)
-          val list = Var(fresh)(value.range)
-          for (x, i) <- xs.zipWithIndex do
-            val e = CharAt(list, IntConst(i)(value.range))(value.range)
-            assign(x, e, s)
-        case _ =>
-          reporter.reportTypeMismatch(value.range, "list", valueType)
+    case s@untpd.Continue() =>
+      if loopLevel > 0 then
+        (List(Continue()(s.range)), ctx)
+      else
+        reporter.report(ctx.uri, ContinueOutOfLoop(s.range))
+        (Nil, ctx)
 
-    private def checkGuard(guard: untpd.Expr): Expr = guard match
-      case e: untpd.Expr =>
-        typer.check(e, BoolType, ctx)
-      case _ => throw IllegalStateException()
+  private def checkVarDecl(pat: untpd.Pattern, value: Expr, typ: Type,
+                           localCtx: TypingCtx): (List[Stmt], TypingCtx) = pat match
+    case untpd.PatternVar(untpd.Ident("_"), None) =>
+      (Nil, localCtx)
+    case untpd.PatternVar(id, None) =>
+      val info = VarInfo(id, typ)
+      val newCtx = resolver.coreAPIs.define(id, info, localCtx)
+      (List(Declare(id.name, typ), Assign(id.name, value)), newCtx)
+    case untpd.TuplePattern(ps) =>
+      typ match
+        case TupleType(ts) if ts.length == ps.length =>
+          var ctx = localCtx
+          val body = ListBuffer.empty[Stmt]
+          for i <- ts.indices do
+            val e = TupleSelect(i, value)(noRange)
+            val (side, newCtx) = checkVarDecl(ps(i), e, ts(i), ctx)
+            ctx = newCtx
+            body ++= side
+          (body.toList, ctx)
+        case t =>
+          reporter.report(localCtx.uri, PatternTypeMismatch(pat.range, s"${t.show}", s"${ps.length}-tuple"))
+          (Nil, localCtx)
+    case _ =>
+      throw IllegalStateException(s"Unexpected pattern: $pat")

@@ -27,7 +27,7 @@ object untpd:
                           requires: List[Expr], ensures: List[Expr], body: List[Stmt])
                          (val endRange: Range) extends TopStmt
 
-  final case class Param(ident: Ident, typ: Type)
+  final case class Param(ident: Ident, typ: Option[Type])
 
   sealed trait FunSpec
 
@@ -39,7 +39,7 @@ object untpd:
   sealed trait Type:
     val range: Range
 
-  final case class TypeRef(name: String)(val range: Range) extends Type
+  final case class TypeName(name: String)(val range: Range) extends Type
 
   final case class GenericType(constr: Ident, args: List[Type])(val range: Range) extends Type
 
@@ -60,13 +60,27 @@ object untpd:
 
   final case class BoolConst(value: Boolean)(val range: Range) extends Expr
 
+  @deprecated
   final case class CharConst(value: Char)(val range: Range) extends Expr
 
   final case class StrConst(value: String)(val range: Range) extends Expr
 
   final case class NullConst()(val range: Range) extends Expr
 
-  final case class TermRef(name: String)(val range: Range) extends Expr
+  final case class TermName(name: String)(val range: Range) extends Expr
+
+  final case class TupleExpr(elems: List[Expr])(val range: Range) extends Expr
+
+  final case class LambdaExpr(params: List[Param], value: Expr)(val range: Range) extends Expr
+
+  final case class Apply(fun: Expr, args: List[Expr])(endPos: Position) extends Expr:
+    override val range: Range = Range(fun.range.getStart, endPos)
+
+  final case class BinaryExpr(left: Expr, op: Ident, right: Expr) extends Expr:
+    override val range: Range = Range(left.range.getStart, right.range.getEnd)
+
+  final case class Ite(cond: Expr, thenExpr: Expr, elseExpr: Expr) extends Expr:
+    override val range: Range = Range(cond.range.getStart, elseExpr.range.getEnd)
 
   final case class ListExpr(elems: List[Expr])(val range: Range) extends Expr
 
@@ -74,35 +88,7 @@ object untpd:
 
   final case class MapExpr(items: List[(Expr, Expr)])(val range: Range) extends Expr
 
-  final case class TupleExpr(elems: List[Expr])(val range: Range) extends Expr
-
-  final case class Lambda(params: List[Ident], value: Expr)(val range: Range) extends Expr
-
-  final case class UnaryExpr(op: Ident, expr: Expr) extends Expr:
-    override val range: Range = Range(op.range.getStart, expr.range.getEnd)
-
-  final case class BinaryExpr(left: Expr, op: Ident, right: Expr) extends Expr:
-    override val range: Range = Range(left.range.getStart, right.range.getEnd)
-
-  final case class ChainedExpr(left: Expr, cmps: List[(Ident, Expr)]) extends Expr:
-    override val range: Range = Range(left.range.getStart, cmps.last._2.range.getEnd)
-
-  final case class MemberAccess(receiver: Expr, member: Ident) extends Expr:
-    override val range: Range = Range(receiver.range.getStart, member.range.getEnd)
-
-  final case class IndexAccess(receiver: Expr, index: Expr)(endPos: Position) extends Expr:
-    override val range: Range = Range(receiver.range.getStart, endPos)
-
-  final case class Slice(receiver: Expr, start: Option[Expr], end: Option[Expr])(endPos: Position) extends Expr:
-    override val range: Range = Range(receiver.range.getStart, endPos)
-
-  final case class Apply(fun: Expr, args: List[Expr])(endPos: Position) extends Expr:
-    override val range: Range = Range(fun.range.getStart, endPos)
-
-  final case class Size(receiver: Expr)(val range: Range) extends Expr
-
-  final case class Ite(cond: Expr, thenExpr: Expr, elseExpr: Expr) extends Expr:
-    override val range: Range = Range(cond.range.getStart, elseExpr.range.getEnd)
+  final case class Access(receiver: Expr, member: Ident)(val range: Range) extends Expr
 
   // Formal Languages
   sealed trait PExpr
@@ -140,11 +126,17 @@ object untpd:
 
   final case class ExprStmt(expr: Expr) extends Stmt
 
-  final case class VarStmt(ident: Ident, typ: Option[Type], init: Option[Expr]) extends Stmt
+  final case class VarDecl(left: Pattern, right: Expr) extends Stmt
 
-  final case class Assign(left: LExpr, right: Expr) extends Stmt
+  sealed trait Pattern:
+    val range: Range
 
-  final case class AugAssign(left: Ident, op: Ident, right: Expr) extends Stmt
+  final case class PatternVar(ident: Ident, typ: Option[Type]) extends Pattern:
+    override val range: Range = if typ.isEmpty then ident.range else Range(ident.range.getStart, typ.get.range.getEnd)
+
+  final case class TuplePattern(elems: List[Pattern])(val range: Range) extends Pattern
+
+  final case class Assign(left: Ident, right: Expr) extends Stmt
 
   final case class Assume(expr: Expr) extends Stmt
 

@@ -6,7 +6,7 @@ object TypeOps:
   extension (typ: Type)
     def isSort: Boolean = typ match
       case IntType | BoolType | StrType | NullType | NoType => true
-      case RefinedType(_, _) => false
+      case _: RefinedType => false
       case ListType(t) => t.isSort
       case SetType(t) => t.isSort
       case MapType(k, v) => k.isSort && v.isSort
@@ -19,7 +19,7 @@ object TypeOps:
       case ListType(t) => ListType(t.erase)
       case SetType(t) => SetType(t.erase)
       case MapType(k, v) => MapType(k.erase, v.erase)
-      case RefinedType(t, _) => t.erase
+      case RefinedType(_, t, _) => t.erase
       case TupleType(ts) => TupleType(ts.map(_.erase))
       case FunType(ps, r) => FunType(ps.map(_.erase), r.erase)
       case OptType(t) => OptType(t.erase)

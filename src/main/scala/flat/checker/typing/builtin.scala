@@ -6,11 +6,16 @@ import flat.checker.flan.TypeOps.erase
 import flat.checker.flan.tpd.{BoolType as bool, IntType as int, StrType as str, *}
 import org.eclipse.lsp4j.Range
 
-final case class Member(funType: FunType, builder: PartialFunction[List[Expr], Range => Expr]):
-  def apply(receiver: Expr, args: List[Expr], range: Range): Expr =
-    val argList = receiver :: args
-    assert(builder.isDefinedAt(argList), s"Builder not defined for arguments: $argList")
-    builder(argList)(range)
+final case class Member(funType: FunType,
+                        op: PartialFunction[List[Expr], Expr],
+                        pre: PartialFunction[List[(Expr, Range)], List[Stmt]] = PartialFunction.empty):
+  def impl(receiver: Expr, args: List[Expr]): Expr =
+    if op.isDefinedAt(receiver :: args) then op(receiver :: args)
+    else
+      throw new IllegalArgumentException(s"Invalid member access: $receiver.${args.mkString(", ")}")
+
+  def side(receiver: Expr, args: List[(Expr, Range)]): List[Stmt] =
+    if pre.isDefinedAt((receiver, noRange) :: args) then pre((receiver, noRange) :: args) else Nil
 
 object builtin:
   def accessMember(typ: Type, name: String): List[Member] = typ.erase match

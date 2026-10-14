@@ -25,7 +25,7 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
     case MapType(tk, tv) => encodeMapSort(tk, tv)
     case TupleType(ts) => tm.mkTupleSort(ts.map(encodeSort).toArray)
     case FunType(ps, r) => tm.mkFunctionSort(ps.map(encodeSort).toArray, encodeSort(r))
-    case RefinedType(t, _) => encodeSort(t)
+    case RefinedType(_, t, _) => encodeSort(t)
     case _ => throw UnsupportedOperationException(s"encode sort ${sort.getClass.getSimpleName}")
 
   def encodeExpr(expr: Expr)(using ctx: Map[String, cvc5.Term]): cvc5.Term = expr match
@@ -38,8 +38,8 @@ class SMTEncoder(using vars: Map[String, Type]) extends LazyLogging:
         case Some(t) => t
         case None => encodeUninterpreted(expr, vars(x), x)
     case Lambda(ps, e) =>
-      val vars = ps.map(p => tm.mkVar(encodeSort(p.typ)))
-      mkLambda(vars, encodeExpr(e)(using ctx ++ (ps.map(_.name) zip vars).toMap))
+      val vars = ps.map(p => tm.mkVar(encodeSort(p._2)))
+      mkLambda(vars, encodeExpr(e)(using ctx ++ (ps.map(_._1) zip vars).toMap))
     case Apply(ef, es) => tm.mkTerm(APPLY_UF, (encodeExpr(ef) :: es.map(encodeExpr)).toArray)
 
     // Basic

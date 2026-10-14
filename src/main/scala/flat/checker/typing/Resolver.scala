@@ -2,7 +2,7 @@ package flat.checker.typing
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.flan.TypeOps.erase
-import flat.checker.flan.tpd.{BoolType, FunType, TupleType}
+import flat.checker.flan.tpd.*
 import flat.checker.flan.untpd
 import flat.checker.parsing.Parser
 import flat.checker.{Reporter, Source}
@@ -10,71 +10,64 @@ import flat.checker.{Reporter, Source}
 import scala.collection.mutable
 
 class Resolver(using reporter: Reporter) extends LazyLogging:
-  private val api = API()
+  def resolve(uri: String, module: untpd.Module): TypingCtx =
+    val ctx0 = TypingCtx(uri)
+    module.body.foldLeft(ctx0) { (ctx, stmt) => check(stmt, ctx) }
 
-  def resolve(module: untpd.Module): Ctx =
-    var ctx = Ctx()
-    module.body.foreach:
-      case untpd.Import(mod, ids) =>
-        for
-          moduleCtx <- load(mod.name)
-          id <- ids
-        do
-          moduleCtx.lookup(id.name) match
-            case Some(info) =>
-              ctx = ctx.define(id.name, info)
-            case None =>
-              reporter.reportNameUndefined(id.range)
+  val coreAPIs = new CoreAPIs
 
-      case untpd.TypeAlias(id, t) =>
-        val value = api.normalize(t, ctx)
-        ctx = define(ctx, id, TypeInfo(value)(id.range))
+  def check(stmt: untpd.TopStmt, ctx: TypingCtx): TypingCtx = stmt match
+    case untpd.Import(mod, ids) =>
+      loadModule(mod.name) match
+        case Some(mCtx) => ids.foldLeft(ctx) { (to, id) => doImport(id, mCtx, to) }
+        case None =>
+          reporter.report(ctx.uri, UndefinedName(mod.range, mod.name))
+          ctx
 
-      case untpd.ValDef(id, Some(t), e) =>
-        val typ = api.normalize(t, ctx)
-        val value = api.check(e, typ, ctx)(using null)
-        ctx = define(ctx, id, ConstInfo(typ, value)(id.range))
-      case untpd.ValDef(id, None, e) =>
-        val (value, sort) = api.infer(e, ctx)(using null)
-        ctx = define(ctx, id, ConstInfo(sort, value)(id.range))
+    case untpd.TypeAlias(id, t) =>
+      val typ = coreAPIs.unfold(t, ctx)
+      val info = TypeInfo(id, typ)
+      coreAPIs.define(id, info, ctx)
 
-      case untpd.LangDef(id, e) =>
-        val regEx = api.translate(e, ctx)
-        regEx.name = id.name
-        ctx = define(ctx, id, LangInfo(regEx)(id.range))
+    case untpd.ValDef(id, None, e) =>
+      val (typ, value, side) = coreAPIs.infer(e, ctx)
+      assert(side.isEmpty, "Side effects are not allowed in top-level val definitions")
+      val info = ConstInfo(id, typ, value)
+      coreAPIs.define(id, info, ctx)
 
-      case untpd.FunDef(id, in, out, pre, post, _) =>
-        val sw = new ScriptWriter
-        val params = api.inferParamList(in, ctx)
-        var localCtx = ctx.push()
-        for (id, typ) <- params do
-          localCtx = define(localCtx, id, ValInfo(typ)(id.range))
-          sw.declare(id.name, typ.erase)
-        val returnType = out.map(api.normalize(_, ctx)).getOrElse(TupleType(Nil))
-        val requires = pre.map(api.check(_, BoolType, localCtx)(using sw))
-        val ensures = post.map(api.check(_, FunType(List(returnType), BoolType), localCtx)(using sw))
-        ctx = define(ctx, id, MethodInfo(params, returnType, requires, ensures, sw, localCtx)(id.range))
+    case untpd.LangDef(id, e) =>
+      val regEx = coreAPIs.expand(e, ctx)
+      regEx.name = id.name
+      val info = LangInfo(id, regEx)
+      coreAPIs.define(id, info, ctx)
 
-    ctx
+    case untpd.FunDef(id, ps, rt, pre, post, _) =>
+      val (params, localCtx) = coreAPIs.resolveParams(ps, Nil, ctx.pushed)
+      val returnType = rt.map(coreAPIs.unfold(_, localCtx)).getOrElse(unitType)
+      val (requires, side1) = pre.map(coreAPIs.check(_, BoolType, localCtx)).unzip
+      assert(side1.forall(_.isEmpty), "Side effects are not allowed in preconditions")
+      val (ensures, side2) = post.map(coreAPIs.check(_, FunType(List(returnType), BoolType), localCtx)).unzip
+      assert(side2.forall(_.isEmpty), "Side effects are not allowed in postconditions")
+      val info = MethodInfo(id, params, returnType, requires, ensures, localCtx)
+      coreAPIs.define(id, info, ctx)
 
-  private val cache = mutable.Map.empty[String, Ctx]
+  private val cache = mutable.Map.empty[String, TypingCtx]
 
-  private def load(moduleName: String): Option[Ctx] =
-    cache.get(moduleName) match
+  private def loadModule(name: String): Option[TypingCtx] =
+    cache.get(name) match
       case Some(ctx) => Some(ctx)
       case None =>
         val path = reporter.source.uri.stripPrefix("file://")
         val basePath = path.substring(0, path.lastIndexOf('/') + 1)
-        val moduleSource = Source.fromPath(os.Path(s"$basePath$moduleName.flan"))
+        val moduleSource = Source.fromPath(os.Path(s"$basePath$name.flan"))
         val parser = Parser(moduleSource.uri, moduleSource.text)
-        val ctx = resolve(parser.parse())
-        cache(moduleName) = ctx
+        val ctx = resolve(moduleSource.uri, parser.parse())
+        cache(name) = ctx
         Some(ctx)
 
-  private def define(ctx: Ctx, id: untpd.Ident, info: Info): Ctx =
-    ctx.lookup(id.name) match
+  private def doImport(id: untpd.Ident, from: TypingCtx, to: TypingCtx): TypingCtx =
+    from.get(id.name) match
+      case Some(info) => coreAPIs.define(id, info, to)
       case None =>
-        ctx.define(id.name, info)
-      case Some(conflict) =>
-        reporter.reportNameRedefined(id.range, conflict.range)
-        ctx
+        reporter.report(to.uri, UndefinedName(id.range, id.name))
+        to

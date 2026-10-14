@@ -1,44 +1,43 @@
 package flat.checker.verif
 
 import flat.checker.flan.*
-import flat.checker.flan.TypeOps.erase
 import flat.checker.flan.tpd.*
-import flat.checker.verif.Simplifier.{simplify, toCNF}
 
-final case class MethodInfo(params: List[VarDecl], returns: List[VarDecl],
-                            requires: List[Expr], ensures: List[Expr],
-                            locals: List[VarDecl]):
-  def paramNames: List[String] = params.map(_.name)
+enum Signal:
+  case NORMAL, BREAK, CONTINUE
 
-  def returnNames: List[String] = returns.map(_.name)
+final case class State(uri: String,
+                       sortStack: List[Map[String, Type]] = List(Map.empty),
+                       valueStack: List[Map[String, Expr]] = List(Map.empty),
+                       symbolicVars: Map[String, Type] = Map.empty,
+                       conds: List[Expr] = Nil,
+                       freshNext: Map[String, Int] = Map.empty,
+                       signal: Signal = Signal.NORMAL):
+  def pushed: State = copy(valueStack = Map.empty :: valueStack)
 
-  def names: List[String] = params.map(_.name) ++ returns.map(_.name) ++ locals.map(_.name)
+  def getSort(name: String): Type =
+    sortStack.collectFirst { case m if m.contains(name) => m(name) }
+      .getOrElse(throw new RuntimeException(s"Variable $name not found in sort stack"))
 
-  def types: Map[String, Type] = Map.from(for p <- params ++ returns ++ locals yield p.name -> p.typ)
+  def getValue(name: String): Expr =
+    valueStack.collectFirst { case m if m.contains(name) => m(name) }
+      .getOrElse(throw new RuntimeException(s"Variable $name not found in value stack"))
 
-final case class VarInfo(typ: Type, value: Expr)
+  def declare(name: String, typ: Type): State =
+    copy(sortStack = sortStack.head + (name -> typ) :: sortStack.tail)
 
-final case class PrfCtx(vars: Map[String, Type] = Map.empty,
-                        premises: List[Expr] = Nil):
-  def add(value: Expr): PrfCtx =
-    copy(premises = premises ++ value.simplify.toCNF)
+  def assign(name: String, value: Expr): State =
+    copy(valueStack = valueStack.head + (name -> value) :: valueStack.tail)
 
-final case class State(methods: Map[String, MethodInfo] = Map.empty,
-                       currentMethod: String = "",
-                       values: Map[String, Expr] = Map.empty,
-                       freshCounts: Map[String, Int] = Map.empty,
-                       ctx: PrfCtx = PrfCtx()):
-  val types: Map[String, Type] = methods(currentMethod).types
+  def havoc(name: String): State =
+    val newCount = freshNext.getOrElse(name, 0)
+    val freshName = name + "$" + newCount
+    copy(freshNext = freshNext + (name -> (newCount + 1)),
+      symbolicVars = symbolicVars + (freshName -> getSort(name)),
+      valueStack = valueStack.head + (name -> Var(freshName)) :: valueStack.tail)
 
-  val sorts: Map[String, Type] = types.map { (name, typ) => name -> typ.erase }
+  def havoc(names: Set[String]): State = names.foldLeft(this)(_.havoc(_))
 
-  def fresh(name: String, sort: Type): (String, State) =
-    val version = freshCounts.getOrElse(name, 0)
-    val freshName = versioned(name, version)
-    (freshName, copy(
-      freshCounts = freshCounts + (name -> (version + 1)),
-      ctx = ctx.copy(vars = ctx.vars + (freshName -> sort))))
+  def assume(cond: Expr): State = copy(conds = cond :: conds)
 
-  def add(value: Expr): State = copy(ctx = ctx.add(value))
-
-inline def versioned(name: String, version: Int): String = s"$name:$version"
+  def assume(conds: List[Expr]): State = copy(conds = conds ++ this.conds)

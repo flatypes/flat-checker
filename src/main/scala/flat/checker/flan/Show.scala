@@ -8,18 +8,18 @@ object Show extends LazyLogging:
   // Types and sorts
   extension (typ: Type)
     def show: String = typ match
-      case IntType => "int"
-      case BoolType => "bool"
-      case StrType => "str"
-      case ListType(t) => s"list[${t.show}]"
-      case SetType(t) => s"set[${t.show}]"
-      case MapType(tk, tv) => s"dict[${tk.show}, ${tv.show}]"
+      case IntType => "Int"
+      case BoolType => "Bool"
+      case StrType => "Str"
+      case ListType(t) => s"List[${t.show}]"
+      case SetType(t) => s"Set[${t.show}]"
+      case MapType(tk, tv) => s"Map[${tk.show}, ${tv.show}]"
       case t: RefinedType =>
         if t.name.nonEmpty then t.name
         else s"{${t.base.show} | ${t.reft.show}}"
       case TupleType(ts) => ts.map(_.show).mkString("(", ", ", ")")
       case FunType(ts, t) => ts.map(_.show).mkString("(", ", ", ")") + " -> " + t.show
-      case NullType => "null"
+      case NullType => "Null"
       case OptType(t) => s"${t.show}?"
       case NoType => "∅"
 
@@ -37,9 +37,6 @@ object Show extends LazyLogging:
       case FunSort(ss, s) => ss.map(_.show).mkString("(", ", ", ")") + " -> " + s.show
       case UnionSort(s1, s2) => s"${s1.show} | ${s2.show}"
       case NoSort => "?"
-
-  extension (varDecl: VarDecl)
-    def show: String = s"${varDecl.name}: ${varDecl.typ.show}"
 
   // Expressions
   val LEVEL_TIGHTER = 0
@@ -66,7 +63,7 @@ object Show extends LazyLogging:
     case _: And => LEVEL_AND
     case _: Or => LEVEL_OR
     case _: Implies => LEVEL_ARROW
-    case _: Ite => LEVEL_LOOSER
+    case _: Ite | _: Lambda => LEVEL_LOOSER
     case _ => LEVEL_TIGHTER
 
   val ASSOC_NONE = 0
@@ -195,14 +192,15 @@ object Show extends LazyLogging:
     if paren then s"($s)" else s
 
   private def showVar(name: String): String =
-    name.split(':') match
+    name.split('$') match
       case Array(x) => x
+      case Array(x, "0") => x
       case Array(x, ver) if ver.forall(c => '0' <= c && c <= '9') =>
         x + ver.map(c => (c - '0' + '₀').toChar).mkString
       case _ => throw IllegalArgumentException(s"invalid variable name: $name")
 
-  private def showParamList(ps: Seq[VarDecl]): String =
-    ps.map(_.show).mkString("(", ", ", ")")
+  private def showParamList(ps: Seq[(String, Type)]): String =
+    ps.map { case (x, t) => s"$x: ${t.show}" }.mkString("(", ", ", ")")
 
   private def showPrefix(op: String, expr: Expr): String =
     op + showExpr(expr, getLevel(expr) > LEVEL_PREFIX)
@@ -229,25 +227,25 @@ object Show extends LazyLogging:
   private def showStmt(stmt: Stmt, level: Int): String =
     val s = stmt match
       case ExprStmt(e) => showExpr(e) + "\n"
+      case Declare(x, t) => s"var ${showVar(x)}: ${t.show}\n"
       case Assign(x, e) => s"${showVar(x)} = ${showExpr(e)}\n"
       case Havoc(x) => s"${showVar(x)} = *\n"
       case Assume(e) => s"assume ${showExpr(e)}\n"
-      case Assert(e) => s"assert ${showExpr(e)}\n"
-      case GAssert(e, _) => s"assert ${showExpr(e)}\n"
+      case Assert(e, _) => s"assert ${showExpr(e)}\n"
       case Abort() => "abort\n"
       case If(e, b1, b2) =>
-        val s1 = b1.map(showStmt(_, level + 1)).mkString("\n")
-        val s2 = b2.map(showStmt(_, level + 1)).mkString("\n")
-        s"if ${showExpr(e)} then\n$s1\nelse\n$s2"
+        val s1 = b1.map(showStmt(_, level + 1)).mkString
+        val s2 = b2.map(showStmt(_, level + 1)).mkString
+        s"if ${showExpr(e)}:\n${s1}else\n$s2"
       case Return() => "return\n"
       case While(e, _, b) =>
-        val body = b.map(showStmt(_, level + 1)).mkString("\n")
-        s"while ${showExpr(e)} do\n$body"
+        val body = b.map(showStmt(_, level + 1)).mkString
+        s"while ${showExpr(e)}:\n$body"
       case Break() => "break\n"
       case Continue() => "continue\n"
       case For(x, e, _, b) =>
-        val body = b.map(showStmt(_, level + 1)).mkString("\n")
-        s"for ${showVar(x)} in ${showExpr(e)} do\n$body"
+        val body = b.map(showStmt(_, level + 1)).mkString
+        s"for ${showVar(x)} in ${showExpr(e)}:\n$body"
     "  " * level + s
 
   extension (stmt: Stmt)

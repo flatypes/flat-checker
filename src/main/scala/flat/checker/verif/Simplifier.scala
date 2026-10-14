@@ -17,11 +17,13 @@ object Simplifier extends LazyLogging:
       case Var(_) | MethodRef(_) => expr
 
       // Functional
+      case Lambda(ps, e) => Lambda(ps, e.simplify)(expr.range)
       case Apply(e, es) =>
         (e.simplify, es.map(_.simplify)) match
-          case (f@Lambda(_, e), es) => e.subst(f.paramNames, es)
+          case (f@Lambda(_, e), es) =>
+            assert(f.paramNames.length == es.length, "lambda apply arity mismatch")
+            e.subst(f.paramNames, es)
           case (e, es) => Apply(e, es)(expr.range)
-      case Lambda(ps, e) => Lambda(ps, e.simplify)(expr.range)
 
       // Basic
       case Eq(e1, e2) =>
