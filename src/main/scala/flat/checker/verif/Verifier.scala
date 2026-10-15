@@ -24,8 +24,13 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
     case ExprStmt(e) =>
       safetyCheck(e, state)
       List(state)
-    case Declare(x, t) =>
-      List(state.declare(x, t))
+    case Declare(x, t, Some(e)) =>
+      if safetyCheck(e, state) then
+        List(state.declare(x, t).assign(x, eval(e, state)))
+      else
+        Nil
+    case Declare(x, t, None) =>
+      List(state.declare(x, t).havoc(x))
     case Assign(x, e) =>
       if safetyCheck(e, state) then
         List(state.assign(x, eval(e, state)))

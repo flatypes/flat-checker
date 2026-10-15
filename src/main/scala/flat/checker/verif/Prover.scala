@@ -15,7 +15,9 @@ object Prover extends LazyLogging:
   def prove(goal: Goal, path: String = ""): Boolean =
     val simplifiedGoal = simplify(goal)
     logger.debug("Simplified:\n{}", simplifiedGoal.pp)
-    if simplifiedGoal.conclusion == BoolConst(true) || simplifiedGoal.premises.contains(BoolConst(false)) then
+    if simplifiedGoal.conclusion == BoolConst(true)
+      || simplifiedGoal.premises.contains(BoolConst(false))
+      || simplifiedGoal.premises.contains(simplifiedGoal.conclusion) then
       return true
 
     splitIf(simplifiedGoal) match

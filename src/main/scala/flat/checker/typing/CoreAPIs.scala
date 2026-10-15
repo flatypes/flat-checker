@@ -5,7 +5,7 @@ import flat.checker.Reporter
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{CharSet, RegEx, StrRE, given}
 import flat.checker.flan.Show.show
-import flat.checker.flan.TypeOps.erase
+import flat.checker.flan.TypeOps.{erase, isSort}
 import flat.checker.flan.tpd.{*, given}
 import flat.checker.flan.untpd
 import flat.checker.parsing.SyntaxError
@@ -76,12 +76,14 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       val (elseExpr, elseSide) = check(e2, typ, ctx.assume(Not(cond)))
       (typ, Ite(cond, thenExpr, elseExpr), condSide ++ thenSide ++ elseSide)
 
-    // Operations: string in lang
+    // Operations: in
     case untpd.BinaryExpr(e, untpd.Ident("in"), untpd.TermName(x))
       if ctx.lookup(x).exists(_.isInstanceOf[LangInfo]) =>
       val (str, strSide) = check(e, StrType, ctx)
       val re = ctx.lookup(x).get.asInstanceOf[LangInfo].regEx
       (BoolType, StrIn(str, re), strSide)
+    case untpd.BinaryExpr(e1, op@untpd.Ident("in"), e2) =>
+      inferOperation(e2, untpd.Ident("contains")(op.range), List(e1), node.range, ctx)
 
     // Operations: string format
     case untpd.BinaryExpr(untpd.StrConst(fmt), untpd.Ident("%"), e) =>
@@ -135,10 +137,13 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       val (args, argsSide) = checkArgs(es, info.paramTypes, node.range, ctx)
       val pre = for p <- info.requires yield
         Assert(p.subst(info.paramNames.zip(args).toMap), () => PreNotProved(node.range))
-      val fresh = "fresh$" + freshCounter.getAndIncrement()
+      val fresh = "fresh_" + freshCounter.getAndIncrement()
+      val freshSide =
+        if info.returnType.isSort then Nil else List(Assume(hasType(Var(fresh), info.returnType)))
       val post = for p <- info.ensures yield
         Assume(Apply(p.subst(info.paramNames.zip(args).toMap), List(Var(fresh))))
-      (info.returnType, Var(fresh), argsSide ++ pre ++ List(Declare(fresh, info.returnType), Havoc(fresh)) ++ post)
+      (info.returnType, Var(fresh),
+        argsSide ++ pre ++ List(Declare(fresh, info.returnType.erase)) ++ freshSide ++ post)
 
     // Function application: others
     case untpd.Apply(e, es) =>

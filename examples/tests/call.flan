@@ -19,3 +19,13 @@ lang Bit = r'0|1'
 def h(s: Input) -> (Bit, Word):
     ensures lambda (bit, word) -> bit == '0' ? word in Lower : word in Upper
     return (s[0], s[1:])
+
+def main():
+    assert f('') in APlus
+    var (x, y) = g(5, 3)
+    assert x >= 0 && y >= 0
+    var (bit, word) = h('0hello')
+    if bit == '1':
+        assert word in Upper
+    else:
+        assert word in Lower

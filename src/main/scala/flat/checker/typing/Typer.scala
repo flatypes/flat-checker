@@ -25,7 +25,6 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     val body = ListBuffer.empty[Stmt]
     for (x, t) <- info.params do
       body += Declare(x, t.erase)
-      body += Havoc(x)
       if t != t.erase then
         body += Assume(resolver.coreAPIs.hasType(Var(x), t))
     for e <- info.requires do
@@ -54,7 +53,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       val typ = resolver.coreAPIs.unfold(t, ctx)
       val (value, side) = resolver.coreAPIs.check(e, typ, ctx)
       val info = VarInfo(id, typ)
-      (side ++ List(Declare(id.name, typ), Assign(id.name, value)), resolver.coreAPIs.define(id, info, ctx))
+      (side ++ List(Declare(id.name, typ.erase, Some(value))), resolver.coreAPIs.define(id, info, ctx))
     case untpd.VarDecl(p, e) =>
       val (typ, value, side) = resolver.coreAPIs.infer(e, ctx)
       val (stmts, newCtx) = checkVarDecl(p, value, typ, ctx)
@@ -132,7 +131,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     case untpd.PatternVar(id, None) =>
       val info = VarInfo(id, typ)
       val newCtx = resolver.coreAPIs.define(id, info, localCtx)
-      (List(Declare(id.name, typ), Assign(id.name, value)), newCtx)
+      (List(Declare(id.name, typ.erase, Some(value))), newCtx)
     case untpd.TuplePattern(ps) =>
       typ match
         case TupleType(ts) if ts.length == ps.length =>

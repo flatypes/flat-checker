@@ -2,6 +2,7 @@ package flat.checker.flan
 
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{CharSet, StrRE}
+import flat.checker.flan.TypeOps.isSort
 import flat.checker.verif.ProofError
 import org.eclipse.lsp4j.{Position, Range}
 
@@ -13,7 +14,8 @@ object tpd:
 
   final case class ExprStmt(expr: Expr) extends Stmt
 
-  final case class Declare(name: String, sort: Type) extends Stmt
+  final case class Declare(name: String, sort: Type, init: Option[Expr] = None) extends Stmt:
+    require(sort.isSort)
 
   final case class Assign(variable: String, value: Expr) extends Stmt
 
@@ -128,6 +130,7 @@ object tpd:
     override def rebuild(subtrees: List[Expr]): MethodRef = this
 
   final case class Lambda(params: List[(String, Type)], body: Expr)(val range: Range = noRange) extends Expr:
+    require(params.forall(_._2.isSort))
     def paramNames: List[String] = params.map(_._1)
 
     override def rebuild(subtrees: List[Expr]): Lambda = subtrees match
