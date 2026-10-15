@@ -3,10 +3,7 @@ package flat.checker.flan
 import org.eclipse.lsp4j.{Position, Range}
 
 object untpd:
-  final case class Module(body: List[TopStmt])
-
-  object Module:
-    val empty: Module = Module(Nil)
+  final case class Module(uri: String, body: List[TopStmt] = Nil)
 
   final case class Ident(name: String)(val range: Range)
 
@@ -19,7 +16,7 @@ object untpd:
 
   final case class TypeAlias(ident: Ident, value: Type) extends TopStmt
 
-  final case class ValDef(ident: Ident, typ: Option[Type], value: Expr) extends TopStmt
+  final case class ValDef(ident: Ident, value: Expr) extends TopStmt
 
   final case class LangDef(ident: Ident, value: PExpr) extends TopStmt
 

@@ -26,8 +26,7 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
 
   given Conversion[String, Parser[Token]] = s => elem(s"'$s'", tk => tk.typ == KEYWORD && tk.value == s)
 
-  // Module
-  def module: Parser[Module] = topStmt.* ^^ (Module(_))
+  def topLevel: Parser[List[TopStmt]] = topStmt.*
 
   private def ident: Parser[Ident] = IDENTIFIER ^^ { tk => Ident(tk.value)(tk.span) }
 
@@ -41,7 +40,7 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     "type" ~>! ident ~ ("=" ~> typ) <~ NEWLINE ^^ { case id ~ t => TypeAlias(id, t) }
 
   private def valDef: Parser[ValDef] =
-    "val" ~>! ident ~ (":" ~> typ).? ~ ("=" ~> expr) <~ NEWLINE ^^ { case id ~ t ~ e => ValDef(id, t, e) }
+    "val" ~>! ident ~ ("=" ~> expr) <~ NEWLINE ^^ { case id ~ e => ValDef(id, e) }
 
   private def langDef: Parser[LangDef] =
     "lang" ~>! ident ~ ("=" ~> pExpr) <~ NEWLINE ^^ { case id ~ e => LangDef(id, e) }
@@ -343,11 +342,11 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     val lexer = Lexer(uri, text)
     val tokens = lexer.lex()
     if reporter.hasError then
-      return Module.empty
+      return Module(uri)
 
     val reader = TokenReader(tokens)
-    phrase(module)(reader) match
-      case Success(mod, _) => mod
+    phrase(topLevel)(reader) match
+      case Success(bd, _) => Module(uri, bd)
       case NoSuccess(msg, next) =>
         reporter.report(uri, SyntaxError(next.first.span, msg))
-        Module.empty
+        Module(uri)

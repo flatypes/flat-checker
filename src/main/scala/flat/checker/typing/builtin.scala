@@ -99,7 +99,6 @@ object builtin:
     case "split" => List(
       Member(str -> ListType(str), { case List(s, t) => StrSplit(s, t) }),
       Member((str, int) -> ListType(str), { case List(s, t, k) => StrSplit(s, t, Some(k)) }))
-    case "partition" => List(Member(str -> TupleType(List(str, str, str)), { case List(s, t) => StrPartition(s, t) }))
     case "replace" => List(Member((str, str) -> str, { case List(s, t1, t2) => StrReplace(s, t1, t2) }))
     // conversion
     case "trim" => List(Member(() -> str, { case List(s) => StrTrim(s) }))

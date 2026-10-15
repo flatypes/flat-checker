@@ -10,6 +10,7 @@ import flat.checker.verif.Simplifier.simplify
 import flat.checker.verif.Type.*
 
 import scala.Function.unlift
+import scala.collection.mutable.ListBuffer
 
 object Prover extends LazyLogging:
   def prove(goal: Goal, path: String = ""): Boolean =
@@ -79,25 +80,36 @@ object Prover extends LazyLogging:
     if narrowedGoal.premises.exists(impliesFalse) then
       return true
 
-    goal.conclusion match
+    var failure = false
+    val todos = ListBuffer.empty[Expr]
+    goal.conclusion.conjuncts.foreach:
       case StrIn(e, r) =>
         val inferer = Inferer(narrowedGoal)
         inferer.infer(e) match
           case TStr(r1) =>
             logger.debug("Inferred: {} ∈ {}", e.show, r1.pp)
-            r1 == r || RESub.check(r1, r)
-          case _ => ???
+            if !(r1 == r || RESub.check(r1, r)) then
+              failure = true
+          case _ => throw IllegalStateException("type error")
       case _ =>
-        val lemmas = Synthesizer.synthesizeLemmas(narrowedGoal)
-        if lemmas.nonEmpty then
-          logger.debug(s"Lemmas: ${lemmas.map(_.show).mkString(", ")}")
-          if lemmas.contains(goal.conclusion) then
-            return true
+        todos ++= goal.conclusion.conjuncts
 
-        val solver = new SMTSolver(using goal.ctx)
-        goal.premises.foreach(solver.add)
-        lemmas.foreach(solver.add)
-        solver.prove(goal.conclusion)
+    if todos.isEmpty then
+      !failure
+    else
+      !failure && solveLogicalGoal(narrowedGoal.copy(conclusion = mkAnd(todos.toList)))
+
+  private def solveLogicalGoal(goal: Goal): Boolean =
+    val lemmas = Synthesizer.synthesizeLemmas(goal)
+    if lemmas.nonEmpty then
+      logger.debug(s"Lemmas: ${lemmas.map(_.show).mkString(", ")}")
+      if lemmas.contains(goal.conclusion) then
+        return true
+
+    val solver = new SMTSolver(using goal.ctx)
+    goal.premises.foreach(solver.add)
+    lemmas.foreach(solver.add)
+    solver.prove(goal.conclusion)
 
   private def impliesFalse(expr: Expr): Boolean = expr match
     case StrIn(_, r) => r.isEmpty

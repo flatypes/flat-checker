@@ -238,7 +238,7 @@ object Show extends LazyLogging:
         val s1 = b1.map(showStmt(_, level + 1)).mkString
         val s2 = b2.map(showStmt(_, level + 1)).mkString
         s"if ${showExpr(e)}:\n${s1}else\n$s2"
-      case Return() => "return\n"
+      case Return(e) => s"return ${showExpr(e)}\n"
       case While(e, _, b) =>
         val body = b.map(showStmt(_, level + 1)).mkString
         s"while ${showExpr(e)}:\n$body"

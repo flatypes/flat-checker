@@ -99,18 +99,16 @@ object CLI extends LazyLogging:
         System.exit(1)
 
       val typer = Typer(using reporter)
-      val scripts = typer.typeCheck(source.uri, tree)
+      val module = typer.typeCheck(tree)
       if reporter.hasError then
         reporter.printTo(Console.err)
         System.exit(1)
 
       val verifier = Verifier(using reporter)
-      for script <- scripts do
-        logger.debug("Script:\n{}", script.body.map(_.show).mkString)
-        verifier.verify(script)
-        if reporter.hasError then
-          reporter.printTo(Console.err)
-          System.exit(1)
+      verifier.verify(module)
+      if reporter.hasError then
+        reporter.printTo(Console.err)
+        System.exit(1)
 
       reporter.printTo(Console.err) // print warnings if any
       logger.info("Checking passed: " + path.toString)

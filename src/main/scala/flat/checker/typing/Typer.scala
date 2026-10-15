@@ -4,33 +4,26 @@ import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
 import flat.checker.flan.*
 import flat.checker.flan.Show.show
-import flat.checker.flan.TypeOps.erase
 import flat.checker.flan.tpd.*
-import flat.checker.verif.{AssertNotProved, PostNotProved}
+import flat.checker.verif.AssertNotProved
 
 import scala.collection.mutable.ListBuffer
 
 class Typer(using reporter: Reporter) extends LazyLogging:
   private val resolver = new Resolver
 
-  def typeCheck(uri: String, module: untpd.Module): List[Script] =
-    val ctx = resolver.resolve(uri, module)
-    module.body.flatMap:
+  def typeCheck(tree: untpd.Module): Module =
+    val ctx = resolver.resolve(tree)
+    val body = tree.body.flatMap:
       case node: untpd.FunDef if node.body.nonEmpty => Some(checkMethod(node, ctx))
       case _ => None
+    Module(tree.uri, body)
 
-  private def checkMethod(node: untpd.FunDef, globalCtx: TypingCtx): Script =
+  private def checkMethod(node: untpd.FunDef, globalCtx: TypingCtx): MethodDef =
     val name = node.ident.name
     val info = globalCtx.get(name).get.asInstanceOf[MethodInfo]
-    val body = ListBuffer.empty[Stmt]
-    for (x, t) <- info.params do
-      body += Declare(x, t.erase)
-      if t != t.erase then
-        body += Assume(resolver.coreAPIs.hasType(Var(x), t))
-    for e <- info.requires do
-      body += Assume(e)
-    body ++= checkBlock(node.body, info.localCtx, info, 0)
-    Script(globalCtx.uri, body.toList)
+    val body = checkBlock(node.body, info.localCtx, info, 0)
+    MethodDef(name, info.params, info.returnType, info.requires, info.ensures, body)
 
   private def checkBlock(nodes: List[untpd.Stmt], localCtx: TypingCtx,
                          methodInfo: MethodInfo, loopLevel: Int): List[Stmt] =
@@ -49,11 +42,34 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       val (typ, expr, side) = resolver.coreAPIs.infer(e, ctx)
       (side :+ ExprStmt(expr), ctx)
 
+    case untpd.VarDecl(p, e@untpd.Apply(untpd.TermName(m), es))
+      if patternIsVarList(p) && ctx.lookup(m).exists(_.isInstanceOf[MethodInfo]) =>
+      val info = ctx.lookup(m).get.asInstanceOf[MethodInfo]
+      val (args, argsSide) = resolver.coreAPIs.checkArgs(es, info.paramTypes, e.range, ctx)
+      val ids: List[untpd.Ident] = p match
+        case untpd.PatternVar(id, None) => List(id)
+        case untpd.TuplePattern(ps) => ps.map:
+          case untpd.PatternVar(id, None) => id
+          case _ => assert(false)
+        case _ => assert(false)
+      val call = MethodCall(ids.map(_.name), m, args)(e.range)
+      val newCtx = ids match
+        case List(id) =>
+          resolver.coreAPIs.define(id, VarInfo(id, info.returnType), ctx)
+        case _ =>
+          info.returnType match
+            case TupleType(ts) if ts.length == ids.length =>
+              resolver.coreAPIs.define(for (id, t) <- ids.zip(ts) yield id -> VarInfo(id, t), ctx)
+            case t =>
+              reporter.report(ctx.uri, PatternTypeMismatch(p.range, s"${t.show}", s"${ids.length}-tuple"))
+              ctx
+      (argsSide ++ List(call), newCtx)
+
     case untpd.VarDecl(untpd.PatternVar(id, Some(t)), e) if id.name != "_" =>
       val typ = resolver.coreAPIs.unfold(t, ctx)
       val (value, side) = resolver.coreAPIs.check(e, typ, ctx)
       val info = VarInfo(id, typ)
-      (side ++ List(Declare(id.name, typ.erase, Some(value))), resolver.coreAPIs.define(id, info, ctx))
+      (side ++ List(Declare(id.name, typ, Some(value))), resolver.coreAPIs.define(id, info, ctx))
     case untpd.VarDecl(p, e) =>
       val (typ, value, side) = resolver.coreAPIs.infer(e, ctx)
       val (stmts, newCtx) = checkVarDecl(p, value, typ, ctx)
@@ -95,12 +111,11 @@ class Typer(using reporter: Reporter) extends LazyLogging:
 
     case s@untpd.Return(Some(e)) =>
       val (value, side) = resolver.coreAPIs.check(e, methodInfo.returnType, ctx)
-      val post = methodInfo.ensures.map(ep => Assert(Apply(ep, List(value)), () => PostNotProved(s.range)))
-      (side ++ post ++ List(Return()(s.range)), ctx)
+      (side ++ List(Return(value)(s.range)), ctx)
     case s@untpd.Return(None) =>
       if methodInfo.returnType != unitType then
         reporter.report(ctx.uri, MissingReturnValue(s.range))
-      (List(Return()(s.range)), ctx)
+      (List(Return(TupleExpr(Nil))(s.range)), ctx)
 
     case s@untpd.While(e, _, bd) =>
       val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
@@ -108,7 +123,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       val (invariants, side1) = s.invariants.map(resolver.coreAPIs.check(_, BoolType, ctx)).unzip
       assert(side1.flatten.isEmpty, "Side effects are not allowed in loop invariants")
       val loopBody = checkBlock(bd, ctx.pushed, methodInfo, loopLevel + 1)
-      (List(While(cond, for (e, i) <- invariants.zipWithIndex yield (e, s.invariants(i).range), loopBody)), ctx)
+      (List(While(cond, invariants, loopBody)), ctx)
 
     case s@untpd.Break() =>
       if loopLevel > 0 then
@@ -131,7 +146,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     case untpd.PatternVar(id, None) =>
       val info = VarInfo(id, typ)
       val newCtx = resolver.coreAPIs.define(id, info, localCtx)
-      (List(Declare(id.name, typ.erase, Some(value))), newCtx)
+      (List(Declare(id.name, typ, Some(value))), newCtx)
     case untpd.TuplePattern(ps) =>
       typ match
         case TupleType(ts) if ts.length == ps.length =>
@@ -148,3 +163,11 @@ class Typer(using reporter: Reporter) extends LazyLogging:
           (Nil, localCtx)
     case _ =>
       throw IllegalStateException(s"Unexpected pattern: $pat")
+
+  private def patternIsVarList(pat: untpd.Pattern): Boolean = pat match
+    case untpd.PatternVar(_, None) => true
+    case untpd.TuplePattern(ps) =>
+      ps.forall:
+        case untpd.PatternVar(_, None) => true
+        case _ => false
+    case _ => false

@@ -3,41 +3,72 @@ package flat.checker.verif
 import flat.checker.flan.*
 import flat.checker.flan.tpd.*
 
+final case class MethodSig(params: List[(String, Type)], returnType: Type, pre: List[Expr], post: List[Expr]):
+  def paramNames: List[String] = params.map(_._1)
+
+  def paramTypes: List[Type] = params.map(_._2)
+
+  def applyPre(args: List[Expr]): List[Expr] =
+    require(args.length == params.length, "Argument length mismatch")
+    val argsMap = paramNames.zip(args).toMap
+    pre.map(_.subst(argsMap))
+
+  def applyPost(args: List[Expr], rets: List[Expr]): List[Expr] =
+    require(args.length == params.length, "Argument length mismatch")
+    val argsMap = paramNames.zip(args).toMap
+    post.map:
+      case Lambda(ps, b) if ps.length >= 2 =>
+        rets match
+          case List(e) =>
+            b.subst(argsMap ++ (for ((y, _), i) <- ps.zipWithIndex yield y -> TupleSelect(i, e)()).toMap)
+          case _ =>
+            require(rets.length == ps.length, "Return length mismatch")
+            b.subst(argsMap ++ (for ((y, _), e) <- ps.zip(rets) yield y -> e).toMap)
+      case f =>
+        rets match
+          case List(e) => Apply(f, List(e)).subst(argsMap)
+          case _ => Apply(f, List(TupleExpr(rets))).subst(argsMap)
+
 enum Signal:
-  case NORMAL, BREAK, CONTINUE
+  case NEXT, BREAK, CONTINUE
 
 final case class State(uri: String,
-                       sortStack: List[Map[String, Type]] = List(Map.empty),
-                       valueStack: List[Map[String, Expr]] = List(Map.empty),
+                       methods: Map[String, MethodSig],
+                       currentMethod: Option[String] = None,
+                       typeStack: List[Map[String, Type]] = List(Map.empty),
+                       symbolicStack: List[Map[String, Expr]] = List(Map.empty),
                        symbolicVars: Map[String, Type] = Map.empty,
                        conds: List[Expr] = Nil,
-                       freshNext: Map[String, Int] = Map.empty,
-                       signal: Signal = Signal.NORMAL):
-  def pushed: State = copy(valueStack = Map.empty :: valueStack)
+                       counters: Map[String, Int] = Map.empty,
+                       signal: Signal = Signal.NEXT):
+  def getMethodSig: MethodSig =
+    require(currentMethod.isDefined, "Current method is not defined")
+    methods(currentMethod.get)
 
-  def getSort(name: String): Type =
-    sortStack.collectFirst { case m if m.contains(name) => m(name) }
+  def pushed: State = copy(symbolicStack = Map.empty :: symbolicStack)
+
+  def getType(name: String): Type =
+    typeStack.collectFirst { case m if m.contains(name) => m(name) }
       .getOrElse(throw new RuntimeException(s"Variable $name not found in sort stack"))
 
-  def getValue(name: String): Expr =
-    valueStack.collectFirst { case m if m.contains(name) => m(name) }
+  def getSymbolicValue(name: String): Expr =
+    symbolicStack.collectFirst { case m if m.contains(name) => m(name) }
       .getOrElse(throw new RuntimeException(s"Variable $name not found in value stack"))
 
   def declare(name: String, typ: Type): State =
-    copy(sortStack = sortStack.head + (name -> typ) :: sortStack.tail)
+    copy(typeStack = typeStack.head + (name -> typ) :: typeStack.tail)
+
+  def declare(varsWithTypes: List[(String, Type)]): State =
+    copy(typeStack = typeStack.head ++ varsWithTypes.toMap :: typeStack.tail)
 
   def assign(name: String, value: Expr): State =
-    copy(valueStack = valueStack.head + (name -> value) :: valueStack.tail)
+    copy(symbolicStack = symbolicStack.head + (name -> value) :: symbolicStack.tail)
 
   def havoc(name: String): State =
-    val newCount = freshNext.getOrElse(name, 0)
+    val newCount = counters.getOrElse(name, 0)
     val freshName = name + "$" + newCount
-    copy(freshNext = freshNext + (name -> (newCount + 1)),
-      symbolicVars = symbolicVars + (freshName -> getSort(name)),
-      valueStack = valueStack.head + (name -> Var(freshName)) :: valueStack.tail)
+    copy(counters = counters + (name -> (newCount + 1)),
+      symbolicVars = symbolicVars + (freshName -> getType(name)),
+      symbolicStack = symbolicStack.head + (name -> Var(freshName)) :: symbolicStack.tail)
 
   def havoc(names: Set[String]): State = names.foldLeft(this)(_.havoc(_))
-
-  def assume(cond: Expr): State = copy(conds = cond :: conds)
-
-  def assume(conds: List[Expr]): State = copy(conds = conds ++ this.conds)

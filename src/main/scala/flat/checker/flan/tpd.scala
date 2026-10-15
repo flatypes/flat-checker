@@ -7,19 +7,27 @@ import flat.checker.verif.ProofError
 import org.eclipse.lsp4j.{Position, Range}
 
 object tpd:
+  @deprecated
   final case class Script(uri: String, body: List[Stmt])
+
+  final case class Module(uri: String, body: List[MethodDef])
+
+  final case class MethodDef(name: String, params: List[(String, Type)], returnType: Type,
+                             requires: List[Expr], ensures: List[Expr], body: List[Stmt])
 
   // Statements
   sealed trait Stmt
 
   final case class ExprStmt(expr: Expr) extends Stmt
 
-  final case class Declare(name: String, sort: Type, init: Option[Expr] = None) extends Stmt:
-    require(sort.isSort)
+  final case class Declare(name: String, typ: Type, init: Option[Expr] = None) extends Stmt
 
   final case class Assign(variable: String, value: Expr) extends Stmt
 
   final case class Havoc(lhs: String) extends Stmt
+
+  final case class MethodCall(variables: List[String], method: String, args: List[Expr])
+                             (val range: Range) extends Stmt
 
   // Proof derivatives
   final case class Assume(cond: Expr) extends Stmt
@@ -31,9 +39,9 @@ object tpd:
   // Control flow
   final case class If(cond: Expr, thenBody: List[Stmt], elseBody: List[Stmt]) extends Stmt
 
-  final case class Return()(val range: Range) extends Stmt
+  final case class Return(value: Expr = NoExpr)(val range: Range) extends Stmt
 
-  final case class While(cond: Expr, invariants: List[(Expr, Range)], body: List[Stmt]) extends Stmt
+  final case class While(cond: Expr, invariants: List[Expr], body: List[Stmt]) extends Stmt
 
   final case class Break()(val range: Range) extends Stmt
 
@@ -131,6 +139,7 @@ object tpd:
 
   final case class Lambda(params: List[(String, Type)], body: Expr)(val range: Range = noRange) extends Expr:
     require(params.forall(_._2.isSort))
+
     def paramNames: List[String] = params.map(_._1)
 
     override def rebuild(subtrees: List[Expr]): Lambda = subtrees match
@@ -336,12 +345,6 @@ object tpd:
       case List(e, et) => StrSplit(e, et)(range)
       case List(e, et, em) => StrSplit(e, et, Some(em))(range)
       case _ => throw IllegalArgumentException("StringSplit must have exactly 2 subtrees")
-
-  @deprecated
-  final case class StrPartition(str: Expr, sep: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrPartition = subtrees match
-      case List(e, et) => StrPartition(e, et)(range)
-      case _ => throw IllegalArgumentException("StrPartition must have exactly 2 subtrees")
 
   final case class StrReplace(str: Expr, target: Expr, replacement: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrReplace = subtrees match

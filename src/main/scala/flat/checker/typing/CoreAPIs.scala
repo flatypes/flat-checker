@@ -5,11 +5,10 @@ import flat.checker.Reporter
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{CharSet, RegEx, StrRE, given}
 import flat.checker.flan.Show.show
-import flat.checker.flan.TypeOps.{erase, isSort}
-import flat.checker.flan.tpd.{*, given}
+import flat.checker.flan.TypeOps.erase
+import flat.checker.flan.tpd.*
 import flat.checker.flan.untpd
 import flat.checker.parsing.SyntaxError
-import flat.checker.verif.{PreNotProved, ReftNotProved}
 import org.eclipse.lsp4j.Range as Span
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -20,28 +19,28 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
 
   def infer(node: untpd.Expr, ctx: TypingCtx): (Type, Expr, List[Stmt]) = node match
     // Constants
-    case untpd.IntConst(v) => (IntType, IntConst(v), Nil)
-    case untpd.BoolConst(v) => (BoolType, BoolConst(v), Nil)
-    case untpd.StrConst(v) => (StrType, StrConst(v), Nil)
-    case untpd.NullConst() => (NullType, NullConst(), Nil)
+    case untpd.IntConst(v) => (IntType, IntConst(v)(node.range), Nil)
+    case untpd.BoolConst(v) => (BoolType, BoolConst(v)(node.range), Nil)
+    case untpd.StrConst(v) => (StrType, StrConst(v)(node.range), Nil)
+    case untpd.NullConst() => (NullType, NullConst()(node.range), Nil)
 
     // Names
     case untpd.TermName(x) =>
       ctx.lookup(x) match
-        case Some(ValInfo(_, typ)) => (narrow(x, typ, ctx), Var(x), Nil)
-        case Some(VarInfo(_, typ)) => (narrow(x, typ, ctx), Var(x), Nil)
+        case Some(ValInfo(_, typ)) => (narrow(x, typ, ctx), Var(x)(node.range), Nil)
+        case Some(VarInfo(_, typ)) => (narrow(x, typ, ctx), Var(x)(node.range), Nil)
         case Some(ConstInfo(_, typ, value)) => (typ, value, Nil)
         case Some(_) =>
           reporter.report(ctx.uri, NotTerm(node.range))
-          (NoType, Var(x), Nil)
+          (NoType, Var(x)(node.range), Nil)
         case None =>
           reporter.report(ctx.uri, UndefinedName(node.range, x))
-          (NoType, Var(x), Nil)
+          (NoType, Var(x)(node.range), Nil)
 
     // Tuples
     case untpd.TupleExpr(es) =>
       val (types, elems, sides) = es.map(infer(_, ctx)).unzip3
-      (TupleType(types), TupleExpr(elems), sides.flatten)
+      (TupleType(types), TupleExpr(elems)(node.range), sides.flatten)
 
     // Lambdas
     case untpd.LambdaExpr(params, body) =>
@@ -51,37 +50,37 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.BinaryExpr(e1, untpd.Ident("=="), e2) =>
       val (leftType, left, leftSide) = infer(e1, ctx)
       val (rightType, right, rightSide) = infer(e2, ctx)
-      (BoolType, Eq(left, right), leftSide ++ rightSide)
+      (BoolType, Eq(left, right)(node.range), leftSide ++ rightSide)
     case untpd.BinaryExpr(e1, untpd.Ident("!="), e2) =>
       val (leftType, left, leftSide) = infer(e1, ctx)
       val (rightType, right, rightSide) = infer(e2, ctx)
-      (BoolType, Ne(left, right), leftSide ++ rightSide)
+      (BoolType, Ne(left, right)(node.range), leftSide ++ rightSide)
 
     // Operations: logical that may introduce assumptions
     case untpd.BinaryExpr(e1, untpd.Ident("&&"), e2) =>
       val (left, leftSide) = check(e1, BoolType, ctx)
       val (right, rightSide) = check(e2, BoolType, ctx.assume(left))
-      (BoolType, And(left, right), leftSide ++ rightSide)
+      (BoolType, And(left, right)(node.range), leftSide ++ rightSide)
     case untpd.BinaryExpr(e1, untpd.Ident("||"), e2) =>
       val (left, leftSide) = check(e1, BoolType, ctx)
       val (right, rightSide) = check(e2, BoolType, ctx.assume(Not(left)))
-      (BoolType, Or(left, right), leftSide ++ rightSide)
+      (BoolType, Or(left, right)(node.range), leftSide ++ rightSide)
     case untpd.BinaryExpr(e1, untpd.Ident("==>"), e2) =>
       val (left, leftSide) = check(e1, BoolType, ctx)
       val (right, rightSide) = check(e2, BoolType, ctx.assume(left))
-      (BoolType, Implies(left, right), leftSide ++ rightSide)
+      (BoolType, Implies(left, right)(node.range), leftSide ++ rightSide)
     case untpd.Ite(e, e1, e2) =>
       val (cond, condSide) = check(e, BoolType, ctx)
       val (typ, thenExpr, thenSide) = infer(e1, ctx.assume(cond))
       val (elseExpr, elseSide) = check(e2, typ, ctx.assume(Not(cond)))
-      (typ, Ite(cond, thenExpr, elseExpr), condSide ++ thenSide ++ elseSide)
+      (typ, Ite(cond, thenExpr, elseExpr)(node.range), condSide ++ thenSide ++ elseSide)
 
     // Operations: in
     case untpd.BinaryExpr(e, untpd.Ident("in"), untpd.TermName(x))
       if ctx.lookup(x).exists(_.isInstanceOf[LangInfo]) =>
       val (str, strSide) = check(e, StrType, ctx)
       val re = ctx.lookup(x).get.asInstanceOf[LangInfo].regEx
-      (BoolType, StrIn(str, re), strSide)
+      (BoolType, StrIn(str, re)(node.range), strSide)
     case untpd.BinaryExpr(e1, op@untpd.Ident("in"), e2) =>
       inferOperation(e2, untpd.Ident("contains")(op.range), List(e1), node.range, ctx)
 
@@ -100,7 +99,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       val (elemType, first, firstSide) = infer(e, ctx)
       val elemSort = elemType.erase
       val (rest, restSides) = es.map(check(_, elemSort, ctx)).unzip
-      (ListType(elemSort), ListExpr(first :: rest)(elemSort, noRange), firstSide ++ restSides.flatten)
+      (ListType(elemSort), ListExpr(first :: rest)(elemSort, node.range), firstSide ++ restSides.flatten)
 
     case untpd.SetExpr(Nil) =>
       reporter.report(ctx.uri, MissingTypeAnnot(node.range))
@@ -109,7 +108,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       val (elemType, first, firstSide) = infer(e, ctx)
       val elemSort = elemType.erase
       val (rest, restSides) = es.map(check(_, elemSort, ctx)).unzip
-      (SetType(elemSort), SetExpr(first :: rest)(elemSort, noRange), firstSide ++ restSides.flatten)
+      (SetType(elemSort), SetExpr(first :: rest)(elemSort, node.range), firstSide ++ restSides.flatten)
 
     case untpd.MapExpr(Nil) =>
       reporter.report(ctx.uri, MissingTypeAnnot(node.range))
@@ -122,7 +121,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       val (restKeys, restKeySides) = items.map((k, v) => check(k, keySort, ctx)).unzip
       val (restValues, restValueSides) = items.map((k, v) => check(v, valueSort, ctx)).unzip
       (MapType(keySort, valueSort),
-        MapExpr(firstKey :: restKeys, firstValue :: restValues)(keySort, valueSort, noRange),
+        MapExpr(firstKey :: restKeys, firstValue :: restValues)(keySort, valueSort, node.range),
         firstKeySide ++ firstValueSide ++ restKeySides.flatten ++ restValueSides.flatten)
 
     // Operations from the standard library
@@ -131,19 +130,11 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.Apply(untpd.Access(e, op), es) => inferOperation(e, op, es, node.range, ctx)
 
     // Function application: method call
-    case untpd.Apply(untpd.TermName(f), es)
-      if ctx.lookup(f).exists(_.isInstanceOf[MethodInfo]) =>
-      val info = ctx.lookup(f).get.asInstanceOf[MethodInfo]
+    case untpd.Apply(untpd.TermName(m), es) if ctx.lookup(m).exists(_.isInstanceOf[MethodInfo]) =>
+      val info = ctx.lookup(m).get.asInstanceOf[MethodInfo]
       val (args, argsSide) = checkArgs(es, info.paramTypes, node.range, ctx)
-      val pre = for p <- info.requires yield
-        Assert(p.subst(info.paramNames.zip(args).toMap), () => PreNotProved(node.range))
       val fresh = "fresh_" + freshCounter.getAndIncrement()
-      val freshSide =
-        if info.returnType.isSort then Nil else List(Assume(hasType(Var(fresh), info.returnType)))
-      val post = for p <- info.ensures yield
-        Assume(Apply(p.subst(info.paramNames.zip(args).toMap), List(Var(fresh))))
-      (info.returnType, Var(fresh),
-        argsSide ++ pre ++ List(Declare(fresh, info.returnType.erase)) ++ freshSide ++ post)
+      (info.returnType, Var(fresh)(node.range), argsSide ++ List(MethodCall(List(fresh), m, args)(node.range)))
 
     // Function application: others
     case untpd.Apply(e, es) =>
@@ -151,7 +142,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       typ match
         case funType: FunType =>
           val (args, argsSide) = checkArgs(es, funType.paramTypes, node.range, ctx)
-          (funType.returnType, Apply(fun, args), funSide ++ argsSide)
+          (funType.returnType, Apply(fun, args)(node.range), funSide ++ argsSide)
         case _ =>
           if typ != NoType then
             reporter.report(ctx.uri, TypeMismatch(node.range, "function type", typ.toString))
@@ -245,68 +236,51 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       case _ =>
         throw UnsupportedOperationException(s"Ambiguous operation: ${op.name} for type $receiverType")
 
-  private def checkArgs(es: List[untpd.Expr], ts: List[Type], span: Span, ctx: TypingCtx): (List[Expr], List[Stmt]) =
+  def checkArgs(es: List[untpd.Expr], ts: List[Type], span: Span, ctx: TypingCtx): (List[Expr], List[Stmt]) =
     if es.length != ts.length then
       reporter.report(ctx.uri, ArityMismatch(span, es.length, ts.length))
     val (args, sides) = es.zip(ts).map(check(_, _, ctx)).unzip
     (args, sides.flatten)
 
   def check(node: untpd.Expr, expected: Type, ctx: TypingCtx): (Expr, List[Stmt]) =
-    (node, expected) match
+    (node, expected.erase) match
       case (untpd.TupleExpr(es), TupleType(ts)) if es.length == ts.length =>
         val (elems, sides) = es.zip(ts).map(check(_, _, ctx)).unzip
-        (TupleExpr(elems), sides.flatten)
+        (TupleExpr(elems)(node.range), sides.flatten)
 
       case (untpd.LambdaExpr(ps, e), FunType(ts, t)) =>
-        ts match
-          case _ if ts.length == ps.length =>
-            val (params, localCtx) = resolveParams(ps, ts, ctx.pushed)
-            val (body, side) = check(e, t, localCtx)
-            assert(side.isEmpty, "side effects not allowed in lambda body")
-            (Lambda(params, body), Nil)
-          case List(TupleType(ts)) if ts.length == ps.length => // auto untupling
-            val (params, localCtx) = resolveParams(ps, ts, ctx.pushed)
-            val (body, side) = check(e, t, localCtx)
-            assert(side.isEmpty, "side effects not allowed in lambda body")
-            val param = "tuple" -> TupleType(ts.map(_.erase))
-            val substMap = (for i <- ps.indices yield params(i)._1 -> TupleSelect(i, Var("tuple"))()).toMap
-            (Lambda(List(param), body.subst(substMap)), Nil)
-          case _ =>
-            reporter.report(ctx.uri, ArityMismatch(node.range, ts.length, ps.length))
-            (NoExpr, Nil)
+        if ps.length != ts.length then
+          reporter.report(ctx.uri, ArityMismatch(node.range, ts.length, ps.length))
+          return (NoExpr, Nil)
 
-      case _ =>
+        val (params, localCtx) = resolveParams(ps, ts, ctx.pushed)
+        val (body, side) = check(e, t, localCtx)
+        assert(side.isEmpty, "side effects not allowed in lambda body")
+        (Lambda(params, body), Nil)
+
+      case (_, expectedSort) =>
         val (actual, expr, side) = infer(node, ctx)
-        if isSubtype(actual, expected) then // success
+        val actualSort = actual.erase
+        if isSubsort(actualSort, expectedSort) then
           (expr, side)
-        else if isSubtype(actual, expected.erase) then // needs refinement checking
-          (expr, side :+ Assert(hasType(expr, expected), () => ReftNotProved(node.range)))
-        else // failure
-          reporter.report(ctx.uri, TypeMismatch(node.range, expected.show, actual.show))
+        else
+          reporter.report(ctx.uri, TypeMismatch(node.range, expectedSort.show, actualSort.show))
           (expr, Nil)
 
-  private def isSubtype(left: Type, right: Type): Boolean =
+  private def isSubsort(left: Type, right: Type): Boolean =
     if left == right || left == NoType || right == NoType then true
     else (left, right) match
-      case (ListType(t1), ListType(t2)) => isSubtype(t1, t2)
-      case (SetType(t1), SetType(t2)) => isSubtype(t1, t2)
-      case (MapType(k1, v1), MapType(k2, v2)) => isSubtype(k1, k2) && isSubtype(k2, k1) && isSubtype(v1, v2)
-      case (RefinedType(_, t1, _), t2) => isSubtype(t1, t2)
-      case (TupleType(ts1), TupleType(ts2)) => ts1.length == ts2.length && (ts1 zip ts2).forall(isSubtype)
+      case (ListType(t1), ListType(t2)) => isSubsort(t1, t2)
+      case (SetType(t1), SetType(t2)) => isSubsort(t1, t2)
+      case (MapType(k1, v1), MapType(k2, v2)) => isSubsort(k1, k2) && isSubsort(v1, v2)
+      case (TupleType(ts1), TupleType(ts2)) =>
+        ts1.length == ts2.length && (ts1 zip ts2).forall(isSubsort)
       case (FunType(ps1, r1), FunType(ps2, r2)) =>
-        ps1.length == ps2.length && (ps2 zip ps1).forall(isSubtype) && isSubtype(r1, r2)
-      case (OptType(t1), OptType(t2)) => isSubtype(t1, t2)
+        ps1.length == ps2.length && (ps2 zip ps1).forall(isSubsort) && isSubsort(r1, r2)
+      case (OptType(t1), OptType(t2)) => isSubsort(t1, t2)
       case (NullType, OptType(_)) => true
-      case (t1, OptType(t2)) => isSubtype(t1, t2)
+      case (t1, OptType(t2)) => isSubsort(t1, t2)
       case _ => false
-
-  def hasType(expr: Expr, typ: Type): Expr = typ match
-    case IntType | BoolType | StrType => BoolConst(true)
-    case ListType(t) => ListForall(expr, Lambda(List("x" -> t), hasType(Var("x"), t)))
-    case TupleType(ts) => mkAnd(for i <- ts.indices.toList yield hasType(TupleSelect(i, expr), ts(i)))
-    case OptType(t) => Implies(Ne(expr, NullConst()), hasType(expr, t))
-    case RefinedType(x, _, e) => e.subst(Map(x -> expr))
-    case _ => throw new IllegalArgumentException(typ.show)
 
   def expand(node: untpd.PExpr, ctx: TypingCtx): StrRE = node match
     case untpd.PChar(c) => RegEx.symbolSet(CharSet(c))
@@ -379,10 +353,11 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       val typ = nodes(i).typ match
         case Some(t) => unfold(t, ctx)
         case None =>
-          if expectedTypes.nonEmpty then expectedTypes(i)
-          else
-            reporter.report(ctx.uri, MissingTypeAnnot(id.range))
-            NoType
+          expectedTypes.lift(i) match
+            case Some(t) => t
+            case None =>
+              reporter.report(ctx.uri, MissingTypeAnnot(id.range))
+              NoType
       val info = ValInfo(id, typ)
       ctx = define(id, info, ctx)
       params += id.name -> typ
@@ -395,3 +370,6 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       case Some(conflict) =>
         reporter.report(ctx.uri, RedefinedName(id.range, id.name))
         ctx
+
+  def define(items: List[(untpd.Ident, Info)], ctx: TypingCtx): TypingCtx =
+    items.foldLeft(ctx) { case (c, (id, info)) => define(id, info, c) }

@@ -23,23 +23,3 @@ object TypeOps:
       case TupleType(ts) => TupleType(ts.map(_.erase))
       case FunType(ps, r) => FunType(ps.map(_.erase), r.erase)
       case OptType(t) => OptType(t.erase)
-
-    infix def :<:(right: Type): Boolean =
-      if typ == right then true
-      else
-        // require both non-refined types
-        (typ, right) match
-          case (NoType, _) | (_, NoType) => true
-          case (ListType(s1), ListType(s2)) => s1 :<: s2
-          case (SetType(s1), SetType(s2)) => s1 :<: s2
-          case (MapType(sk1, sv1), MapType(sk2, sv2)) => sk1 == sk2 && sv1 :<: sv2
-          case (TupleType(ss1), TupleType(ss2)) =>
-            ss1.length == ss2.length && (ss1 zip ss2).forall(_ :<: _)
-          case (FunType(ss1, s1), FunType(ss2, s2)) =>
-            ss1.length == ss2.length && (ss2 zip ss1).forall(_ :<: _) && s1 :<: s2
-          case (NullType, OptType(_)) => true
-          case (t1, OptType(t2)) => t1 :<: t2
-          case _ => false
-
-  extension (expr: Expr)
-    def sort(using ctx: Map[String, Type]): Type = ???
