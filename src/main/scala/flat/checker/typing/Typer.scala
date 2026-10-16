@@ -47,9 +47,9 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       val info = ctx.lookup(m).get.asInstanceOf[MethodInfo]
       val (args, argsSide) = resolver.coreAPIs.checkArgs(es, info.paramTypes, e.range, ctx)
       val ids: List[untpd.Ident] = p match
-        case untpd.PatternVar(id, None) => List(id)
-        case untpd.TuplePattern(ps) => ps.map:
-          case untpd.PatternVar(id, None) => id
+        case untpd.PatVar(id, None) => List(id)
+        case untpd.TuplePat(ps) => ps.map:
+          case untpd.PatVar(id, None) => id
           case _ => assert(false)
         case _ => assert(false)
       val call = MethodCall(ids.map(_.name), m, args)(e.range)
@@ -65,7 +65,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
               ctx
       (argsSide ++ List(call), newCtx)
 
-    case untpd.VarDecl(untpd.PatternVar(id, Some(t)), e) if id.name != "_" =>
+    case untpd.VarDecl(untpd.PatVar(id, Some(t)), e) if id.name != "_" =>
       val typ = resolver.coreAPIs.unfold(t, ctx)
       val (value, side) = resolver.coreAPIs.check(e, typ, ctx)
       val info = VarInfo(id, typ)
@@ -139,15 +139,15 @@ class Typer(using reporter: Reporter) extends LazyLogging:
         reporter.report(ctx.uri, ContinueOutOfLoop(s.range))
         (Nil, ctx)
 
-  private def checkVarDecl(pat: untpd.Pattern, value: Expr, typ: Type,
+  private def checkVarDecl(pat: untpd.Pat, value: Expr, typ: Type,
                            localCtx: TypingCtx): (List[Stmt], TypingCtx) = pat match
-    case untpd.PatternVar(untpd.Ident("_"), None) =>
+    case untpd.PatVar(untpd.Ident("_"), None) =>
       (Nil, localCtx)
-    case untpd.PatternVar(id, None) =>
+    case untpd.PatVar(id, None) =>
       val info = VarInfo(id, typ)
       val newCtx = resolver.coreAPIs.declare(id, info, localCtx)
       (List(Declare(id.name, typ, Some(value))), newCtx)
-    case untpd.TuplePattern(ps) =>
+    case untpd.TuplePat(ps) =>
       typ match
         case TupleType(ts) if ts.length == ps.length =>
           var ctx = localCtx
@@ -164,10 +164,10 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     case _ =>
       throw IllegalStateException(s"Unexpected pattern: $pat")
 
-  private def patternIsVarList(pat: untpd.Pattern): Boolean = pat match
-    case untpd.PatternVar(_, None) => true
-    case untpd.TuplePattern(ps) =>
+  private def patternIsVarList(pat: untpd.Pat): Boolean = pat match
+    case untpd.PatVar(_, None) => true
+    case untpd.TuplePat(ps) =>
       ps.forall:
-        case untpd.PatternVar(_, None) => true
+        case untpd.PatVar(_, None) => true
         case _ => false
     case _ => false

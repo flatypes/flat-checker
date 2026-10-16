@@ -5,7 +5,7 @@ import flat.checker.flan.tpd.*
 object Subst:
   def substExpr(expr: Expr, m: Map[String, Expr], boundVars: Set[String]): Expr = expr match
     case Var(x) => if !boundVars.contains(x) && m.contains(x) then m(x) else expr
-    case f@Lambda(ps, e) => Lambda(ps, substExpr(e, m, boundVars ++ f.paramNames))
+    case f@LambdaExpr(ps, e) => LambdaExpr(ps, substExpr(e, m, boundVars ++ f.paramNames))
     case _ => expr.rebuild(substExpr(_, m, boundVars))
 
   extension (expr: Expr)

@@ -28,7 +28,8 @@ val keywords: List[String] = List(
   "from", "import", "type", "val", "lang", "def", "requires", "ensures",
   "true", "false", "null", "in", "lambda",
   "pass", "var", "assume", "assert", "raise", "if", "else", "return",
-  "while", "invariant", "break", "continue", "for"
+  "while", "invariant", "break", "continue", "for",
+  "Int", "Bool", "Str", "List", "Set", "Map"
 )
 
 val tabSize = 4

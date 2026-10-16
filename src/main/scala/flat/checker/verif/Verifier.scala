@@ -3,7 +3,7 @@ package flat.checker.verif
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
 import flat.checker.flan.Show.show
-import flat.checker.flan.TypeOps.{erase, isSort}
+import flat.checker.flan.sorting.{isSort, toSort}
 import flat.checker.flan.tpd.*
 import flat.checker.verif.Signal.*
 
@@ -147,7 +147,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
         && prove(MapContains(e, ek), state, () => KeyNotExist(ek.range))
 
     // Others
-    case Lambda(_, _) => true
+    case LambdaExpr(_, _) => true
     case _ => expr.subtrees.forall(safetyCheck(_, state))
 
   private def typeCheck(expr: Expr, typ: Type, state: State): Boolean =
@@ -169,7 +169,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
   private def prove(cond: Expr, state: State, err: () => ProofError): Boolean =
     val typeConds = state.symbolicVars.flatMap { (x, t) => hasType(Var(x), t) }.toList
-    val sorts = for (x, t) <- state.symbolicVars yield x -> t.erase
+    val sorts = for (x, t) <- state.symbolicVars yield x -> t.toSort
     val goal = Goal(eval(cond, state), typeConds ++ state.conds, sorts)
     val number = goalCounter.incrementAndGet()
     logger.info("Goal {}:\n{}", number, goal.pp)
@@ -184,19 +184,19 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
   private def eval(expr: Expr, state: State, boundVars: Set[String] = Set.empty): Expr = expr match
     case Var(x) => if boundVars.contains(x) then expr else state.getSymbolicValue(x)
-    case f@Lambda(ps, e) => Lambda(ps, eval(e, state, boundVars ++ f.paramNames))
+    case f@LambdaExpr(ps, e) => LambdaExpr(ps, eval(e, state, boundVars ++ f.paramNames))
     case _ =>
       val values = expr.subtrees.map(eval(_, state, boundVars))
       expr.rebuild(values)
 
   private def hasType(expr: Expr, typ: Type): Option[Expr] = typ match
     case IntType | BoolType | StrType => None
-    case ListType(t) => for b <- hasType(Var("x"), t) yield ListForall(expr, Lambda(List("x" -> t), b))
+    case ListType(t) => for b <- hasType(Var("x"), t) yield ListForall(expr, LambdaExpr(List("x" -> t), b))
     case TupleType(ts) =>
       val bs = ts.zipWithIndex.flatMap { (t, i) => hasType(TupleSelect(i, expr), t) }
       if bs.isEmpty then None else Some(mkAnd(bs))
     case OptType(t) => for b <- hasType(expr, t) yield Implies(Ne(expr, NullConst()), b)
-    case RefinedType(x, t, e) =>
+    case ReftType(x, t, e) =>
       assert(t.isSort)
       Some(e.subst(Map(x -> expr)))
     case _ => throw new IllegalArgumentException(typ.show)

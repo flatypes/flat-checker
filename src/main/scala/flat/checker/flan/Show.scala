@@ -14,7 +14,7 @@ object Show extends LazyLogging:
       case ListType(t) => s"List[${t.show}]"
       case SetType(t) => s"Set[${t.show}]"
       case MapType(tk, tv) => s"Map[${tk.show}, ${tv.show}]"
-      case t: RefinedType =>
+      case t: ReftType =>
         if t.name.nonEmpty then t.name
         else s"{${t.base.show} | ${t.reft.show}}"
       case TupleType(ts) => ts.map(_.show).mkString("(", ", ", ")")
@@ -22,21 +22,6 @@ object Show extends LazyLogging:
       case NullType => "Null"
       case OptType(t) => s"${t.show}?"
       case NoType => "∅"
-
-  extension (sort: Sort)
-    def show: String = sort match
-      case NullSort => "null"
-      case BoolSort => "Bool"
-      case IntSort => "Int"
-      case CharSort => "Char"
-      case SeqSort(CharSort) => "String"
-      case SeqSort(s) => s"Seq[${s.show}]"
-      case SetSort(s) => s"Set[${s.show}]"
-      case MapSort(k, v) => s"Map[${k.show}, ${v.show}]"
-      case TupleSort(ss) => ss.map(_.show).mkString("(", ", ", ")")
-      case FunSort(ss, s) => ss.map(_.show).mkString("(", ", ", ")") + " -> " + s.show
-      case UnionSort(s1, s2) => s"${s1.show} | ${s2.show}"
-      case NoSort => "?"
 
   // Expressions
   val LEVEL_TIGHTER = 0
@@ -63,7 +48,7 @@ object Show extends LazyLogging:
     case _: And => LEVEL_AND
     case _: Or => LEVEL_OR
     case _: Implies => LEVEL_ARROW
-    case _: Ite | _: Lambda => LEVEL_LOOSER
+    case _: Ite | _: LambdaExpr => LEVEL_LOOSER
     case _ => LEVEL_TIGHTER
 
   val ASSOC_NONE = 0
@@ -77,8 +62,7 @@ object Show extends LazyLogging:
       case StrConst(s) => s"'${escapeString(s)}'"
       case NullConst() => "null"
       case Var(x) => showVar(x)
-      case MethodRef(f) => f
-      case Lambda(ps, e) => s"λ ${showParamList(ps)}, ${showExpr(e)}"
+      case LambdaExpr(ps, e) => s"λ ${showParamList(ps)}, ${showExpr(e)}"
       case Apply(ef, es) => showTighter(ef) + es.map(showExpr(_)).mkString("(", ", ", ")")
 
       // Tuple

@@ -27,7 +27,7 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
     case NullConst() => throw IllegalArgumentException("NullConst")
     case Var(x) => ctx.lookup(x).getOrElse(encodeVar(x))
     case TupleExpr(es) => tm.mkTuple(es.map(encodeExpr(_, ctx)).toArray)
-    case Lambda(ps, e) =>
+    case LambdaExpr(ps, e) =>
       val binders = for (x, s) <- ps yield x -> tm.mkVar(encodeSort(s), x)
       val body = encodeExpr(e, ctx.pushed(binders))
       tm.mkTerm(LAMBDA, tm.mkTerm(VARIABLE_LIST, binders.map(_._2).toArray), body)

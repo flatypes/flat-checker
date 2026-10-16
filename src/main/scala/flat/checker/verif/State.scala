@@ -17,7 +17,7 @@ final case class MethodSig(params: List[(String, Type)], returnType: Type, pre: 
     require(args.length == params.length, "Argument length mismatch")
     val argsMap = paramNames.zip(args).toMap
     post.map:
-      case Lambda(ps, b) if ps.length >= 2 =>
+      case LambdaExpr(ps, b) if ps.length >= 2 =>
         rets match
           case List(e) =>
             b.subst(argsMap ++ (for ((y, _), i) <- ps.zipWithIndex yield y -> TupleSelect(i, e)()).toMap)

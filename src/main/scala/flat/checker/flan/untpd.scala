@@ -7,18 +7,12 @@ object untpd:
 
   final case class Ident(name: String)(val range: Range)
 
-  // Top-Level Definitions
+  // Top-level statements
   sealed trait TopStmt:
     val ident: Ident
 
   final case class Import(module: Ident, items: List[Ident]) extends TopStmt:
     override val ident: Ident = module
-
-  final case class TypeAlias(ident: Ident, value: Type) extends TopStmt
-
-  final case class ValDef(ident: Ident, value: Expr) extends TopStmt
-
-  final case class LangDef(ident: Ident, value: PExpr) extends TopStmt
 
   final case class FunDef(ident: Ident, params: List[Param], returnType: Option[Type],
                           requires: List[Expr], ensures: List[Expr], body: List[Stmt])
@@ -26,28 +20,56 @@ object untpd:
 
   final case class Param(ident: Ident, typ: Option[Type])
 
-  sealed trait FunSpec
+  final case class ConstDef(ident: Ident, value: Expr) extends TopStmt
 
-  final case class RequireSpec(cond: Expr) extends FunSpec
+  final case class LangDef(ident: Ident, value: PExpr) extends TopStmt
 
-  final case class EnsureSpec(cond: Expr) extends FunSpec
+  final case class TypeAlias(ident: Ident, value: Type) extends TopStmt
 
-  // Types
-  sealed trait Type:
+  // Local statements
+  sealed trait Stmt
+
+  final case class Pass() extends Stmt
+
+  final case class ExprStmt(expr: Expr) extends Stmt
+
+  final case class VarDecl(left: Pat, right: Expr) extends Stmt
+
+  sealed trait Pat:
     val range: Range
 
-  final case class TypeName(name: String)(val range: Range) extends Type
+  final case class PatVar(ident: Ident, typ: Option[Type]) extends Pat:
+    override val range: Range = if typ.isEmpty then ident.range else Range(ident.range.getStart, typ.get.range.getEnd)
 
-  final case class GenericType(constr: Ident, args: List[Type])(val range: Range) extends Type
+  final case class TuplePat(elems: List[Pat])(val range: Range) extends Pat
 
-  final case class TupleType(elemTypes: List[Type])(val range: Range) extends Type:
-    def arity: Int = elemTypes.length
+  final case class Assign(left: Ident, right: Expr) extends Stmt
 
-  final case class FunType(paramTypes: List[Type], returnType: Type)(val range: Range) extends Type
+  // Proof derivatives
+  final case class Assume(expr: Expr) extends Stmt
 
-  final case class OptType(baseType: Type)(val range: Range) extends Type
+  final case class Assert(expr: Expr) extends Stmt
 
-  final case class RefinedType(param: Param, cond: Expr)(val range: Range) extends Type
+  final case class Abort(expr: Expr) extends Stmt
+
+  // Control flow
+  final case class If(cond: Expr, thenBody: List[Stmt], elseBody: List[Stmt]) extends Stmt
+
+  final case class While(cond: Expr, specs: List[LoopSpec], body: List[Stmt]) extends Stmt:
+    def invariants: List[Expr] = specs.collect { case InvariantSpec(e) => e }
+
+  final case class For(ident: Ident, iter: Expr, specs: List[LoopSpec], body: List[Stmt]) extends Stmt:
+    def invariants: List[Expr] = specs.collect { case InvariantSpec(e) => e }
+
+  sealed trait LoopSpec
+
+  final case class InvariantSpec(cond: Expr) extends LoopSpec
+
+  final case class Return(value: Option[Expr])(val range: Range) extends Stmt
+
+  final case class Break()(val range: Range) extends Stmt
+
+  final case class Continue()(val range: Range) extends Stmt
 
   // Expressions
   sealed trait Expr:
@@ -56,9 +78,6 @@ object untpd:
   final case class IntConst(value: BigInt)(val range: Range) extends Expr
 
   final case class BoolConst(value: Boolean)(val range: Range) extends Expr
-
-  @deprecated
-  final case class CharConst(value: Char)(val range: Range) extends Expr
 
   final case class StrConst(value: String)(val range: Range) extends Expr
 
@@ -73,6 +92,9 @@ object untpd:
   final case class Apply(fun: Expr, args: List[Expr])(endPos: Position) extends Expr:
     override val range: Range = Range(fun.range.getStart, endPos)
 
+  // Operations
+  final case class Access(receiver: Expr, member: Ident)(val range: Range) extends Expr
+
   final case class BinaryExpr(left: Expr, op: Ident, right: Expr) extends Expr:
     override val range: Range = Range(left.range.getStart, right.range.getEnd)
 
@@ -84,8 +106,6 @@ object untpd:
   final case class SetExpr(elems: List[Expr])(val range: Range) extends Expr
 
   final case class MapExpr(items: List[(Expr, Expr)])(val range: Range) extends Expr
-
-  final case class Access(receiver: Expr, member: Ident)(val range: Range) extends Expr
 
   // Formal Languages
   sealed trait PExpr
@@ -116,55 +136,29 @@ object untpd:
 
   case object PAllChar extends PExpr
 
-  // Statements
-  trait Stmt
-
-  final case class Pass() extends Stmt
-
-  final case class ExprStmt(expr: Expr) extends Stmt
-
-  final case class VarDecl(left: Pattern, right: Expr) extends Stmt
-
-  sealed trait Pattern:
+  // Types
+  sealed trait Type:
     val range: Range
 
-  final case class PatternVar(ident: Ident, typ: Option[Type]) extends Pattern:
-    override val range: Range = if typ.isEmpty then ident.range else Range(ident.range.getStart, typ.get.range.getEnd)
+  final case class IntType()(val range: Range) extends Type
 
-  final case class TuplePattern(elems: List[Pattern])(val range: Range) extends Pattern
+  final case class BoolType()(val range: Range) extends Type
 
-  final case class Assign(left: Ident, right: Expr) extends Stmt
+  final case class StrType()(val range: Range) extends Type
 
-  final case class Assume(expr: Expr) extends Stmt
+  final case class ListType(elemType: Type)(val range: Range) extends Type
 
-  final case class Assert(expr: Expr) extends Stmt
+  final case class SetType(elemType: Type)(val range: Range) extends Type
 
-  final case class Abort(expr: Expr) extends Stmt
+  final case class MapType(keyType: Type, valueType: Type)(val range: Range) extends Type
 
-  final case class If(cond: Expr, thenBody: List[Stmt], elseBody: List[Stmt]) extends Stmt
+  final case class TypeName(name: String)(val range: Range) extends Type
 
-  final case class Return(value: Option[Expr])(val range: Range) extends Stmt
+  final case class TupleType(elemTypes: List[Type])(val range: Range) extends Type:
+    def arity: Int = elemTypes.length
 
-  final case class While(cond: Expr, specs: List[LoopSpec], body: List[Stmt]) extends Stmt:
-    def invariants: List[Expr] = specs.collect { case InvariantSpec(e) => e }
+  final case class FunType(paramTypes: List[Type], returnType: Type)(val range: Range) extends Type
 
-  sealed trait LoopSpec
+  final case class OptType(baseType: Type)(val range: Range) extends Type
 
-  final case class InvariantSpec(cond: Expr) extends LoopSpec
-
-  final case class Break()(val range: Range) extends Stmt
-
-  final case class Continue()(val range: Range) extends Stmt
-
-  final case class For(ident: Ident, iter: Expr, specs: List[LoopSpec], body: List[Stmt]) extends Stmt:
-    def invariants: List[Expr] = specs.collect { case InvariantSpec(e) => e }
-
-  // Left-values
-  sealed trait LExpr:
-    val range: Range
-
-  final case class LRef(name: String)(val range: Range) extends LExpr
-
-  final case class LTuple(elems: List[LExpr])(val range: Range) extends LExpr
-
-  final case class LList(elems: List[LExpr])(val range: Range) extends LExpr
+  final case class ReftType(param: Param, cond: Expr)(val range: Range) extends Type

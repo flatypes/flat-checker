@@ -39,8 +39,8 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def typeAlias: Parser[TypeAlias] =
     "type" ~>! ident ~ ("=" ~> typ) <~ NEWLINE ^^ { case id ~ t => TypeAlias(id, t) }
 
-  private def valDef: Parser[ValDef] =
-    "val" ~>! ident ~ ("=" ~> expr) <~ NEWLINE ^^ { case id ~ e => ValDef(id, e) }
+  private def valDef: Parser[ConstDef] =
+    "val" ~>! ident ~ ("=" ~> expr) <~ NEWLINE ^^ { case id ~ e => ConstDef(id, e) }
 
   private def langDef: Parser[LangDef] =
     "lang" ~>! ident ~ ("=" ~> pExpr) <~ NEWLINE ^^ { case id ~ e => LangDef(id, e) }
@@ -68,13 +68,18 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     case _ => FunType(List(left), right)(left.range.getStart)
 
   private def optType: Parser[Type] =
-    postfix(genericType | typeRef | parenType | refinedType, "?" ^^ { tk => t => OptType(t)(tk.span.getEnd) })
+    postfix(stdType | typeName | parenType | reftType, "?" ^^ { tk => t => OptType(t)(tk.span.getEnd) })
 
-  private def genericType: Parser[GenericType] =
-    ident ~ ("[" ~> rep1sep(typ, ",")) ~ "]"
-      ^^ { case ctor ~ args ~ tk => GenericType(ctor, args)(tk.span.getEnd) }
+  private def stdType: Parser[Type] =
+    "Int" ^^ { tk => IntType()(tk.span) }
+      | "Bool" ^^ { tk => BoolType()(tk.span) }
+      | "Str" ^^ { tk => StrType()(tk.span) }
+      | "List" ~ ("[" ~> typ) ~ "]" ^^ { case tk1 ~ t ~ tk2 => ListType(t)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+      | "Set" ~ ("[" ~> typ) ~ "]" ^^ { case tk1 ~ t ~ tk2 => SetType(t)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+      | "Map" ~ ("[" ~> typ) ~ ("," ~> typ) ~ "]"
+      ^^ { case tk1 ~ k ~ v ~ tk2 => MapType(k, v)(Span(tk1.span.getStart, tk2.span.getEnd)) }
 
-  private def typeRef: Parser[TypeName] = IDENTIFIER ^^ { tk => TypeName(tk.value)(tk.span) }
+  private def typeName: Parser[TypeName] = IDENTIFIER ^^ { tk => TypeName(tk.value)(tk.span) }
 
   private def parenType: Parser[Type] =
     "(" ~ repsep(typ, ",") ~ ")" ^^ {
@@ -82,9 +87,9 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
       case tk1 ~ ts ~ tk2 => TupleType(ts)(Span(tk1.span.getStart, tk2.span.getEnd))
     }
 
-  private def refinedType: Parser[RefinedType] =
+  private def reftType: Parser[ReftType] =
     "{" ~ param ~ ("|" ~> expr) ~ "}"
-      ^^ { case tk1 ~ p ~ e ~ tk2 => RefinedType(p, e)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+      ^^ { case tk1 ~ p ~ e ~ tk2 => ReftType(p, e)(Span(tk1.span.getStart, tk2.span.getEnd)) }
 
   // Expressions
   private def expr: Parser[Expr] = lambda | ite | implies
@@ -281,13 +286,13 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def varDecl: Parser[VarDecl] =
     "var" ~>! pattern ~ ("=" ~> expr) <~ NEWLINE ^^ { case l ~ r => VarDecl(l, r) }
 
-  private def pattern: Parser[Pattern] = patternVar | tuplePattern
+  private def pattern: Parser[Pat] = patternVar | tuplePattern
 
-  private def patternVar: Parser[PatternVar] = ident ~ (":" ~> typ).? ^^ { case id ~ t => PatternVar(id, t) }
+  private def patternVar: Parser[PatVar] = ident ~ (":" ~> typ).? ^^ { case id ~ t => PatVar(id, t) }
 
-  private def tuplePattern: Parser[TuplePattern] =
+  private def tuplePattern: Parser[TuplePat] =
     "(" ~! repsep(pattern, ",") ~ ")"
-      ^^ { case tk1 ~ ps ~ tk2 => TuplePattern(ps)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+      ^^ { case tk1 ~ ps ~ tk2 => TuplePat(ps)(Span(tk1.span.getStart, tk2.span.getEnd)) }
 
   private def assumeStmt: Parser[Assume] = "assume" ~>! expr <~ NEWLINE ^^ (Assume(_))
 
@@ -326,17 +331,6 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     }
 
   private def exprStmt: Parser[ExprStmt] = expr <~ NEWLINE ^^ (ExprStmt(_))
-
-  // Left-hand side expressions
-  private def lExpr: Parser[LExpr] = lRef | lTuple | lList
-
-  private def lRef: Parser[LRef] = IDENTIFIER ^^ { tk => LRef(tk.value)(tk.span) }
-
-  private def lTuple: Parser[LTuple] =
-    "(" ~! repsep(lExpr, ",") ~ ")" ^^ { case tk1 ~ es ~ tk2 => LTuple(es)(Span(tk1.span.getStart, tk2.span.getEnd)) }
-
-  private def lList: Parser[LList] =
-    "[" ~! repsep(lExpr, ",") ~ "]" ^^ { case tk1 ~ es ~ tk2 => LList(es)(Span(tk1.span.getStart, tk2.span.getEnd)) }
 
   def parse(): Module =
     val lexer = Lexer(uri, text)

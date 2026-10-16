@@ -28,7 +28,7 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
       val info = TypeInfo(id, typ)
       coreAPIs.declare(id, info, ctx)
 
-    case untpd.ValDef(id, e) =>
+    case untpd.ConstDef(id, e) =>
       val (typ, value, side) = coreAPIs.infer(e, ctx)
       assert(side.isEmpty, "Side effects are not allowed in top-level val definitions")
       val info = ConstInfo(id, typ, value)

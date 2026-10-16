@@ -13,14 +13,13 @@ object Simplifier extends LazyLogging:
       case _ => false
 
     def simplify: Expr = expr match
-      case IntConst(_) | BoolConst(_) | StrConst(_) | NullConst() => expr
-      case Var(_) | MethodRef(_) => expr
+      case IntConst(_) | BoolConst(_) | StrConst(_) | NullConst() | Var(_) => expr
 
       // Functional
-      case Lambda(ps, e) => Lambda(ps, e.simplify)(expr.range)
+      case LambdaExpr(ps, e) => LambdaExpr(ps, e.simplify)(expr.range)
       case Apply(e, es) =>
         (e.simplify, es.map(_.simplify)) match
-          case (f@Lambda(_, e), es) =>
+          case (f@LambdaExpr(_, e), es) =>
             assert(f.paramNames.length == es.length, "lambda apply arity mismatch")
             e.subst(f.paramNames, es)
           case (e, es) => Apply(e, es)(expr.range)

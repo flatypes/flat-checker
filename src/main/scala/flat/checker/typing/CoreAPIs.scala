@@ -5,7 +5,7 @@ import flat.checker.Reporter
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{CharSet, RegEx, StrRE, given}
 import flat.checker.flan.Show.show
-import flat.checker.flan.TypeOps.erase
+import flat.checker.flan.sorting.{subsortOf, toSort}
 import flat.checker.flan.tpd.*
 import flat.checker.flan.untpd
 import flat.checker.parsing.SyntaxError
@@ -98,7 +98,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       (NoType, NoExpr, Nil)
     case untpd.ListExpr(e :: es) =>
       val (elemType, first, firstSide) = infer(e, ctx)
-      val elemSort = elemType.erase
+      val elemSort = elemType.toSort
       val (rest, restSides) = es.map(check(_, elemSort, ctx)).unzip
       (ListType(elemSort), ListExpr(first :: rest)(elemSort, node.range), firstSide ++ restSides.flatten)
 
@@ -107,7 +107,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       (NoType, NoExpr, Nil)
     case untpd.SetExpr(e :: es) =>
       val (elemType, first, firstSide) = infer(e, ctx)
-      val elemSort = elemType.erase
+      val elemSort = elemType.toSort
       val (rest, restSides) = es.map(check(_, elemSort, ctx)).unzip
       (SetType(elemSort), SetExpr(first :: rest)(elemSort, node.range), firstSide ++ restSides.flatten)
 
@@ -117,8 +117,8 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.MapExpr((ek, ev) :: items) =>
       val (keyType, firstKey, firstKeySide) = infer(ek, ctx)
       val (valueType, firstValue, firstValueSide) = infer(ev, ctx)
-      val keySort = keyType.erase
-      val valueSort = valueType.erase
+      val keySort = keyType.toSort
+      val valueSort = valueType.toSort
       val (restKeys, restKeySides) = items.map((k, v) => check(k, keySort, ctx)).unzip
       val (restValues, restValueSides) = items.map((k, v) => check(v, valueSort, ctx)).unzip
       (MapType(keySort, valueSort),
@@ -244,7 +244,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     (args, sides.flatten)
 
   def check(node: untpd.Expr, expected: Type, ctx: TypingCtx): (Expr, List[Stmt]) =
-    (node, expected.erase) match
+    (node, expected.toSort) match
       case (untpd.TupleExpr(es), TupleType(ts)) if es.length == ts.length =>
         val (elems, sides) = es.zip(ts).map(check(_, _, ctx)).unzip
         (TupleExpr(elems)(node.range), sides.flatten)
@@ -257,31 +257,16 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
         val (params, localCtx) = resolveParams(ps, ts, ctx.pushed)
         val (body, side) = check(e, t, localCtx)
         assert(side.isEmpty, "side effects not allowed in lambda body")
-        (Lambda(params, body), Nil)
+        (LambdaExpr(params, body), Nil)
 
       case (_, expectedSort) =>
         val (actual, expr, side) = infer(node, ctx)
-        val actualSort = actual.erase
-        if isSubsort(actualSort, expectedSort) then
+        val actualSort = actual.toSort
+        if actualSort.subsortOf(expectedSort) then
           (expr, side)
         else
           reporter.report(ctx.uri, TypeMismatch(node.range, expectedSort.show, actualSort.show))
           (expr, Nil)
-
-  private def isSubsort(left: Type, right: Type): Boolean =
-    if left == right || left == NoType || right == NoType then true
-    else (left, right) match
-      case (ListType(t1), ListType(t2)) => isSubsort(t1, t2)
-      case (SetType(t1), SetType(t2)) => isSubsort(t1, t2)
-      case (MapType(k1, v1), MapType(k2, v2)) => isSubsort(k1, k2) && isSubsort(v1, v2)
-      case (TupleType(ts1), TupleType(ts2)) =>
-        ts1.length == ts2.length && (ts1 zip ts2).forall(isSubsort)
-      case (FunType(ps1, r1), FunType(ps2, r2)) =>
-        ps1.length == ps2.length && (ps2 zip ps1).forall(isSubsort) && isSubsort(r1, r2)
-      case (OptType(t1), OptType(t2)) => isSubsort(t1, t2)
-      case (NullType, OptType(_)) => true
-      case (t1, OptType(t2)) => isSubsort(t1, t2)
-      case _ => false
 
   def expand(node: untpd.PExpr, ctx: TypingCtx): StrRE = node match
     case untpd.PChar(c) => RegEx.symbolSet(CharSet(c))
@@ -310,40 +295,36 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.PAllChar => RegEx.symbolSet(CharSet.full)
 
   def unfold(node: untpd.Type, ctx: TypingCtx): Type = node match
+    case untpd.IntType() => IntType
+    case untpd.BoolType() => BoolType
+    case untpd.StrType() => StrType
+    case untpd.ListType(t) => ListType(unfold(t, ctx))
+    case untpd.SetType(t) => SetType(unfold(t, ctx))
+    case untpd.MapType(tk, tv) => MapType(unfold(tk, ctx), unfold(tv, ctx))
     case t@untpd.TypeName(x) =>
       ctx.lookup(x) match
         case Some(TypeInfo(_, typ)) => typ
-        case Some(LangInfo(_, r)) => RefinedType("s", StrType, StrIn(Var("s"), r))
+        case Some(LangInfo(_, r)) => ReftType("s", StrType, StrIn(Var("s"), r))
         case Some(_) =>
           reporter.reportNotType(t.range, x)
           NoType
         case None =>
-          x match
-            case "int" | "Int" => IntType
-            case "bool" | "Bool" => BoolType
-            case "str" | "Str" => StrType
-            case _ =>
-              reporter.report(ctx.uri, UndefinedName(t.range, x))
-              NoType
-
-    case untpd.GenericType(untpd.Ident("List"), List(t)) => ListType(unfold(t, ctx))
-    case untpd.GenericType(untpd.Ident("Set"), List(t)) => SetType(unfold(t, ctx))
-    case untpd.GenericType(untpd.Ident("Map"), List(tk, tv)) => MapType(unfold(tk, ctx), unfold(tv, ctx))
-    case t@untpd.GenericType(_, _) =>
-      reporter.reportNameUndefined(t.range)
-      NoType
-
+          reporter.report(ctx.uri, UndefinedName(t.range, x))
+          NoType
     case untpd.TupleType(ts) => TupleType(ts.map(unfold(_, ctx)))
     case untpd.FunType(ts, t) => FunType(ts.map(unfold(_, ctx)), unfold(t, ctx))
     case untpd.OptType(t) => OptType(unfold(t, ctx))
-    case untpd.RefinedType(untpd.Param(id, Some(t)), e) =>
+    case untpd.ReftType(untpd.Param(id, Some(t)), e) =>
       val base = unfold(t, ctx)
       val info = ValInfo(id, base)
       val localCtx = ctx.pushed.declare(id.name, info)
       val (cond, side) = check(e, BoolType, localCtx)
       if side.nonEmpty then
         reporter.report(ctx.uri, NotConstant(e.range))
-      RefinedType(id.name, base, cond)
+      ReftType(id.name, base, cond)
+    case untpd.ReftType(untpd.Param(id, None), _) =>
+      reporter.report(ctx.uri, MissingTypeAnnot(id.range))
+      NoType
 
   def resolveParams(nodes: List[untpd.Param], expectedTypes: List[Type],
                     localCtx: TypingCtx): (List[(String, Type)], TypingCtx) =

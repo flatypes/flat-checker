@@ -2,7 +2,7 @@ package flat.checker.typing
 
 import flat.checker.domain.CharSet
 import flat.checker.domain.StrREOps.NumStrFormat
-import flat.checker.flan.TypeOps.erase
+import flat.checker.flan.sorting.toSort
 import flat.checker.flan.tpd.{BoolType as bool, IntType as int, StrType as str, *}
 import org.eclipse.lsp4j.Range
 
@@ -18,7 +18,7 @@ final case class Member(funType: FunType,
     if pre.isDefinedAt((receiver, noRange) :: args) then pre((receiver, noRange) :: args) else Nil
 
 object builtin:
-  def accessMember(typ: Type, name: String): List[Member] = typ.erase match
+  def accessMember(typ: Type, name: String): List[Member] = typ.toSort match
     case `int` => accessIntMember(name)
     case `bool` => accessBoolMember(name)
     case `str` => accessStrMember(name)

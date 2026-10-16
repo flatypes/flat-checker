@@ -2,20 +2,16 @@ package flat.checker.flan
 
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{CharSet, StrRE}
-import flat.checker.flan.TypeOps.isSort
 import flat.checker.verif.ProofError
 import org.eclipse.lsp4j.{Position, Range}
 
 object tpd:
-  @deprecated
-  final case class Script(uri: String, body: List[Stmt])
-
   final case class Module(uri: String, body: List[MethodDef])
 
   final case class MethodDef(name: String, params: List[(String, Type)], returnType: Type,
                              requires: List[Expr], ensures: List[Expr], body: List[Stmt])
 
-  // Statements
+  // Local statements
   sealed trait Stmt
 
   final case class ExprStmt(expr: Expr) extends Stmt
@@ -39,47 +35,15 @@ object tpd:
   // Control flow
   final case class If(cond: Expr, thenBody: List[Stmt], elseBody: List[Stmt]) extends Stmt
 
-  final case class Return(value: Expr = NoExpr)(val range: Range) extends Stmt
-
   final case class While(cond: Expr, invariants: List[Expr], body: List[Stmt]) extends Stmt
+
+  final case class For(name: String, iter: Expr, inv: Expr, body: List[Stmt]) extends Stmt
+
+  final case class Return(value: Expr = NoExpr)(val range: Range) extends Stmt
 
   final case class Break()(val range: Range) extends Stmt
 
   final case class Continue()(val range: Range) extends Stmt
-
-  final case class For(name: String, iter: Expr, inv: Expr, body: List[Stmt]) extends Stmt
-
-  // Types
-  sealed trait Type
-
-  case object IntType extends Type
-
-  case object BoolType extends Type
-
-  case object StrType extends Type
-
-  final case class ListType(elemType: Type) extends Type
-
-  final case class SetType(elemType: Type) extends Type
-
-  final case class MapType(keyType: Type, valType: Type) extends Type
-
-  final case class TupleType(elemTypes: List[Type]) extends Type
-
-  def mkTupleType(elemTypes: Type*): TupleType = TupleType(elemTypes.toList)
-
-  val unitType: TupleType = TupleType(Nil)
-
-  final case class FunType(paramTypes: List[Type], returnType: Type) extends Type:
-    def arity: Int = paramTypes.length
-
-  case object NullType extends Type
-
-  final case class OptType(valType: Type) extends Type
-
-  final case class RefinedType(name: String, base: Type, reft: Expr) extends Type
-
-  case object NoType extends Type
 
   // Expressions
   sealed trait Expr extends Product:
@@ -134,16 +98,18 @@ object tpd:
   final case class Var(name: String)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Var = this
 
-  final case class MethodRef(name: String)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): MethodRef = this
+  final case class TupleExpr(elems: List[Expr])(val range: Range = noRange) extends Expr:
+    require(elems.length != 1, "TupleExpr must have at least 2 elements or none")
 
-  final case class Lambda(params: List[(String, Type)], body: Expr)(val range: Range = noRange) extends Expr:
-    require(params.forall(_._2.isSort))
+    override def rebuild(subtrees: List[Expr]): TupleExpr = TupleExpr(subtrees)(range)
 
+  def mkTuple(elems: Expr*): TupleExpr = TupleExpr(elems.toList)()
+
+  final case class LambdaExpr(params: List[(String, Type)], body: Expr)(val range: Range = noRange) extends Expr:
     def paramNames: List[String] = params.map(_._1)
 
-    override def rebuild(subtrees: List[Expr]): Lambda = subtrees match
-      case List(b) => Lambda(params, b)(range)
+    override def rebuild(subtrees: List[Expr]): LambdaExpr = subtrees match
+      case List(b) => LambdaExpr(params, b)(range)
       case _ => throw IllegalArgumentException("Lambda must have exactly 1 subtree")
 
   final case class Apply(fun: Expr, args: List[Expr])(val range: Range = noRange) extends Expr:
@@ -153,6 +119,7 @@ object tpd:
 
   def mkApply(fun: Expr, args: Expr*): Apply = Apply(fun, args.toList)()
 
+  // Equality
   final case class Eq(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Eq = subtrees match
       case List(e1, e2) => Eq(e1, e2)(range)
@@ -162,38 +129,6 @@ object tpd:
     override def rebuild(subtrees: List[Expr]): Ne = subtrees match
       case List(e1, e2) => Ne(e1, e2)(range)
       case _ => throw IllegalArgumentException("Ne must have exactly 2 subtrees")
-
-  final case class Ite(cond: Expr, thenValue: Expr, elseValue: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): Ite = subtrees match
-      case List(e, e1, e2) => Ite(e, e1, e2)(range)
-      case _ => throw IllegalArgumentException("Ite must have exactly 3 subtrees")
-
-  // Boolean operations
-  final case class And(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): And = subtrees match
-      case List(e1, e2) => And(e1, e2)(range)
-      case _ => throw IllegalArgumentException("And must have exactly 2 subtrees")
-
-  def mkAnd(exprs: List[Expr]): Expr =
-    if exprs.isEmpty then BoolConst(true) else exprs.reduce(And(_, _)())
-
-  final case class Or(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): Or = subtrees match
-      case List(e1, e2) => Or(e1, e2)(range)
-      case _ => throw IllegalArgumentException("Or must have exactly 2 subtrees")
-
-  def mkOr(exprs: List[Expr]): Expr =
-    if exprs.isEmpty then BoolConst(false) else exprs.reduce(Or(_, _)())
-
-  final case class Not(cond: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): Not = subtrees match
-      case List(e) => Not(e)(range)
-      case _ => throw IllegalArgumentException("Not must have exactly 1 subtree")
-
-  final case class Implies(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): Implies = subtrees match
-      case List(e1, e2) => Implies(e1, e2)(range)
-      case _ => throw IllegalArgumentException("Implies must have exactly 2 subtrees")
 
   // Int operations
   final case class Negate(int: Expr)(val range: Range = noRange) extends Expr:
@@ -265,6 +200,38 @@ object tpd:
     override def rebuild(subtrees: List[Expr]): BitShR = subtrees match
       case List(e1, e2) => BitShR(e1, e2)(range)
       case _ => throw IllegalArgumentException("BitShR must have exactly 2 subtrees")
+
+  // Boolean
+  final case class And(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): And = subtrees match
+      case List(e1, e2) => And(e1, e2)(range)
+      case _ => throw IllegalArgumentException("And must have exactly 2 subtrees")
+
+  def mkAnd(exprs: List[Expr]): Expr =
+    if exprs.isEmpty then BoolConst(true) else exprs.reduce(And(_, _)())
+
+  final case class Or(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): Or = subtrees match
+      case List(e1, e2) => Or(e1, e2)(range)
+      case _ => throw IllegalArgumentException("Or must have exactly 2 subtrees")
+
+  def mkOr(exprs: List[Expr]): Expr =
+    if exprs.isEmpty then BoolConst(false) else exprs.reduce(Or(_, _)())
+
+  final case class Not(cond: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): Not = subtrees match
+      case List(e) => Not(e)(range)
+      case _ => throw IllegalArgumentException("Not must have exactly 1 subtree")
+
+  final case class Implies(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): Implies = subtrees match
+      case List(e1, e2) => Implies(e1, e2)(range)
+      case _ => throw IllegalArgumentException("Implies must have exactly 2 subtrees")
+
+  final case class Ite(cond: Expr, thenValue: Expr, elseValue: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): Ite = subtrees match
+      case List(e, e1, e2) => Ite(e, e1, e2)(range)
+      case _ => throw IllegalArgumentException("Ite must have exactly 3 subtrees")
 
   // String operations: access
   final case class StrLength(str: Expr)(val range: Range = noRange) extends Expr:
@@ -527,13 +494,6 @@ object tpd:
       case _ => throw IllegalArgumentException("MapUpdate must have exactly 3 subtrees")
 
   // Tuple operations
-  final case class TupleExpr(elems: List[Expr])(val range: Range = noRange) extends Expr:
-    require(elems.length != 1, "TupleExpr must have at least 2 elements or none")
-
-    override def rebuild(subtrees: List[Expr]): TupleExpr = TupleExpr(subtrees)(range)
-
-  def mkTuple(elems: Expr*): TupleExpr = TupleExpr(elems.toList)()
-
   final case class TupleSelect(index: Int, tup: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): TupleSelect = subtrees match
       case List(t) => TupleSelect(index, t)(range)
@@ -544,3 +504,35 @@ object tpd:
     val range: Range = noRange
 
     override def rebuild(subtrees: List[Expr]): NoExpr.type = this
+
+  // Types
+  sealed trait Type
+
+  case object IntType extends Type
+
+  case object BoolType extends Type
+
+  case object StrType extends Type
+
+  final case class ListType(elemType: Type) extends Type
+
+  final case class SetType(elemType: Type) extends Type
+
+  final case class MapType(keyType: Type, valType: Type) extends Type
+
+  final case class TupleType(elemTypes: List[Type]) extends Type
+
+  def mkTupleType(elemTypes: Type*): TupleType = TupleType(elemTypes.toList)
+
+  val unitType: TupleType = TupleType(Nil)
+
+  final case class FunType(paramTypes: List[Type], returnType: Type) extends Type:
+    def arity: Int = paramTypes.length
+
+  case object NullType extends Type
+
+  final case class OptType(valType: Type) extends Type
+
+  final case class ReftType(name: String, base: Type, reft: Expr) extends Type
+
+  case object NoType extends Type
