@@ -8,6 +8,7 @@ import flat.checker.flan.tpd.*
 import flat.checker.verif.ExprOps.conjuncts
 import flat.checker.verif.Simplifier.simplify
 import flat.checker.verif.Type.*
+import io.github.cvc5
 
 import scala.Function.unlift
 import scala.collection.mutable.ListBuffer
@@ -106,10 +107,17 @@ object Prover extends LazyLogging:
       if lemmas.contains(goal.conclusion) then
         return true
 
-    val solver = new SMTSolver(using goal.ctx)
-    goal.premises.foreach(solver.add)
-    lemmas.foreach(solver.add)
-    solver.prove(goal.conclusion)
+    val tm = new cvc5.TermManager
+    val encoder = new SMTEncoder(goal.ctx, tm)
+    val solver = new cvc5.Solver(tm)
+    solver.setOption("tlimit-per", "3000")
+    for e <- goal.premises ++ lemmas do
+      val formula = encoder.encodeExpr(e, EncodingCtx.empty)
+      solver.assertFormula(formula)
+    val formula = encoder.encodeExpr(goal.conclusion, EncodingCtx.empty)
+    solver.assertFormula(formula.notTerm)
+    val result = solver.checkSat()
+    result.isUnsat
 
   private def impliesFalse(expr: Expr): Boolean = expr match
     case StrIn(_, r) => r.isEmpty

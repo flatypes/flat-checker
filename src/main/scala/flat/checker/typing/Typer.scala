@@ -15,14 +15,14 @@ class Typer(using reporter: Reporter) extends LazyLogging:
   def typeCheck(tree: untpd.Module): Module =
     val ctx = resolver.resolve(tree)
     val body = tree.body.flatMap:
-      case node: untpd.FunDef if node.body.nonEmpty => Some(checkMethod(node, ctx))
+      case node: untpd.FunDef => Some(checkMethod(node, ctx))
       case _ => None
     Module(tree.uri, body)
 
   private def checkMethod(node: untpd.FunDef, globalCtx: TypingCtx): MethodDef =
     val name = node.ident.name
     val info = globalCtx.get(name).get.asInstanceOf[MethodInfo]
-    val body = checkBlock(node.body, info.localCtx, info, 0)
+    val body = checkBlock(node.body, globalCtx.copy(stack = info.scope :: globalCtx.stack), info, 0)
     MethodDef(name, info.params, info.returnType, info.requires, info.ensures, body)
 
   private def checkBlock(nodes: List[untpd.Stmt], localCtx: TypingCtx,
@@ -105,8 +105,8 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     // Control flow
     case untpd.If(e, bd1, bd2) =>
       val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
-      val thenBody = checkBlock(bd1, ctx.pushed, methodInfo, loopLevel)
-      val elseBody = checkBlock(bd2, ctx.pushed, methodInfo, loopLevel)
+      val thenBody = checkBlock(bd1, ctx.pushed.assume(cond), methodInfo, loopLevel)
+      val elseBody = checkBlock(bd2, ctx.pushed.assume(Not(cond)), methodInfo, loopLevel)
       (side :+ If(cond, thenBody, elseBody), ctx)
 
     case s@untpd.Return(Some(e)) =>

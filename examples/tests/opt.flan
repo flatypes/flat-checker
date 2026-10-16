@@ -1,0 +1,15 @@
+lang AStar = r'a*'
+
+def f(s1: AStar?, s2: AStar) -> AStar:
+    if s1 != null:
+        return s1 + s2
+    else:
+        return s2
+
+type Nat = {n: Int | n >= 0}
+
+def g(n: Nat?, m: Nat) -> Nat:
+    if n != null:
+        return n + m
+    else:
+        return m

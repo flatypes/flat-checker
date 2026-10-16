@@ -46,7 +46,7 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
       val (requires, side1) = pre.map(coreAPIs.check(_, BoolType, localCtx)).unzip
       assert(side1.forall(_.isEmpty), "Side effects are not allowed in preconditions")
       val ensures = post.map(checkEnsureSpec(_, returnType, localCtx))
-      val info = MethodInfo(id, params, returnType, requires, ensures, localCtx)
+      val info = MethodInfo(id, params, returnType, requires, ensures, localCtx.stack.head)
       coreAPIs.define(id, info, ctx)
 
   private def checkEnsureSpec(node: untpd.Expr, returnType: Type, ctx: TypingCtx): Expr =

@@ -9,7 +9,7 @@ sealed trait Info:
 
 // Globals
 final case class MethodInfo(id: untpd.Ident, params: List[(String, Type)], returnType: Type,
-                            requires: List[Expr], ensures: List[Expr], localCtx: TypingCtx) extends Info:
+                            requires: List[Expr], ensures: List[Expr], scope: Map[String, Info]) extends Info:
   def paramNames: List[String] = params.map(_._1)
 
   def paramTypes: List[Type] = params.map(_._2)
@@ -33,8 +33,7 @@ final case class TypingCtx(uri: String,
   def get(name: String): Option[Info] = stack.head.get(name)
 
   def define(name: String, info: Info): TypingCtx =
-    val head = stack.head + (name -> info)
-    copy(stack = head :: stack.tail)
+    copy(stack = stack.head + (name -> info) :: stack.tail)
 
   def lookup(name: String): Option[Info] =
     stack.collectFirst { case m if m.contains(name) => m(name) }
