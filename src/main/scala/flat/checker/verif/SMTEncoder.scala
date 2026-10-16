@@ -112,7 +112,8 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
     case ListConcat(e1, e2) => tm.mkTerm(SEQ_CONCAT, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
     case ListUpdate(e, ei, ex) =>
       tm.mkTerm(SEQ_UPDATE, encodeExpr(e, ctx), encodeExpr(ei, ctx), tm.mkTerm(SEQ_UNIT, encodeExpr(ex, ctx)))
-    case ListContains(e, ev) => tm.mkTerm(SEQ_CONTAINS, encodeExpr(e, ctx), encodeExpr(ev, ctx))
+    case ListContains(e, ev) =>
+      tm.mkTerm(SEQ_CONTAINS, encodeExpr(e, ctx), tm.mkTerm(SEQ_UNIT, encodeExpr(ev, ctx)))
 
     // List: higher-order
     case _: ListForall => tm.mkConst(bool)

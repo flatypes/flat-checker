@@ -1,9 +1,10 @@
-from url_unsplit import Scheme, Authority, Path, Query, Fragment, URL, url_unsplit
+from url_unsplit import Scheme, Authority, Path, Query, Fragment, URL, url_unsplit, RelativePath
 
-val uses_relative: List[Str] = ['', 'ftp', 'http']
-val uses_netloc: List[Str] = ['', 'ftp', 'http']
+val uses_relative = ['', 'ftp', 'http']
+val uses_netloc = ['', 'ftp', 'http']
 
-def url_split(url: URL) -> (Scheme?, Authority?, Path, Query?, Fragment?)
+def url_split(url: URL) -> (Scheme?, Authority?, Path, Query?, Fragment?):
+    ensures lambda (scheme, netloc, path, query, fragment) -> scheme == null ==> path in RelativePath
 
 /** Join a base URL and a possibly relative URL to form an absolute
     interpretation of the latter. */
@@ -13,43 +14,34 @@ def url_join(base: URL, url: URL) -> URL:
     if url == '':
         return base
 
-    var bscheme: Scheme?
-    var bnetloc: Authority?
-    var bpath: Path
-    var bquery: Query?
-    var bfragment: Fragment?
-    var scheme: Scheme?
-    var netloc: Authority?
-    var path: Path
-    var query: Query?
-    var fragment: Fragment?
-    // (bscheme, bnetloc, bpath, bquery, bfragment) = url_split(base)
-    // (scheme, netloc, path, query, fragment) = url_split(url)
+    var (b_scheme, b_netloc, b_path, b_query, b_fragment) = url_split(base)
+    var (scheme, netloc, path, query, fragment) = url_split(url)
 
     if scheme == null:
-        scheme = bscheme
-    if scheme != bscheme || (scheme != null && scheme != '' && scheme !in uses_relative):
+        scheme = b_scheme
+    if scheme != b_scheme || (scheme != null && scheme != '' && scheme !in uses_relative):
         return url
     if (scheme == null || scheme == '') || scheme in uses_netloc:
         if netloc != null && netloc != '':
             return url_unsplit(scheme, netloc, path, query, fragment)
-        netloc = bnetloc
+        netloc = b_netloc
 
     if path == '':
-        path = bpath
+        path = b_path
         if query == null:
-            query = bquery
+            query = b_query
             if fragment == null:
-                fragment = bfragment
+                fragment = b_fragment
         return url_unsplit(scheme, netloc, path, query, fragment)
 
-    var base_parts = bpath.split('/')
+    var base_parts = b_path.split('/')
     if base_parts.last != '':
         // the last item is not a directory, so will not be taken into account
         // in resolving the relative path
         base_parts = base_parts.init
 
-    var segments: List[Str]
+/*
+    var segments: List[Str] = []
     // for rfc3986, ignore all base path should the first character be root.
     if path[:1] == '/':
         segments = path.split('/')
@@ -79,3 +71,4 @@ def url_join(base: URL, url: URL) -> URL:
         resolved_path += ['']
 
     return url_unsplit(scheme, netloc, |resolved_path| == 0 ? '/' : '/'.join(resolved_path), query, fragment)
+*/

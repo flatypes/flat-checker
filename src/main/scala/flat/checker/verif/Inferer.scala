@@ -1,158 +1,195 @@
 package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.domain.Index.*
+import flat.checker.domain.Index.{First, Left, Right, UnknownIndex}
 import flat.checker.domain.REOps.*
 import flat.checker.domain.StrREOps.*
 import flat.checker.domain.{*, given}
-import flat.checker.flan.*
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
 
-enum Type:
-  case TBool(dom: BoolSet)
-  case TNat(dom: CountingRE)
-  case TIndex(dom: IndexSet)
-  case TNum(dom: NatRange)
-  case TStr(dom: StrRE)
-  case TStrSeq(dom: RegEx[StrRE])
+import scala.collection.mutable.ListBuffer
 
-import flat.checker.verif.Type.*
+enum Domain:
+  case Top
+  case Nat(set: CountingRE)
+  case Index(set: IndexSet)
+  case Num(set: NatRange)
+  case Bool(set: BoolSet)
+  case Str(set: StrRE)
+  case StrList(set: RegEx[StrRE])
 
-class Inferer(goal: Goal) extends LazyLogging:
-  def infer(expr: Expr): Type =
-    val r = goal.premises.reverseIterator.collectFirst { case StrIn(`expr`, r) => TStr(r) }
+  def membership(elem: Expr): List[Expr] = this match
+    case Top => Nil
+    case Nat(set) =>
+      if set.isFinite then
+        List(mkOr(for n <- set.toFinSet.toList.sorted yield Eq(elem, IntConst(n))))
+      else
+        List(Le(IntConst(set.min), elem))
+
+    case Index(set) =>
+      val cases = ListBuffer.empty[Expr]
+      if set.neg.nonEmpty then
+        for i <- set.neg.toList.sorted do
+          cases += Eq(elem, IntConst(i))
+      if set.pos.isFinite then
+        for n <- set.pos.toFinSet.toList.sorted do
+          cases += Eq(elem, IntConst(n))
+      else
+        cases += Le(IntConst(set.pos.min), elem)
+      List(mkOr(cases.toList))
+
+    case Num(set) =>
+      set.max match
+        case Some(max) => List(Le(IntConst(set.min), elem), Le(elem, IntConst(max)))
+        case None => List(Le(IntConst(set.min), elem))
+
+    case Bool(set) =>
+      set match
+        case BoolSet.True => List(elem)
+        case BoolSet.False => List(Not(elem))
+        case _ => Nil
+
+    case Str(r) =>
+      r match
+        case RegEx.Lit(a) => List(inCharSet(elem, a))
+        case _ =>
+          if r.isFiniteLang then
+            List(mkOr(for s <- r.getLang.toList.sorted yield Eq(elem, StrConst(s))))
+          else
+            List(StrIn(elem, r))
+
+    case StrList(_) => Nil
+
+private def inCharSet(elem: Expr, set: CharSet): Expr =
+  if set.pos then mkOr(for c <- set.chars.toList.sorted yield Eq(elem, CharConst(c)))
+  else mkAnd(for c <- set.chars.toList.sorted yield Ne(elem, CharConst(c)))
+
+object Inferer extends LazyLogging:
+  def infer(expr: Expr)(using goal: Goal): Domain =
+    val r = goal.premises.reverseIterator.collectFirst { case StrIn(`expr`, r) => Domain.Str(r) }
     if r.isDefined then
       return r.get
 
     expr match
-      case StrConst(s) => TStr(RegEx.word(s.toList))
+      case StrConst(s) => Domain.Str(RegEx.word(s.toList))
       case Var(x) =>
-        goal.premises.reverseIterator
-          .collectFirst:
-            case StrIn(`expr`, r) => TStr(r)
-          .getOrElse:
-            goal.ctx(x) match
-              case StrType => TStr(RegEx.full)
-              case ListType(StrType) => TStrSeq(RegEx.Lit(RegEx.full).star)
-              case _ => throw new Exception(s"Cannot infer type for ${expr.show}")
+        goal.ctx(x) match
+          case StrType => Domain.Str(RegEx.full)
+          case ListType(StrType) => Domain.StrList(RegEx.Lit(RegEx.full).star)
+          case _ => Domain.Top
 
-      // Seq Operations
+      // Equality
+      case Eq(e, StrConst(t)) =>
+        infer(e) match
+          case Domain.Str(r) =>
+            if r.filterEq(t.toList).isEmpty then Domain.Bool(BoolSet.False)
+            else if r.filterNe(t.toList).isEmpty then Domain.Bool(BoolSet.True)
+            else Domain.Bool(BoolSet.Full)
+          case _ => Domain.Top
+      case Ne(e, StrConst(t)) =>
+        infer(e) match
+          case Domain.Str(r) =>
+            if r.filterNe(t.toList).isEmpty then Domain.Bool(BoolSet.False)
+            else if r.filterEq(t.toList).isEmpty then Domain.Bool(BoolSet.True)
+            else Domain.Bool(BoolSet.Full)
+          case _ => Domain.Top
+
+      // String
       case StrConcat(e1, e2) =>
         (infer(e1), infer(e2)) match
-          case (TStr(r1), TStr(r2)) => TStr(r1 * r2)
-          case (TStrSeq(r1), TStrSeq(r2)) => TStrSeq(r1 * r2)
-          case _ => throw new Exception(s"Sort Error: ${expr.show}")
+          case (Domain.Str(r1), Domain.Str(r2)) => Domain.Str(r1 * r2)
+          case _ => Domain.Top
       case StrLength(e) =>
         infer(e) match
-          case TStr(r) => TNat(r.absLength)
-          case TStrSeq(r) => TNat(r.absLength)
-          case _ => throw new Exception("Expected a sequence type for SeqLength")
+          case Domain.Str(r) => Domain.Nat(r.absLength)
+          case _ => Domain.Top
       case CharAt(e, ei) =>
-        (infer(e), inferIndex(ei, e)) match
-          case (TStr(r), index) => TStr(RegEx.symbolSet(r.absAt(index)))
-          case (TStrSeq(r), index) => TStr(r.absAt(index))
-          case _ => throw new Exception("Expected a sequence type for SeqAt")
-      case Substr(e, ei, ej) =>
-        (infer(e), inferIndex(ei, e), inferIndex(ej, e)) match
-          case (TStr(r), i, j) => TStr(r.absSlice(i, j))
-          case _ => throw new Exception(s"Cannot infer ${expr.show}")
-      case StrStartsWith(e, et) =>
-        (infer(e), et) match
-          case (TStr(r), StrConst(s)) => TBool(r.absStartsWith(s.toList))
-          case _ => throw new Exception("Expected a sequence type for SeqStartsWith")
-      case StrEndsWith(e, et) =>
-        (infer(e), et) match
-          case (TStr(r), StrConst(s)) => TBool(r.absEndsWith(s.toList))
-          case _ => throw new Exception("Expected a sequence type for SeqEndsWith")
-      case StrContains(StrConst(s), e) =>
         infer(e) match
-          case TStr(r) if r.isFiniteLang =>
-            val results = r.getLang.map(s.contains)
-            if results.forall(_ == true) then TBool(BoolSet.True)
-            else if results.forall(_ == false) then TBool(BoolSet.False)
-            else TBool(BoolSet.Full)
-          case _ => throw new Exception("Expected a sequence type for SeqContains")
-      case StrContains(e, et) =>
-        (infer(e), et) match
-          case (TStr(r), StrConst(s)) => TBool(r.absContains(s.toList))
-          case _ => throw new Exception("Expected a sequence type for SeqContains")
-      case StrIndexOf(e, et, IntConst(0)) =>
-        (infer(e), et) match
-          case (TStr(r), StrConst(s)) => TIndex(r.absIndexOfStr(s))
-          case _ => throw new Exception("Expected a sequence type for SeqIndexOf")
-      case StrSplit(e, et, lim) =>
-        (infer(e), et, lim) match
-          case (TStr(r), StrConst(s), Some(IntConst(m))) => TStrSeq(r.absSplit(s.toList, m.intValue))
-          case (TStr(r), StrConst(s), None) => TStrSeq(r.absSplitStr(s))
-          case _ => throw new Exception("Expected a sequence type for SeqSplit")
-      case StrCount(e, et) =>
-        (infer(e), et) match
-          case (TStr(r), StrConst(s)) => TNat(r.absCountStr(s))
-          case _ => throw new Exception("Expected a sequence type for SeqCount")
+          case Domain.Str(r) => Domain.Str(RegEx.symbolSet(r.absAt(inferIndex(ei, e))))
+          case _ => Domain.Top
+      case Substr(e, ei, ej) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Str(r.absSlice(inferIndex(ei, e), inferIndex(ej, e)))
+          case _ => Domain.Top
+      case StrStartsWith(e, StrConst(t)) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Bool(r.absStartsWith(t.toList))
+          case _ => Domain.Top
+      case StrEndsWith(e, StrConst(t)) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Bool(r.absEndsWith(t.toList))
+          case _ => Domain.Top
       case StrReverse(e) =>
         infer(e) match
-          case TStrSeq(r) => TStrSeq(r.reverse)
-          case _ => throw new Exception("Expected a sequence type for SeqReverse")
+          case Domain.Str(r) => Domain.Str(r.reverse)
+          case _ => Domain.Top
 
-      // String-specific
-      case StrReplace(e, StrConst(s1), StrConst(s2)) =>
+      // String: find and replace
+      case StrContains(e, StrConst(t)) =>
         infer(e) match
-          case TStr(r) => TStr(r.absReplace(s1, s2))
-          case _ => throw new Exception("Expected a string type for StrReplace")
-      case StrToLower(e) =>
+          case Domain.Str(r) => Domain.Bool(r.absContains(t.toList))
+          case _ => Domain.Top
+      case StrIndexOf(e, StrConst(t), IntConst(0)) =>
         infer(e) match
-          case TStr(r) => TStr(r.absMap(_.map(_.toLower)))
-          case _ => throw new Exception("Expected a string type for StringToLower")
-      case StrToUpper(e) =>
+          case Domain.Str(r) => Domain.Index(r.absIndexOf(t.toList))
+          case _ => Domain.Top
+      case StrReplace(e, StrConst(t1), StrConst(t2)) =>
         infer(e) match
-          case TStr(r) => TStr(r.absMap(_.map(_.toUpper)))
-          case _ => throw new Exception("Expected a string type for StringToUpper")
+          case Domain.Str(r) => Domain.Str(r.absReplace(t1, t2))
+          case _ => Domain.Top
+      case StrCount(e, StrConst(t)) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Nat(r.absCount(t.toList))
+          case _ => Domain.Top
+
+      // String: split and join
+      case StrSplit(e, StrConst(t), None) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.StrList(r.absSplit(t.toList))
+          case _ => Domain.Top
+      case StrJoin(_, _) => ???
+
+      // String: others
       case StrTrim(e) =>
         infer(e) match
-          case TStr(r) => TStr(r.absTrim())
-          case _ => throw new Exception("Expected a string type for StringTrim")
+          case Domain.Str(r) => Domain.Str(r.absTrim())
+          case _ => Domain.Top
+      case StrToLower(e) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Str(r.absMap(_.map(_.toLower)))
+          case _ => Domain.Top
+      case StrToUpper(e) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Str(r.absMap(_.map(_.toUpper)))
+          case _ => Domain.Top
+      case StrIs(e, a) =>
+        infer(e) match
+          case Domain.Str(r) =>
+            if r.alphabet.subsetOf(a) then Domain.Bool(BoolSet.True) else Domain.Bool(BoolSet.Full)
+          case _ => Domain.Top
+
+      case StrToInt(e) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Num(r.absToInt())
+          case _ => Domain.Top
       case IntFormat(e, fmt) =>
         val solver = LPSolver(goal.premises)
         solver.solve(e) match
           case (Some(min), Some(max)) if 0 <= min =>
-            TStr(absFromInt(min, max, fmt))
+            Domain.Str(absFromInt(min, max, fmt))
           case _ =>
             val r1 = RegEx.Lit(CharSet.from(fmt.digits))
-            TStr(r1.plus)
-      case StrToInt(e) =>
-        infer(e) match
-          case TStr(r) => TNum(r.absToInt())
-          case _ => throw new Exception("Expected a string type for StringToInt")
+            Domain.Str(r1.plus)
 
-      case StrIs(e, a) =>
+      // List
+      case ListLength(e) =>
         infer(e) match
-          case TStr(r) => if r.alphabet.subsetOf(a) then TBool(BoolSet.True) else TBool(BoolSet.Full)
-          case _ => throw new Exception("Expected a string type for StrIs")
+          case Domain.StrList(r) => Domain.Nat(r.absLength)
+          case _ => Domain.Top
 
-      // String eq
-      case Eq(e, StrConst(s)) =>
-        infer(e) match
-          case TStr(r) =>
-            if r.filterEq(s.toList).isEmpty then TBool(BoolSet.False)
-            else if r.filterNe(s.toList).isEmpty then TBool(BoolSet.True)
-            else TBool(BoolSet.Full)
-          case _ => throw new Exception("Expected a string type for Eq")
-      case Ne(e, StrConst(s)) =>
-        infer(e) match
-          case TStr(r) =>
-            if r.filterNe(s.toList).isEmpty then TBool(BoolSet.False)
-            else if r.filterEq(s.toList).isEmpty then TBool(BoolSet.True)
-            else TBool(BoolSet.Full)
-          case _ => throw new Exception("Expected a string type for Ne")
-
-      case Ite(_, e1, e2) =>
-        (infer(e1), infer(e2)) match
-          case (TStr(r1), TStr(r2)) => TStr(r1 | r2)
-          case _ => throw new Exception(s"Type inference not implemented for Ite with types: ${infer(e1)} and ${infer(e2)}")
-
-      case other =>
-        throw new Exception(s"Type inference not implemented for expression: $other")
+      // Others
+      case _ => Domain.Top
 
   private def inferIndex(idx: Expr, seq: Expr): Index = idx match
     case IntConst(i) if 0 <= i => Left(i.intValue)

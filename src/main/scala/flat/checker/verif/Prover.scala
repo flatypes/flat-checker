@@ -7,37 +7,56 @@ import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
 import flat.checker.verif.ExprOps.conjuncts
 import flat.checker.verif.Simplifier.simplify
-import flat.checker.verif.Type.*
 import io.github.cvc5
 
 import scala.Function.unlift
-import scala.collection.mutable.ListBuffer
 
 object Prover extends LazyLogging:
-  def prove(goal: Goal, path: String = ""): Boolean =
-    val simplifiedGoal = simplify(goal)
-    logger.debug("Simplified:\n{}", simplifiedGoal.pp)
-    if simplifiedGoal.conclusion == BoolConst(true)
-      || simplifiedGoal.premises.contains(BoolConst(false))
-      || simplifiedGoal.premises.contains(simplifiedGoal.conclusion) then
+  def prove(goal: Goal, path: List[String] = Nil): Boolean =
+    val simpGoal = simplify(goal)
+    if trivial(simpGoal) then
       return true
 
-    splitIf(simplifiedGoal) match
-      case Some((trueGoal, trueCond), (falseGoal, falseCond)) =>
-        prove(trueGoal, s"$path if (true) ${trueCond.show}")
-          && prove(falseGoal, s"$path if (false) ${falseCond.show}")
-      case None =>
-        splitOr(simplifiedGoal) match
-          case Some((leftGoal, leftCond), (rightGoal, rightCond)) =>
-            prove(leftGoal, s"$path if (left) ${leftCond.show}")
-              && prove(rightGoal, s"$path if (right) ${rightCond.show}")
-          case None =>
-            if path.nonEmpty then
-              logger.debug("Case{}:\n{}", path, simplifiedGoal.pp)
-            val success = solve(simplifiedGoal)
-            if !success then
-              logger.warn("Failed to prove goal:\n{}", simplifiedGoal.pp)
-            success
+    simpGoal.conclusion match
+      case And(e1, e2) => // P => e1, P => e2
+        prove(simpGoal.copy(conclusion = e1), path :+ "left")
+          && prove(simpGoal.copy(conclusion = e2), path :+ "right")
+      case Or(e1, e2) => // P and !e1 => e2
+        prove(simpGoal.copy(conclusion = e2, premises = simpGoal.premises :+ Not(e1)), path)
+      case Implies(e1, e2) => // P and e1 => e2
+        prove(simpGoal.copy(conclusion = e2, premises = simpGoal.premises :+ e1), path)
+      case _ =>
+        if path.isEmpty then
+          logger.debug("Simplified:\n{}", simpGoal.pp)
+        else
+          logger.debug("Case {}:\n{}", path.mkString(", "), simpGoal.pp)
+        solve(simpGoal)
+//
+//    splitIf(simpGoal) match
+//      case Some((trueGoal, trueCond), (falseGoal, falseCond)) =>
+//        prove(trueGoal, s"$path, if (true) ${trueCond.show}")
+//          && prove(falseGoal, s"$path, if (false) ${falseCond.show}")
+//      case None =>
+//        splitOr(simpGoal) match
+//          case Some((leftGoal, leftCond), (rightGoal, rightCond)) =>
+//            prove(leftGoal, s"$path, if (left) ${leftCond.show}")
+//              && prove(rightGoal, s"$path, if (right) ${rightCond.show}")
+//          case None =>
+//            if path.isEmpty then
+//              logger.debug("Simplified:\n{}", simpGoal.pp)
+//            else
+//              logger.debug("Case{}:\n{}", path, simpGoal.pp)
+//            solve(simpGoal)
+
+  private def trivial(goal: Goal): Boolean =
+    goal.conclusion == BoolConst(true) || goal.premises.contains(goal.conclusion) || goal.premises.exists:
+      case BoolConst(false) => true
+      case StrIn(_, r) => r.isEmpty
+      case Eq(e1, e2) => goal.premises.contains(Ne(e1, e2)())
+      case Ne(e1, e2) => goal.premises.contains(Eq(e1, e2)())
+      case Lt(e1, e2) => goal.premises.contains(Lt(e2, e1)())
+      case Not(e) => goal.premises.contains(e)
+      case _ => false
 
   private def simplify(goal: Goal): Goal =
     val conclusion = goal.conclusion.simplify
@@ -78,27 +97,18 @@ object Prover extends LazyLogging:
 
   private def solve(goal: Goal): Boolean =
     val narrowedGoal = Narrower.narrow(goal)
-    if narrowedGoal.premises.exists(impliesFalse) then
+    if trivial(narrowedGoal) then
       return true
 
-    var failure = false
-    val todos = ListBuffer.empty[Expr]
-    goal.conclusion.conjuncts.foreach:
+    goal.conclusion match
       case StrIn(e, r) =>
-        val inferer = Inferer(narrowedGoal)
-        inferer.infer(e) match
-          case TStr(r1) =>
+        Inferer.infer(e)(using narrowedGoal) match
+          case Domain.Str(r1) =>
             logger.debug("Inferred: {} ∈ {}", e.show, r1.pp)
-            if !(r1 == r || RESub.check(r1, r)) then
-              failure = true
+            r1 == r || RESub.check(r1, r)
           case _ => throw IllegalStateException("type error")
-      case _ =>
-        todos ++= goal.conclusion.conjuncts
-
-    if todos.isEmpty then
-      !failure
-    else
-      !failure && solveLogicalGoal(narrowedGoal.copy(conclusion = mkAnd(todos.toList)))
+      case b =>
+        solveLogicalGoal(narrowedGoal)
 
   private def solveLogicalGoal(goal: Goal): Boolean =
     val lemmas = Synthesizer.synthesizeLemmas(goal)
@@ -118,7 +128,3 @@ object Prover extends LazyLogging:
     solver.assertFormula(formula.notTerm)
     val result = solver.checkSat()
     result.isUnsat
-
-  private def impliesFalse(expr: Expr): Boolean = expr match
-    case StrIn(_, r) => r.isEmpty
-    case _ => false

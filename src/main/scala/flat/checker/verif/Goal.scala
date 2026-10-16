@@ -2,7 +2,6 @@ package flat.checker.verif
 
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
-import flat.checker.verif.Type.*
 
 final case class Goal(conclusion: Expr, premises: List[Expr], ctx: Map[String, Type]):
   @deprecated

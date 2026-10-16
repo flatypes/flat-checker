@@ -80,16 +80,6 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       Nil
 
     // Control flow
-    case Break() => List(state.copy(signal = BREAK))
-    case Continue() => List(state.copy(signal = CONTINUE))
-    case Return(e) =>
-      val sig = state.getMethodSig
-      if safetyCheck(e, state) then
-        typeCheck(e, sig.returnType, state)
-        for b <- sig.applyPost(sig.paramNames.map(Var(_)), List(e)) do
-          prove(b, state, () => PostNotProved(e.range))
-      Nil
-
     case If(e, bd1, bd2) =>
       val (trueState, falseState) =
         if safetyCheck(e, state) then (assume(e, state), assume(Not(e), state))
@@ -114,6 +104,17 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
           prove(ei, st, () => InvNotMaintained(ei.range))
       // Loop exits
       falseState :: finalStates.filter(_.signal == BREAK).map(_.copy(signal = NEXT))
+
+    case Return(e) =>
+      val sig = state.getMethodSig
+      if safetyCheck(e, state) then
+        typeCheck(e, sig.returnType, state)
+        for b <- sig.applyPost(sig.paramNames.map(Var(_)), List(e)) do
+          prove(b, state, () => PostNotProved(e.range))
+      Nil
+
+    case Break() => List(state.copy(signal = BREAK))
+    case Continue() => List(state.copy(signal = CONTINUE))
 
   private def safetyCheck(expr: Expr, state: State): Boolean = expr match
     // Boolean
@@ -151,7 +152,20 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
     case _ => expr.subtrees.forall(safetyCheck(_, state))
 
   private def typeCheck(expr: Expr, typ: Type, state: State): Boolean =
-    hasType(expr, typ).forall(prove(_, state, () => ReftNotProved(expr.range)))
+    if typ.isSort then
+      // sorting checking already done
+      return true
+
+    (expr, typ) match
+      case (Var(x), _) if state.getType(x) == typ => true
+      case (TupleExpr(es), TupleType(ts)) =>
+        assert(es.length == ts.length)
+        es.zip(ts).forall(typeCheck(_, _, state))
+      case (ListExpr(es), ListType(t)) => es.forall(typeCheck(_, t, state))
+      case (SetExpr(es), SetType(t)) => es.forall(typeCheck(_, t, state))
+      case (MapExpr(eks, evs), MapType(tk, tv)) =>
+        eks.forall(typeCheck(_, tk, state)) && evs.forall(typeCheck(_, tv, state))
+      case _ => hasType(expr, typ).forall(prove(_, state, () => ReftNotProved(expr.range)))
 
   private def assign(variable: String, expr: Expr, state: State): List[State] =
     if safetyCheck(expr, state) && typeCheck(expr, state.getType(variable), state) then

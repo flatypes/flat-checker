@@ -47,7 +47,7 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
 
   private def funDef: Parser[FunDef] =
     "def" ~>! ident ~ params ~ ("->" ~> typ).?
-      ~ (NEWLINE ^^^ new~(new~(Nil, Nil), Nil) | block(requireSpec.* ~ ensureSpec.* ~ stmt.+))
+      ~ (NEWLINE ^^^ new~(new~(Nil, Nil), Nil) | block(requireSpec.* ~! ensureSpec.* ~! stmt.*))
       ^^ { case id ~ ps ~ t ~ (pre ~ post ~ body) => FunDef(id, ps, t, pre, post, body)(id.range) }
 
   private def params: Parser[List[Param]] = "(" ~> repsep(param, ",") <~ ")"

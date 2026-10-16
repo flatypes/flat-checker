@@ -62,6 +62,9 @@ object tpd:
     def collectFirst[T](pf: PartialFunction[Expr, T]): Option[T] =
       if pf.isDefinedAt(this) then Some(pf(this)) else subtrees.collectFirst(Function.unlift(_.collectFirst(pf)))
 
+    def foreach(f: Expr => Boolean): Unit =
+      if f(this) then () else subtrees.foreach(_.foreach(f))
+
     def rebuild(subtrees: List[Expr]): Expr
 
     def rebuild(f: Expr => Expr): Expr = rebuild(subtrees.map(f))
