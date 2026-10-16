@@ -33,6 +33,8 @@ final case class TypingCtx(uri: String,
   def lookup(name: String): Option[Info] =
     stack.collectFirst { case m if m.contains(name) => m(name) }
 
+  def scope: Map[String, Info] = stack.head
+
   def declare(name: String, info: Info): TypingCtx =
     copy(stack = stack.head + (name -> info) :: stack.tail)
 

@@ -259,6 +259,17 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
         assert(side.isEmpty, "side effects not allowed in lambda body")
         (LambdaExpr(params, body), Nil)
 
+      case (untpd.ListExpr(es), ListType(t)) =>
+        val (elems, sides) = es.map(check(_, t, ctx)).unzip
+        (ListExpr(elems)(t, node.range), sides.flatten)
+      case (untpd.SetExpr(es), SetType(t)) =>
+        val (elems, sides) = es.map(check(_, t, ctx)).unzip
+        (SetExpr(elems)(t, node.range), sides.flatten)
+      case (untpd.MapExpr(items), MapType(tk, tv)) =>
+        val (keys, keySides) = items.map((k, v) => check(k, tk, ctx)).unzip
+        val (values, valueSides) = items.map((k, v) => check(v, tv, ctx)).unzip
+        (MapExpr(keys, values)(tk, tv, node.range), keySides.flatten ++ valueSides.flatten)
+
       case (_, expectedSort) =>
         val (actual, expr, side) = infer(node, ctx)
         val actualSort = actual.toSort

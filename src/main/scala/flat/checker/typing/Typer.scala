@@ -17,7 +17,10 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     val body = tree.body.flatMap:
       case node: untpd.FunDef => Some(checkMethod(node, ctx))
       case _ => None
-    Module(tree.uri, body)
+    val importedMethods = ctx.scope.collect:
+      case (m, info: MethodInfo) if body.forall(_.name != m) =>
+        MethodDef(m, info.params, info.returnType, info.requires, info.ensures, Nil)
+    Module(tree.uri, importedMethods.toList ++ body)
 
   private def checkMethod(node: untpd.FunDef, globalCtx: TypingCtx): MethodDef =
     val name = node.ident.name
