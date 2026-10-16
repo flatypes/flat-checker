@@ -26,19 +26,19 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
     case untpd.TypeAlias(id, t) =>
       val typ = coreAPIs.unfold(t, ctx)
       val info = TypeInfo(id, typ)
-      coreAPIs.define(id, info, ctx)
+      coreAPIs.declare(id, info, ctx)
 
     case untpd.ValDef(id, e) =>
       val (typ, value, side) = coreAPIs.infer(e, ctx)
       assert(side.isEmpty, "Side effects are not allowed in top-level val definitions")
       val info = ConstInfo(id, typ, value)
-      coreAPIs.define(id, info, ctx)
+      coreAPIs.declare(id, info, ctx)
 
     case untpd.LangDef(id, e) =>
       val regEx = coreAPIs.expand(e, ctx)
       regEx.name = id.name
       val info = LangInfo(id, regEx)
-      coreAPIs.define(id, info, ctx)
+      coreAPIs.declare(id, info, ctx)
 
     case untpd.FunDef(id, ps, rt, pre, post, _) =>
       val (params, localCtx) = coreAPIs.resolveParams(ps, Nil, ctx.pushed)
@@ -47,7 +47,7 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
       assert(side1.forall(_.isEmpty), "Side effects are not allowed in preconditions")
       val ensures = post.map(checkEnsureSpec(_, returnType, localCtx))
       val info = MethodInfo(id, params, returnType, requires, ensures, localCtx.stack.head)
-      coreAPIs.define(id, info, ctx)
+      coreAPIs.declare(id, info, ctx)
 
   private def checkEnsureSpec(node: untpd.Expr, returnType: Type, ctx: TypingCtx): Expr =
     val expectedType = (node, returnType) match
@@ -73,7 +73,7 @@ class Resolver(using reporter: Reporter) extends LazyLogging:
 
   private def doImport(id: untpd.Ident, from: TypingCtx, to: TypingCtx): TypingCtx =
     from.get(id.name) match
-      case Some(info) => coreAPIs.define(id, info, to)
+      case Some(info) => coreAPIs.declare(id, info, to)
       case None =>
         reporter.report(to.uri, UndefinedName(id.range, id.name))
         to

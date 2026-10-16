@@ -44,7 +44,7 @@ lang URL = URI | RelativeRef
 
 def url_unsplit(scheme: Scheme?, netloc: Authority?, path: Path, query: Query?, fragment: Fragment?) -> URL:
     requires scheme == null ==> path in RelativePath
-    var url = path
+    var url: Str = path
     if netloc != null:
         if url != '' && url[:1] != '/':
             url = '/' + url

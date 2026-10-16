@@ -9,6 +9,7 @@ import flat.checker.flan.TypeOps.erase
 import flat.checker.flan.tpd.*
 import flat.checker.flan.untpd
 import flat.checker.parsing.SyntaxError
+import flat.checker.verif.Simplifier.simplify
 import org.eclipse.lsp4j.Range as Span
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -59,20 +60,20 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     // Operations: logical that may introduce assumptions
     case untpd.BinaryExpr(e1, untpd.Ident("&&"), e2) =>
       val (left, leftSide) = check(e1, BoolType, ctx)
-      val (right, rightSide) = check(e2, BoolType, ctx.assume(left))
+      val (right, rightSide) = check(e2, BoolType, assume(left, ctx))
       (BoolType, And(left, right)(node.range), leftSide ++ rightSide)
     case untpd.BinaryExpr(e1, untpd.Ident("||"), e2) =>
       val (left, leftSide) = check(e1, BoolType, ctx)
-      val (right, rightSide) = check(e2, BoolType, ctx.assume(Not(left)))
+      val (right, rightSide) = check(e2, BoolType, assume(Not(left), ctx))
       (BoolType, Or(left, right)(node.range), leftSide ++ rightSide)
     case untpd.BinaryExpr(e1, untpd.Ident("==>"), e2) =>
       val (left, leftSide) = check(e1, BoolType, ctx)
-      val (right, rightSide) = check(e2, BoolType, ctx.assume(left))
+      val (right, rightSide) = check(e2, BoolType, assume(left, ctx))
       (BoolType, Implies(left, right)(node.range), leftSide ++ rightSide)
     case untpd.Ite(e, e1, e2) =>
       val (cond, condSide) = check(e, BoolType, ctx)
-      val (typ, thenExpr, thenSide) = infer(e1, ctx.assume(cond))
-      val (elseExpr, elseSide) = check(e2, typ, ctx.assume(Not(cond)))
+      val (typ, thenExpr, thenSide) = infer(e1, assume(cond, ctx))
+      val (elseExpr, elseSide) = check(e2, typ, assume(Not(cond), ctx))
       (typ, Ite(cond, thenExpr, elseExpr)(node.range), condSide ++ thenSide ++ elseSide)
 
     // Operations: in
@@ -338,7 +339,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.RefinedType(untpd.Param(id, Some(t)), e) =>
       val base = unfold(t, ctx)
       val info = ValInfo(id, base)
-      val localCtx = ctx.pushed.define(id.name, info)
+      val localCtx = ctx.pushed.declare(id.name, info)
       val (cond, side) = check(e, BoolType, localCtx)
       if side.nonEmpty then
         reporter.report(ctx.uri, NotConstant(e.range))
@@ -359,17 +360,28 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
               reporter.report(ctx.uri, MissingTypeAnnot(id.range))
               NoType
       val info = ValInfo(id, typ)
-      ctx = define(id, info, ctx)
+      ctx = declare(id, info, ctx)
       params += id.name -> typ
     (params.toList, ctx)
 
-  def define(id: untpd.Ident, info: Info, ctx: TypingCtx): TypingCtx =
+  def declare(id: untpd.Ident, info: Info, ctx: TypingCtx): TypingCtx =
     ctx.get(id.name) match
       case None =>
-        ctx.define(id.name, info)
+        ctx.declare(id.name, info)
       case Some(conflict) =>
         reporter.report(ctx.uri, RedefinedName(id.range, id.name))
         ctx
 
-  def define(items: List[(untpd.Ident, Info)], ctx: TypingCtx): TypingCtx =
-    items.foldLeft(ctx) { case (c, (id, info)) => define(id, info, c) }
+  def declare(items: List[(untpd.Ident, Info)], ctx: TypingCtx): TypingCtx =
+    items.foldLeft(ctx) { case (c, (id, info)) => declare(id, info, c) }
+
+  def assume(cond: Expr, ctx: TypingCtx): TypingCtx =
+    cond.simplify match
+      case Ne(Var(x), NullConst()) =>
+        ctx.updatedWith(x):
+          case ValInfo(id, OptType(t)) => ValInfo(id, t)
+          case VarInfo(id, OptType(t)) => VarInfo(id, t)
+      case And(e1, e2) =>
+        assume(e2, assume(e1, ctx))
+      case _ =>
+        ctx

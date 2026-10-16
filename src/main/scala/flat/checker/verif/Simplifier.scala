@@ -338,6 +338,7 @@ object Simplifier extends LazyLogging:
       case _ => throw NotImplementedError(s"Simplifier.simplify(${expr.getClass.getSimpleName})")
 
     def toCNF: List[Expr] = expr match
+      case BoolConst(true) => Nil
       case And(e1, e2) => e1.toCNF ++ e2.toCNF
       case _ => List(expr)
 

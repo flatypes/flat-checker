@@ -28,16 +28,19 @@ final case class VarInfo(id: untpd.Ident, typ: Type) extends Info
 final case class TypingCtx(uri: String,
                            stack: List[Map[String, Info]] = List(Map.empty),
                            conds: List[Expr] = Nil):
-  def isEmpty: Boolean = stack.isEmpty
-
   def get(name: String): Option[Info] = stack.head.get(name)
-
-  def define(name: String, info: Info): TypingCtx =
-    copy(stack = stack.head + (name -> info) :: stack.tail)
 
   def lookup(name: String): Option[Info] =
     stack.collectFirst { case m if m.contains(name) => m(name) }
 
-  def assume(cond: Expr): TypingCtx = copy(conds = cond :: conds)
+  def declare(name: String, info: Info): TypingCtx =
+    copy(stack = stack.head + (name -> info) :: stack.tail)
+
+  def updatedWith(name: String)(pf: PartialFunction[Info, Info]): TypingCtx =
+    val i = stack.indexWhere(_.contains(name))
+    require(i >= 0, s"not found: $name")
+    pf.lift(stack(i)(name)) match
+      case Some(info) => copy(stack = stack.updated(i, stack(i) + (name -> info)))
+      case None => this
 
   def pushed: TypingCtx = copy(stack = Map.empty :: stack)

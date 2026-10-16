@@ -55,11 +55,11 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       val call = MethodCall(ids.map(_.name), m, args)(e.range)
       val newCtx = ids match
         case List(id) =>
-          resolver.coreAPIs.define(id, VarInfo(id, info.returnType), ctx)
+          resolver.coreAPIs.declare(id, VarInfo(id, info.returnType), ctx)
         case _ =>
           info.returnType match
             case TupleType(ts) if ts.length == ids.length =>
-              resolver.coreAPIs.define(for (id, t) <- ids.zip(ts) yield id -> VarInfo(id, t), ctx)
+              resolver.coreAPIs.declare(for (id, t) <- ids.zip(ts) yield id -> VarInfo(id, t), ctx)
             case t =>
               reporter.report(ctx.uri, PatternTypeMismatch(p.range, s"${t.show}", s"${ids.length}-tuple"))
               ctx
@@ -69,7 +69,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       val typ = resolver.coreAPIs.unfold(t, ctx)
       val (value, side) = resolver.coreAPIs.check(e, typ, ctx)
       val info = VarInfo(id, typ)
-      (side ++ List(Declare(id.name, typ, Some(value))), resolver.coreAPIs.define(id, info, ctx))
+      (side ++ List(Declare(id.name, typ, Some(value))), resolver.coreAPIs.declare(id, info, ctx))
     case untpd.VarDecl(p, e) =>
       val (typ, value, side) = resolver.coreAPIs.infer(e, ctx)
       val (stmts, newCtx) = checkVarDecl(p, value, typ, ctx)
@@ -105,8 +105,8 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     // Control flow
     case untpd.If(e, bd1, bd2) =>
       val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
-      val thenBody = checkBlock(bd1, ctx.pushed.assume(cond), methodInfo, loopLevel)
-      val elseBody = checkBlock(bd2, ctx.pushed.assume(Not(cond)), methodInfo, loopLevel)
+      val thenBody = checkBlock(bd1, resolver.coreAPIs.assume(cond, ctx.pushed), methodInfo, loopLevel)
+      val elseBody = checkBlock(bd2, resolver.coreAPIs.assume(Not(cond), ctx.pushed), methodInfo, loopLevel)
       (side :+ If(cond, thenBody, elseBody), ctx)
 
     case s@untpd.Return(Some(e)) =>
@@ -145,7 +145,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       (Nil, localCtx)
     case untpd.PatternVar(id, None) =>
       val info = VarInfo(id, typ)
-      val newCtx = resolver.coreAPIs.define(id, info, localCtx)
+      val newCtx = resolver.coreAPIs.declare(id, info, localCtx)
       (List(Declare(id.name, typ, Some(value))), newCtx)
     case untpd.TuplePattern(ps) =>
       typ match

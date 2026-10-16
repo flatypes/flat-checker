@@ -9,7 +9,7 @@ def f(s1: AStar?, s2: AStar) -> AStar:
 type Nat = {n: Int | n >= 0}
 
 def g(n: Nat?, m: Nat) -> Nat:
-    if n != null:
+    if m > 0 && n != null:
         return n + m
     else:
-        return m
+        return 0
