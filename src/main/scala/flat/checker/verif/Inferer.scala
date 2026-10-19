@@ -96,9 +96,9 @@ object Inferer extends LazyLogging:
           case _ => Domain.Top
 
       // String
-      case StrConcat(e1, e2) =>
-        (infer(e1), infer(e2)) match
-          case (Domain.Str(r1), Domain.Str(r2)) => Domain.Str(r1 * r2)
+      case StrContains(e, StrConst(t)) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Bool(r.absContains(t.toList))
           case _ => Domain.Top
       case StrLength(e) =>
         infer(e) match
@@ -112,6 +112,10 @@ object Inferer extends LazyLogging:
         infer(e) match
           case Domain.Str(r) => Domain.Str(r.absSlice(inferIndex(ei, e), inferIndex(ej, e)))
           case _ => Domain.Top
+      case StrConcat(e1, e2) =>
+        (infer(e1), infer(e2)) match
+          case (Domain.Str(r1), Domain.Str(r2)) => Domain.Str(r1 * r2)
+          case _ => Domain.Top
       case StrStartsWith(e, StrConst(t)) =>
         infer(e) match
           case Domain.Str(r) => Domain.Bool(r.absStartsWith(t.toList))
@@ -119,16 +123,6 @@ object Inferer extends LazyLogging:
       case StrEndsWith(e, StrConst(t)) =>
         infer(e) match
           case Domain.Str(r) => Domain.Bool(r.absEndsWith(t.toList))
-          case _ => Domain.Top
-      case StrReverse(e) =>
-        infer(e) match
-          case Domain.Str(r) => Domain.Str(r.reverse)
-          case _ => Domain.Top
-
-      // String: find and replace
-      case StrContains(e, StrConst(t)) =>
-        infer(e) match
-          case Domain.Str(r) => Domain.Bool(r.absContains(t.toList))
           case _ => Domain.Top
       case StrIndexOf(e, StrConst(t), IntConst(0)) =>
         infer(e) match
@@ -138,37 +132,8 @@ object Inferer extends LazyLogging:
         infer(e) match
           case Domain.Str(r) => Domain.Str(r.absReplace(t1, t2))
           case _ => Domain.Top
-      case StrCount(e, StrConst(t)) =>
-        infer(e) match
-          case Domain.Str(r) => Domain.Nat(r.absCount(t.toList))
-          case _ => Domain.Top
 
-      // String: split and join
-      case StrSplit(e, StrConst(t), None) =>
-        infer(e) match
-          case Domain.Str(r) => Domain.StrList(r.absSplit(t.toList))
-          case _ => Domain.Top
-      case StrJoin(_, _) => ???
-
-      // String: others
-      case StrTrim(e) =>
-        infer(e) match
-          case Domain.Str(r) => Domain.Str(r.absTrim())
-          case _ => Domain.Top
-      case StrToLower(e) =>
-        infer(e) match
-          case Domain.Str(r) => Domain.Str(r.absMap(_.map(_.toLower)))
-          case _ => Domain.Top
-      case StrToUpper(e) =>
-        infer(e) match
-          case Domain.Str(r) => Domain.Str(r.absMap(_.map(_.toUpper)))
-          case _ => Domain.Top
-      case StrIs(e, a) =>
-        infer(e) match
-          case Domain.Str(r) =>
-            if r.alphabet.subsetOf(a) then Domain.Bool(BoolSet.True) else Domain.Bool(BoolSet.Full)
-          case _ => Domain.Top
-
+      // String conversions
       case StrToInt(e) =>
         infer(e) match
           case Domain.Str(r) => Domain.Num(r.absToInt())
@@ -182,10 +147,55 @@ object Inferer extends LazyLogging:
             val r1 = RegEx.Lit(CharSet.from(fmt.digits))
             Domain.Str(r1.plus)
 
+      // String extensions
+      case StrReverse(e) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Str(r.reverse)
+          case _ => Domain.Top
+      case StrTrim(e) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Str(r.absTrim())
+          case _ => Domain.Top
+      case StrCount(e, StrConst(t)) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Nat(r.absCount(t.toList))
+          case _ => Domain.Top
+      case StrSplit(e, StrConst(t), None) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.StrList(r.absSplit(t.toList))
+          case _ => Domain.Top
+      case StrJoin(_, _) => ???
+
+      // String: others
+      case StrToLower(e) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Str(r.absMap(_.map(_.toLower)))
+          case _ => Domain.Top
+      case StrToUpper(e) =>
+        infer(e) match
+          case Domain.Str(r) => Domain.Str(r.absMap(_.map(_.toUpper)))
+          case _ => Domain.Top
+
       // List
+      case ListContains(e, StrConst(t)) =>
+        infer(e) match
+          case Domain.StrList(r) => Domain.Bool(r.absContains(???))
+          case _ => Domain.Top
       case ListLength(e) =>
         infer(e) match
           case Domain.StrList(r) => Domain.Nat(r.absLength)
+          case _ => Domain.Top
+      case ListSelect(e, ei) =>
+        infer(e) match
+          case Domain.StrList(r) => Domain.Str(r.absAt(inferIndex(ei, e)))
+          case _ => Domain.Top
+      case ListSlice(e, ei, ej) =>
+        infer(e) match
+          case Domain.StrList(r) => Domain.StrList(r.absSlice(inferIndex(ei, e), inferIndex(ej, e)))
+          case _ => Domain.Top
+      case ListConcat(e1, e2) =>
+        (infer(e1), infer(e2)) match
+          case (Domain.StrList(r1), Domain.StrList(r2)) => Domain.StrList(r1 * r2)
           case _ => Domain.Top
 
       // Others
@@ -194,9 +204,13 @@ object Inferer extends LazyLogging:
   private def inferIndex(idx: Expr, seq: Expr): Index = idx match
     case IntConst(i) if 0 <= i => Left(i.intValue)
     case StrLength(`seq`) => Right(0)
+    case ListLength(`seq`) => Right(0)
     case Add(StrLength(`seq`), IntConst(i)) if 0 <= i => Right(i.intValue)
+    case Add(ListLength(`seq`), IntConst(i)) if 0 <= i => Right(i.intValue)
     case Sub(StrLength(`seq`), IntConst(i)) if 0 <= i => Right(i.intValue)
+    case Sub(ListLength(`seq`), IntConst(i)) if 0 <= i => Right(i.intValue)
     case Add(IntConst(i), Sub(StrLength(`seq`), IntConst(j))) if 0 <= i - j => Right(i.intValue - j.intValue)
+    case Add(IntConst(i), Sub(ListLength(`seq`), IntConst(j))) if 0 <= i - j => Right(i.intValue - j.intValue)
     case StrIndexOf(`seq`, StrConst(s), IntConst(0)) => First(s.toList)
     case Add(StrIndexOf(`seq`, StrConst(s), IntConst(0)), IntConst(i)) => First(s.toList, i.intValue)
     case Sub(Add(StrIndexOf(`seq`, StrConst(s), IntConst(0)), IntConst(i)), IntConst(j)) if 0 <= j =>

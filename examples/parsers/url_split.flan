@@ -1,71 +1,129 @@
-val scheme_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-."
+// https://datatracker.ietf.org/doc/html/rfc3986.html
+lang C = r"[a-zA-Z0-9\-._~!$&'()*+,;=]" // unreserved / sub-delims
+lang H = r"[0-9a-fA-F]" // HEXDIG
+lang PctEncoded = "%" H H
 
-def url_split(url: URL) -> (Scheme?, Authority?, str, Query?, Fragment?):
-    var s = url
+lang Scheme = r"[a-zA-Z][a-zA-Z0-9+\-.]*"
+
+from ipv4_address import IPv4Address
+from ipv6_address import IPv6Address
+
+lang IPvFuture = "v" H+ "." (C | ":")+
+lang IPLiteral = "[" (IPv6Address | IPvFuture) "]"
+lang RegName = (C | PctEncoded)*
+lang Host = IPLiteral | IPv4Address | RegName
+
+lang UserInfo = (C | PctEncoded | ":")*
+lang Port = r"[0-9]*"
+lang Authority = (UserInfo "@")? Host (":" Port)?
+
+lang PChar = C | PctEncoded | ":" | "@"
+lang Segment = PChar*
+lang SegmentNz = PChar+ // non-zero-length segment
+lang SegmentNzNc = (C | PctEncoded | "@")+ // non-zero-length segment without any colon
+
+lang PathAbEmpty = ("/" Segment)* // begins with "/" or is empty
+lang PathAbsolute = "/" (SegmentNz ("/" Segment)*)? // begins with "/" but not "//"
+lang PathNoScheme = SegmentNzNc ("/" Segment)* // begins with a non-colon segment
+lang PathRootless = SegmentNz ("/" Segment)* // begins with a segment
+lang PathEmpty = "" // zero characters
+// NOTE: PathAbsolute | PathEmpty <: PathAbEmpty, PathNoScheme <: PathRootless
+lang Path = PathAbEmpty | PathRootless
+lang RelativePath = PathAbEmpty | PathNoScheme
+
+lang Query = (PChar | "/" | "?")*
+lang Fragment = (PChar | "/" | "?")*
+
+lang HierPart = ("//" Authority PathAbEmpty) | PathAbsolute | PathRootless | PathEmpty
+lang URI = Scheme ":" HierPart ("?" Query)? ("#" Fragment)?
+
+lang RelativePart = ("//" Authority PathAbEmpty) | PathAbsolute | PathNoScheme | PathEmpty
+lang RelativeRef = RelativePart ("?" Query)? ("#" Fragment)?
+
+lang URL = URI | RelativeRef
+
+lang SchemeChars = r"[a-zA-Z0-9+\-.]*"
+
+def url_split(url: URL) -> (Scheme?, Authority?, Path, Query?, Fragment?):
     var scheme: Scheme? = null
     var netloc: Authority? = null
     var query: Query? = null
     var fragment: Fragment? = null
+    var rest: Str = url
 
-    var i = s.indexOf(':')
-    if i > 0 && url[0].isAsciiLetter:
-        // TODO: check scheme chars
-        (scheme, s) = (s[:i].toLower, s[i+1:])
-    if s[:2] == '//':
-        var domain: str
-        (domain, s) = _split_netloc(s)
-        if (('[' in domain && ']' !in domain) ||
-                (']' in domain && '[' !in domain)):
+    var i = url.indexOf(':')
+    if i > 0 && url[0].isAsciiLetter && url[:i] in SchemeChars:
+        scheme = url[:i].toLower
+        rest = url[i+1:]
+    if rest[:2] == "//":
+        var (auth, s) = _split_netloc(rest)
+        if (('[' in auth && ']' !in auth) ||
+            (']' in auth && '[' !in auth)):
             raise "Invalid IPv6 URL"
-        if '[' in domain && ']' in domain:
-            _check_bracketed_netloc(domain)
-        netloc = domain
-    if '#' in s:
-        [s, fragment] = url.split('#', 1)
-    if '?' in s:
-        [s, query] = url.split('?', 1)
-    return (scheme, netloc, s, query, fragment)
+        if '[' in auth && ']' in auth:
+            _check_bracketed_netloc(auth)
+        netloc = auth
+        rest = s
+    if '#' in rest:
+        i = rest.indexOf('#')
+        rest = rest[:i]
+        fragment = rest[i+1:]
+    if '?' in rest:
+        i = rest.indexOf('?')
+        rest = rest[:i]
+        query = rest[i+1:]
+    return (scheme, netloc, rest, query, fragment)
 
-lang RelativeRefNLRest = PathAbEmpty ("?" Query)? ("#" Fragment)?
-lang RelativeRefNL = "//" Authority RelativeRefNLRest
+lang NetURLRest = PathAbEmpty ("?" Query)? ("#" Fragment)?
+lang NetURL = "//" Authority NetURLRest
 
-def _split_netloc(url: RelativeRefNL) -> (Authority, RelativeRefNLRest):
+def _split_netloc(url: NetURL) -> (Authority, NetURLRest):
     var delim = |url|   // position of end of domain part of url, default is end
-    for c in '/?#': // look for delimiters; the order is NOT important
-        var wdelim = url.indexOf(c, 2)        // find first of this delim
-        if wdelim >= 0:                    // if found
-            delim = delim < wdelim ? delim : wdelim     // use earliest delim position
-    return (url[2:delim], url[delim:])   // return (domain, rest)
+    // Unfold for-loop: for c in '/?#'
+    var wdelim = url.indexOf('/', 2)
+    if wdelim >= 0:
+        delim = delim < wdelim ? delim : wdelim
+    wdelim = url.indexOf('?', 2)
+    if wdelim >= 0:
+        delim = delim < wdelim ? delim : wdelim
+    wdelim = url.indexOf('#', 2)
+    if wdelim >= 0:
+        delim = delim < wdelim ? delim : wdelim
+    return (url[2:delim], url[delim:])
 
 lang BrNetLoc = (UserInfo "@")? IPLiteral (":" Port)?
 
 def _check_bracketed_netloc(netloc: BrNetLoc):
-    var hostname_and_port = netloc.partition('@')._3 // right partition
-    var before_bracket: str
-    var open_br: str
-    var bracketed: str
-    (before_bracket, open_br, bracketed) = hostname_and_port.partition('[')
-    var hostname: Str
-    var port: Str
-    if open_br != '':
+    var i = netloc.indexOf('@')
+    var hostname_and_port = i >= 0 ? netloc[i+1:] : netloc
+    i = hostname_and_port.indexOf('[')
+    var before_bracket = i >= 0 ? hostname_and_port[:i] : hostname_and_port
+    var have_open_br = i >= 0
+    var bracketed = i >= 0 ? hostname_and_port[i+1:] : ""
+    var hostname: Str = ""
+    if have_open_br:
         // No data is allowed before a bracket.
-        if before_bracket != '':
+        if before_bracket != "":
             raise "Invalid IPv6 URL"
-        (hostname, _, port) = bracketed.partition(']')
+        i = bracketed.indexOf(']')
+        hostname = i >= 0 ? bracketed[:i] : bracketed
+        var port = i >= 0 ? bracketed[i+1:] : ""
         // No data is allowed after the bracket but before the port delimiter.
-        if port != '' && !port.startsWith(":"):
+        if port != "" && !port.startsWith(":"):
             raise "Invalid IPv6 URL"
     else:
-        (hostname, _, port) = hostname_and_port.partition(':')
+        i = hostname_and_port.indexOf(':')
+        hostname = i >= 0 ? hostname_and_port[:i] : hostname_and_port
     _check_bracketed_host(hostname)
 
 lang BrHost = IPv6Address | IPvFuture
+lang IPvFutureRE = r"v[a-fA-F0-9]+\..+"
 
 // Valid bracketed hosts are defined in
 // https://www.rfc-editor.org/rfc/rfc3986#page-49 and https://url.spec.whatwg.org/
-def _check_bracketed_host(hostname: str):
-    if hostname.startsWith('v'):
-        if false: // hostname in r"v[a-fA-F0-9]+\..+"
+def _check_bracketed_host(hostname: BrHost):
+    if hostname.startsWith("v"):
+        if hostname !in IPvFutureRE:
             raise "IPvFuture address is invalid"
     else:
         parse_ipv6_address(hostname)

@@ -1,7 +1,7 @@
 package flat.checker.typing
 
-import flat.checker.domain.CharSet
 import flat.checker.domain.StrREOps.NumStrFormat
+import flat.checker.domain.{CharSet, RegEx, given}
 import flat.checker.flan.sorting.toSort
 import flat.checker.flan.tpd.{BoolType as bool, IntType as int, StrType as str, *}
 import org.eclipse.lsp4j.Range
@@ -84,12 +84,17 @@ object builtin:
     // test
     case "startsWith" => List(Member(str -> bool, { case List(s, t) => StrStartsWith(s, t) }))
     case "endsWith" => List(Member(str -> bool, { case List(s, t) => StrEndsWith(s, t) }))
-    case "isAscii" => List(Member(() -> bool, { case List(s) => StrIs(s, CharSet.ascii) }))
-    case "isAsciiLower" => List(Member(() -> bool, { case List(s) => StrIs(s, CharSet.asciiLower) }))
-    case "isAsciiUpper" => List(Member(() -> bool, { case List(s) => StrIs(s, CharSet.asciiUpper) }))
-    case "isAsciiLetter" => List(Member(() -> bool, { case List(s) => StrIs(s, CharSet.asciiLetter) }))
-    case "isAsciiDecimal" => List(Member(() -> bool, { case List(s) => StrIs(s, CharSet.asciiDecimal) }))
-    case "isAsciiSpace" => List(Member(() -> bool, { case List(s) => StrIs(s, CharSet.asciiSpace) }))
+    case "isAscii" => List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.ascii).star) }))
+    case "isAsciiLower" =>
+      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiLower).star) }))
+    case "isAsciiUpper" =>
+      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiUpper).star) }))
+    case "isAsciiLetter" =>
+      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiLetter).star) }))
+    case "isAsciiDecimal" =>
+      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiDecimal).star) }))
+    case "isAsciiSpace" =>
+      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiSpace).star) }))
     // search
     case "contains" => List(Member(str -> bool, { case List(s, t) => StrContains(s, t) }))
     case "indexOf" => List(
@@ -106,6 +111,9 @@ object builtin:
     case "toUpper" => List(Member(() -> str, { case List(s) => StrToUpper(s) }))
     case "toInt" => List(Member(() -> int, { case List(s) => StrToInt(s) }))
     case "toCode" => List(Member(() -> int, { case List(s) => CharToCode(s) }))
+    // String higher-order
+    case "forall" => List(Member((str -> bool) -> bool, { case List(s, f) => StrForall(s, f) }))
+    case "map" => List(Member((str -> str) -> str, { case List(s, f) => StrMap(s, f) }))
     case _ => Nil
 
   private def accessListMember(t: Type, name: String): List[Member] = name match

@@ -97,8 +97,9 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
     case StrToInt(e) => tm.mkTerm(STRING_TO_INT, encodeExpr(e, ctx))
     case IntFormat(e, _) => tm.mkTerm(STRING_FROM_INT, encodeExpr(e, ctx))
 
-    // String: other
-    case StrIs(_, _) => tm.mkConst(bool)
+    // String: higher-order
+    case StrForall(_, _) => tm.mkConst(bool)
+    case StrMap(_, _) => tm.mkConst(str)
     case StrIn(_, _) => tm.mkConst(bool)
 
     // List

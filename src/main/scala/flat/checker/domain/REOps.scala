@@ -92,7 +92,7 @@ object REOps extends LazyLogging:
       else if r.filterNotContain(t).isEmpty then BoolSet.True
       else BoolSet.Full
 
-    private def findFirst(t: List[set.Symbol]): List[(RegEx[A], RegEx[A])] =
+    def findFirst(t: List[set.Symbol]): List[(RegEx[A], RegEx[A])] =
       val forbiddenPrefixes =
         for n <- 1.until(t.length).toList; if t.endsWith(t.take(n)) yield t.dropRight(n)
       for
@@ -100,6 +100,13 @@ object REOps extends LazyLogging:
         r1f1 = forbiddenPrefixes.foldLeft(r1)(_.filterNotEndWith(_)); if r1f1.nonEmpty
         r1f = r1f1.filterNotContain(t); if !r1f.isEmpty
       yield (r1f, r2f.deriv(t.tail))
+
+    def findFirst(t: List[set.Symbol], start: Int): List[(RegEx[A], RegEx[A])] =
+      require(start >= 0)
+      if start == 0 then r.findFirst(t)
+      else
+        val rp = r.absTake(start)
+        for (r1, r2) <- r.absDrop(start).findFirst(t) yield (rp * r1, r2)
 
     def dropIndexOf(t: List[set.Symbol]): RegEx[A] =
       word(t) * sum(r.findFirst(t).map(_._2))
@@ -230,12 +237,30 @@ object REOps extends LazyLogging:
         case Comp(r1, r2) if !r1.alphabet.contains(t.head) => r1 * r2.filterNotContain2(t)
         case _ => NotContainSolver(t).solve(r)
 
+    def filterIndexOfNeg(t: List[set.Symbol], start: Int): RegEx[A] =
+      require(start >= 0)
+      if start == 0 then filterNotContain(t)
+      else r.absTake(start) * r.absDrop(start).filterNotContain(t)
+
+    def filterIndexOfEq(t: List[set.Symbol], start: Int, n: Int): RegEx[A] =
+      require(n >= 0)
+      sum(for (r1, r2) <- findFirst(t, start); rf = r1.filterLengthEq(n); if rf.nonEmpty yield rf * word(t) * r2)
+
+    def filterIndexOfLe(t: List[set.Symbol], start: Int, n: Int): RegEx[A] =
+      require(n >= 0)
+      sum(for (r1, r2) <- findFirst(t, start); rf = r1.filterLengthLe(n); if rf.nonEmpty yield rf * word(t) * r2)
+        + filterIndexOfNeg(t, start)
+
+    def filterIndexOfGe(t: List[set.Symbol], start: Int, n: Int): RegEx[A] =
+      require(n >= 0)
+      sum(for (r1, r2) <- findFirst(t, start); rf = r1.filterLengthGe(n); if rf.nonEmpty yield rf * word(t) * r2)
+
     def filterIndexOfLt(x1: set.Symbol, x2: set.Symbol): RegEx[A] =
       // Assume both character exist
       sum(for (r1, r2) <- r.findAny(x1) yield
         r1.filterNotContain1(x2) * symbol(x1) * r2.filterContains(List(x2)))
 
-    private def filterElemAt(i: Int, f: A => A): RegEx[A] =
+    def filterElemAt(i: Int, f: A => A): RegEx[A] =
       if i == 0 then
         sum(for (a, r1) <- r.absSplitAt1; b = f(a); if b.nonEmpty yield Lit(b) * r1)
       else
@@ -317,8 +342,10 @@ object REOps extends LazyLogging:
 
     def filterLengthGe(n: Int): RegEx[A] =
       require(n >= 0)
-      val m = r.groupByLength(n)
-      sum((for (k, rk) <- m; if k >= n yield rk).toList)
+      if n == 0 then r
+      else
+        val m = r.groupByLength(n)
+        sum((for (k, rk) <- m; if k >= n yield rk).toList)
 
   private class CountSolver[A](using set: SymbolSet[A])(t: List[set.Symbol]) extends LinearSolver[A, Set[Int]]:
     require(t.nonEmpty)

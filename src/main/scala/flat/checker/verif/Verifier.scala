@@ -88,22 +88,24 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
     case While(e, inv, bd) =>
       val havocState = state.havoc(collectModifiedVars(bd))
-      val safeInv = inv.filter(safetyCheck(_, havocState))
-      // Check invariants on entry
-      for ei <- safeInv do
-        prove(ei, state, () => InvNotProvedOnEntry(ei.range))
-      // Execute loop body once
-      val invState = assume(safeInv, havocState)
-      val (trueState, falseState) =
-        if safetyCheck(e, state) then (assume(e, invState), assume(Not(e), invState))
-        else (invState, invState)
-      val finalStates = execBody(bd, List(trueState))
-      // Check invariants maintained
-      for st <- finalStates; if st.signal == NEXT || st.signal == CONTINUE do
+      if safetyCheck(mkAnd(inv), havocState) then
+        // Check invariants on entry
         for ei <- inv do
-          prove(ei, st, () => InvNotMaintained(ei.range))
-      // Loop exits
-      falseState :: finalStates.filter(_.signal == BREAK).map(_.copy(signal = NEXT))
+          prove(ei, state, () => InvNotProvedOnEntry(ei.range))
+        // Execute loop body once
+        val invState = assume(inv, havocState)
+        val (trueState, falseState) =
+          if safetyCheck(e, invState) then (assume(e, invState), assume(Not(e), invState))
+          else (invState, invState)
+        val finalStates = execBody(bd, List(trueState))
+        // Check invariants maintained
+        for st <- finalStates; if st.signal == NEXT || st.signal == CONTINUE do
+          for ei <- inv do
+            prove(ei, st, () => InvNotMaintained(ei.range))
+        // Loop exits
+        falseState :: finalStates.filter(_.signal == BREAK).map(_.copy(signal = NEXT))
+      else
+        Nil
 
     case Return(e) =>
       val sig = state.getMethodSig
@@ -157,6 +159,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       return true
 
     (expr, typ) match
+      case (NullConst(), OptType(_)) => true
       case (Var(x), _) if state.getType(x) == typ => true
       case (TupleExpr(es), TupleType(ts)) =>
         assert(es.length == ts.length)

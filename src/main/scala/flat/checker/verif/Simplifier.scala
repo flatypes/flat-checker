@@ -28,9 +28,11 @@ object Simplifier extends LazyLogging:
       case Eq(e1, e2) =>
         (e1.simplify, e2.simplify) match
           case (e1, e2) if e1 == e2 => BoolConst(true)
+          case (e1, e2) if e1.isConst && e2.isConst => BoolConst(e1 == e2)
           case (e1, e2) => Eq(e1, e2)
       case Ne(e1, e2) =>
         (e1.simplify, e2.simplify) match
+          case (e1, e2) if e1.isConst && e2.isConst => BoolConst(e1 != e2)
           case (e1, e2) => Ne(e1, e2)
       case Ite(e, e1, e2) =>
         (e.simplify, e1.simplify, e2.simplify) match
@@ -128,7 +130,10 @@ object Simplifier extends LazyLogging:
           case (e, ei) => CharAt(e, ei)
       case Substr(e, ei, ej) =>
         (e.simplify, ei.simplify, ej.simplify) match
-          case (StrConst(s), IntConst(i), IntConst(j)) => StrConst(s.substring(i.intValue, j.intValue))
+          case (StrConst(""), _, _) => StrConst("")
+          case (StrConst(s), IntConst(i), IntConst(j)) if 0 <= i && i <= j && j < s.length =>
+            StrConst(s.substring(i.toInt, j.toInt))
+          case (e, ei, ej) if ei == ej => StrConst("")
           case (e, ei, ej) => Substr(e, ei, ej)
 
       // String: construction
@@ -158,10 +163,6 @@ object Simplifier extends LazyLogging:
         (e.simplify, et.simplify) match
           case (StrConst(s), StrConst(t)) => BoolConst(s.endsWith(t))
           case (e, et) => StrEndsWith(e, et)
-      case StrIs(e, a) =>
-        e.simplify match
-          case StrConst(s) => ???
-          case e => StrIs(e, a)
       case StrIn(e, r) =>
         e.simplify match
           case StrConst(s) => BoolConst(r.contains(s.toList))
@@ -224,6 +225,12 @@ object Simplifier extends LazyLogging:
         e.simplify match
           case IntConst(i) => CharConst(i.toChar)
           case e => CodeToChar(e)
+
+      // String higher-order
+      case StrForall(e, ep) =>
+        e.simplify match
+          case StrConst("") => BoolConst(true)
+          case e => StrForall(e, ep)
 
       // List
       case e@ListExpr(es) => ListExpr(es.map(_.simplify))(e.elemSort, e.range)

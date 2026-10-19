@@ -1,7 +1,7 @@
 package flat.checker.flan
 
+import flat.checker.domain.StrRE
 import flat.checker.domain.StrREOps.NumStrFormat
-import flat.checker.domain.{CharSet, StrRE}
 import flat.checker.verif.ProofError
 import org.eclipse.lsp4j.{Position, Range}
 
@@ -282,11 +282,6 @@ object tpd:
       case List(e, et) => StrEndsWith(e, et)(range)
       case _ => throw IllegalArgumentException("SeqEndsWith must have exactly 2 subtrees")
 
-  final case class StrIs(str: Expr, a: CharSet)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrIs = subtrees match
-      case List(e) => StrIs(e, a)(range)
-      case _ => throw IllegalArgumentException("StrIs must have exactly 1 subtree")
-
   final case class StrIn(str: Expr, regEx: StrRE)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrIn = subtrees match
       case List(e) => StrIn(e, regEx)(range)
@@ -358,9 +353,25 @@ object tpd:
       case List(e) => CodeToChar(e)(range)
       case _ => throw IllegalArgumentException("CharFromInt must have exactly 1 subtree")
 
+  // String: higher-order
+  final case class StrForall(str: Expr, pred: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): StrForall = subtrees match
+      case List(e, ep) => StrForall(e, ep)(range)
+      case _ => throw IllegalArgumentException("StrForall must have exactly 2 subtrees")
+
+  final case class StrMap(str: Expr, func: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): StrMap = subtrees match
+      case List(e, ef) => StrMap(e, ef)(range)
+      case _ => throw IllegalArgumentException("StrMap must have exactly 2 subtrees")
+
   // List operations
   final case class ListExpr(elems: List[Expr])(val elemSort: Type, val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): ListExpr = ListExpr(subtrees)(elemSort, range)
+
+  final case class ListConcat(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): ListConcat = subtrees match
+      case List(e1, e2) => ListConcat(e1, e2)(range)
+      case _ => throw IllegalArgumentException("ListConcat must have exactly 2 subtrees")
 
   final case class ListLength(lst: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): ListLength = subtrees match
@@ -377,11 +388,6 @@ object tpd:
       case List(e, ei, ej) => ListSlice(e, ei, ej)(range)
       case _ => throw IllegalArgumentException("ListSlice must have 3 subtrees")
 
-  final case class ListConcat(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): ListConcat = subtrees match
-      case List(e1, e2) => ListConcat(e1, e2)(range)
-      case _ => throw IllegalArgumentException("ListConcat must have exactly 2 subtrees")
-
   final case class ListUpdate(seq: Expr, idx: Expr, elem: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): ListUpdate = subtrees match
       case List(e, ei, ex) => ListUpdate(e, ei, ex)(range)
@@ -392,6 +398,7 @@ object tpd:
       case List(e, ex) => ListContains(e, ex)(range)
       case _ => throw IllegalArgumentException("ListContains must have exactly 2 subtrees")
 
+  // List higher-order
   final case class ListForall(lst: Expr, pred: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): ListForall = subtrees match
       case List(e, ep) => ListForall(e, ep)(range)

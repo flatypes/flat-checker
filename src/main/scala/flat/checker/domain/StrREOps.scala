@@ -118,6 +118,20 @@ object StrREOps extends LazyLogging:
       case Comp(r1, r2) => for s1 <- r1.getLang; s2 <- r2.getLang yield s1 + s2
       case _ => throw UnsupportedOperationException("Cannot convert infinite StrRE to finite set")
 
+    def filterForallCharIn(a: CharSet): StrRE = r match
+      case Zero() | One() => r
+      case Lit(b) => RegEx.symbolSet(b & a)
+      case Plus(r1, r2) => r1.filterForallCharIn(a) + r2.filterForallCharIn(a)
+      case Comp(r1, r2) => r1.filterForallCharIn(a) * r2.filterForallCharIn(a)
+      case Star(r1) => r1.filterForallCharIn(a).star
+
+    def filterExistsCharIn(a: CharSet): StrRE = r match
+      case Zero() | One() => Zero()
+      case Lit(b) => if (b & a).isEmpty then Zero() else r
+      case Plus(r1, r2) => r1.filterExistsCharIn(a) + r2.filterExistsCharIn(a)
+      case Comp(r1, r2) => r1.filterExistsCharIn(a) * r2 + r1 * r2.filterExistsCharIn(a)
+      case Star(r1) => r * r1.filterExistsCharIn(a) * r
+
   final case class NumStrFormat(zeroPadded: Boolean = false,
                                 width: Int = 0,
                                 conv: Char = 'd'):
