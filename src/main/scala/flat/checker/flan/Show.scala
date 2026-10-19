@@ -80,6 +80,7 @@ object Show extends LazyLogging:
       case Mul(e1, e2) => showInfix("*", LEVEL_MUL, ASSOC_LEFT, e1, e2)
       case Div(e1, e2) => showInfix("/", LEVEL_MUL, ASSOC_LEFT, e1, e2)
       case Mod(e1, e2) => showInfix("%", LEVEL_MUL, ASSOC_LEFT, e1, e2)
+      case Pow(e1, e2) => showInfix("**", LEVEL_MUL, ASSOC_LEFT, e1, e2)
       case Le(e1, e2) => showInfix("≤", LEVEL_REL, ASSOC_NONE, e1, e2)
       case Lt(e1, e2) => showInfix("<", LEVEL_REL, ASSOC_NONE, e1, e2)
 

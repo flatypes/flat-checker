@@ -164,6 +164,11 @@ object tpd:
       case List(e1, e2) => Mod(e1, e2)(range)
       case _ => throw IllegalArgumentException("Mod must have exactly 2 subtrees")
 
+  final case class Pow(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): Pow = subtrees match
+      case List(e1, e2) => Pow(e1, e2)(range)
+      case _ => throw IllegalArgumentException("Pow must have exactly 2 subtrees")
+
   final case class Le(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): Le = subtrees match
       case List(e1, e2) => Le(e1, e2)(range)

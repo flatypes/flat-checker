@@ -145,7 +145,7 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
 
   private def additive: Parser[Expr] = infixL(binaryOp("+" | "-"), multiplicative)
 
-  private def multiplicative: Parser[Expr] = infixL(binaryOp("*" | "/" | "%"), unary)
+  private def multiplicative: Parser[Expr] = infixL(binaryOp("*" | "/" | "%" | "**"), unary)
 
   private def unaryOp(op: Parser[Token]): Parser[Expr => Expr] =
     op ^^ { tk => e => Access(e, Ident("prefix_" + tk.value)(tk.span))(Span(tk.span.getStart, e.range.getEnd)) }
@@ -324,11 +324,14 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     (ident <~ "=") ~! expr <~ NEWLINE ^^ { case left ~ right => Assign(left, right) }
 
   private def augAssign: Parser[Assign] =
-    ident ~ ("+=" | "-=" | "*=" | "/=" | "%=") ~! expr <~ NEWLINE ^^ {
+    ident ~ augAssignOp ~! expr <~ NEWLINE ^^ {
       case id ~ tk ~ e =>
         val op = Ident(tk.value.dropRight(1))(tk.span)
         Assign(id, BinaryExpr(TermName(id.name)(id.range), op, e))
     }
+
+  private def augAssignOp: Parser[Token] =
+    "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>="
 
   private def exprStmt: Parser[ExprStmt] = expr <~ NEWLINE ^^ (ExprStmt(_))
 

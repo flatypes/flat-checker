@@ -107,6 +107,14 @@ object Simplifier extends LazyLogging:
           case (IntConst(i1), IntConst(i2)) if i2 != 0 => IntConst(i1 % i2)
           case (e, IntConst(1)) => IntConst(0)
           case (e1, e2) => Mod(e1, e2)
+      case Pow(e1, e2) =>
+        (e1.simplify, e2.simplify) match
+          case (IntConst(i1), IntConst(i2)) => IntConst(Math.pow(i1.toDouble, i2.toDouble).toInt)
+          case (e, IntConst(0)) => IntConst(1)
+          case (e, IntConst(1)) => e
+          case (IntConst(0), _) => IntConst(0)
+          case (IntConst(1), _) => IntConst(1)
+          case (e1, e2) => Pow(e1, e2)
 
       // Int relational
       case Le(e1, e2) =>
@@ -118,6 +126,32 @@ object Simplifier extends LazyLogging:
           case (IntConst(i1), IntConst(i2)) => BoolConst(i1 < i2)
           case (StrIndexOf(e1, _, _), StrLength(e2)) if e1 == e2 => BoolConst(true)  // s.indexOf(t) < |s|
           case (e1, e2) => Lt(e1, e2)
+
+      // Integer bitwise
+      case BitAnd(e1, e2) =>
+        (e1.simplify, e2.simplify) match
+          case (IntConst(i1), IntConst(i2)) => IntConst(i1 & i2)
+          case (left, right) => BitAnd(left, right)
+      case BitOr(e1, e2) =>
+        (e1.simplify, e2.simplify) match
+          case (IntConst(i1), IntConst(i2)) => IntConst(i1 | i2)
+          case (left, right) => BitOr(left, right)
+      case BitXor(e1, e2) =>
+        (e1.simplify, e2.simplify) match
+          case (IntConst(i1), IntConst(i2)) => IntConst(i1 ^ i2)
+          case (left, right) => BitXor(left, right)
+      case BitNot(e) =>
+        e.simplify match
+          case IntConst(i) => IntConst(~i)
+          case value => BitNot(value)
+      case BitShL(e1, e2) =>
+        (e1.simplify, e2.simplify) match
+          case (IntConst(i1), IntConst(i2)) => IntConst(i1 << i2.toInt)
+          case (left, right) => BitShL(left, right)
+      case BitShR(e1, e2) =>
+        (e1.simplify, e2.simplify) match
+          case (IntConst(i1), IntConst(i2)) => IntConst(i1 >> i2.toInt)
+          case (left, right) => BitShR(left, right)
 
       // String: access
       case StrLength(e) =>

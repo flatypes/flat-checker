@@ -50,10 +50,20 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
     case Mul(e1, e2) => tm.mkTerm(MULT, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
     case Div(e1, e2) => tm.mkTerm(INTS_DIVISION, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
     case Mod(e1, e2) => tm.mkTerm(INTS_MODULUS, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
+    case Pow(IntConst(2), e) => tm.mkTerm(POW2, encodeExpr(e, ctx))
+    case Pow(e1, e2) => tm.mkTerm(POW, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
 
     // Integer relational
     case Le(e1, e2) => tm.mkTerm(LEQ, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
     case Lt(e1, e2) => tm.mkTerm(LT, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
+
+    // Integer bitwise
+    case BitAnd(e1, e2) => tm.mkTerm(BITVECTOR_AND, encodeExpr(e1, ctx).toBV, encodeExpr(e2, ctx).toBV).toNat
+    case BitOr(e1, e2) => tm.mkTerm(BITVECTOR_OR, encodeExpr(e1, ctx).toBV, encodeExpr(e2, ctx).toBV).toNat
+    case BitXor(e1, e2) => tm.mkTerm(BITVECTOR_XOR, encodeExpr(e1, ctx).toBV, encodeExpr(e2, ctx).toBV).toNat
+    case BitNot(e) => tm.mkTerm(BITVECTOR_NOT, encodeExpr(e, ctx).toBV).toNat
+    case BitShL(e1, e2) => tm.mkTerm(BITVECTOR_SHL, encodeExpr(e1, ctx).toBV, encodeExpr(e2, ctx).toBV).toNat
+    case BitShR(e1, e2) => tm.mkTerm(BITVECTOR_LSHR, encodeExpr(e1, ctx).toBV, encodeExpr(e2, ctx).toBV).toNat
 
     // Boolean
     case And(e1, e2) => tm.mkTerm(AND, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
@@ -261,3 +271,8 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
 
   private inline def mkLambda(variable: cvc5.Term, body: cvc5.Term): cvc5.Term =
     tm.mkTerm(LAMBDA, tm.mkTerm(VARIABLE_LIST, variable), body)
+
+  extension (t: cvc5.Term)
+    def toBV: cvc5.Term = tm.mkTerm(tm.mkOp(INT_TO_BITVECTOR, 32), t)
+
+    def toNat: cvc5.Term = tm.mkTerm(BITVECTOR_TO_NAT, t)

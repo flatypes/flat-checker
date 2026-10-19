@@ -38,21 +38,21 @@ object builtin:
     private def ->(returnType: Type): FunType = FunType(List(twoParams._1, twoParams._2), returnType)
 
   private def accessIntMember(name: String): List[Member] = name match
-    // unary operators
-    case "prefix_-" => List(Member(() -> int, { case List(n) => Negate(n) }))
-    case "prefix_~" => List(Member(() -> int, { case List(n) => BitNot(n) }))
     // arithmetic operators
+    case "prefix_-" => List(Member(() -> int, { case List(n) => Negate(n) }))
     case "+" => List(Member(int -> int, { case List(n1, n2) => Add(n1, n2) }))
     case "-" => List(Member(int -> int, { case List(n1, n2) => Sub(n1, n2) }))
     case "*" => List(Member(int -> int, { case List(n1, n2) => Mul(n1, n2) }))
     case "/" => List(Member(int -> int, { case List(n1, n2) => Div(n1, n2) }))
     case "%" => List(Member(int -> int, { case List(n1, n2) => Mod(n1, n2) }))
+    case "**" => List(Member(int -> int, { case List(n1, n2) => Pow(n1, n2) }))
     // relational operators
     case "<=" => List(Member(int -> bool, { case List(n1, n2) => Le(n1, n2) }))
     case "<" => List(Member(int -> bool, { case List(n1, n2) => Lt(n1, n2) }))
     case ">=" => List(Member(int -> bool, { case List(n1, n2) => Le(n2, n1) }))
     case ">" => List(Member(int -> bool, { case List(n1, n2) => Lt(n2, n1) }))
     // bitwise operators
+    case "prefix_~" => List(Member(() -> int, { case List(n) => BitNot(n) }))
     case "&" => List(Member(int -> int, { case List(n1, n2) => BitAnd(n1, n2) }))
     case "|" => List(Member(int -> int, { case List(n1, n2) => BitOr(n1, n2) }))
     case "^" => List(Member(int -> int, { case List(n1, n2) => BitXor(n1, n2) }))
@@ -60,7 +60,7 @@ object builtin:
     case ">>" => List(Member(int -> int, { case List(n1, n2) => BitShR(n1, n2) }))
     // conversion
     case "toChar" => List(Member(() -> str, { case List(n) => CodeToChar(n) }))
-    case "toString" => List(Member(() -> str, { case List(n) => IntFormat(n) }))
+    case "toStr" => List(Member(() -> str, { case List(n) => IntFormat(n) }))
     case _ => Nil
 
   private def accessBoolMember(name: String): List[Member] = name match
@@ -91,7 +91,7 @@ object builtin:
       List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiUpper).star) }))
     case "isAsciiLetter" =>
       List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiLetter).star) }))
-    case "isAsciiDecimal" =>
+    case "isAsciiDigit" =>
       List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiDecimal).star) }))
     case "isAsciiSpace" =>
       List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiSpace).star) }))
