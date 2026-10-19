@@ -12,6 +12,26 @@ import flat.checker.flan.tpd.*
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
+object NarrowerCache:
+  private val cache = mutable.Map.empty[(StrRE, Expr), StrRE]
+  private var hit = 0
+  private var miss = 0
+
+  def getOrElseUpdate(input: StrRE, premise: Expr, result: => StrRE): StrRE =
+    cache.get((input, premise)) match
+      case Some(r) =>
+        hit += 1
+        r
+      case None =>
+        miss += 1
+        val r1 = result
+        cache((input, premise)) = r1
+        r1
+
+  def hitRate: Double =
+    val total = hit + miss
+    if total == 0 then 0.0 else hit.toDouble / total
+
 class Narrower(goal: Goal) extends LazyLogging:
   private val ctx = mutable.Map.empty[Expr, StrRE]
   private val used = ListBuffer.empty[Expr]
@@ -22,25 +42,29 @@ class Narrower(goal: Goal) extends LazyLogging:
         case Substr(e, IntConst(0), StrIndexOf(e1, StrConst(t), IntConst(0)))
           if e1 == e && isTarget(e) =>
           used += premise
-          val r = filterPrefixUntilIndexOf(t, get(e, premise), f)
+          val r0 = get(e)
+          val r = NarrowerCache.getOrElseUpdate(r0, premise, filterPrefixUntilIndexOf(t, r0, f))
           logger.debug("Narrow {} to {} by {}", e.show, r.pp, premise.show)
           ctx(e) = r
         case Substr(e, StrIndexOf(e1, StrConst(t), IntConst(0)), StrLength(e2))
           if e1 == e && e2 == e && isTarget(e) =>
           used += premise
-          val r = filterSuffixFromIndexOf(t, 0, get(e, premise), f)
+          val r0 = get(e)
+          val r = NarrowerCache.getOrElseUpdate(r0, premise, filterSuffixFromIndexOf(t, 0, r0, f))
           logger.debug("Narrow {} to {} by {}", e.show, r.pp, premise.show)
           ctx(e) = r
         case Substr(e, Add(StrIndexOf(e1, StrConst(t), IntConst(0)), IntConst(k)), StrLength(e2))
           if e1 == e && e2 == e && 0 <= k && k <= t.length && isTarget(e) =>
           used += premise
-          val r = filterSuffixFromIndexOf(t, k.toInt, get(e, premise), f)
+          val r0 = get(e)
+          val r = NarrowerCache.getOrElseUpdate(r0, premise, filterSuffixFromIndexOf(t, k.toInt, r0, f))
           logger.debug("Narrow {} to {} by {}", e.show, r.pp, premise.show)
           ctx(e) = r
         case _ =>
           if isTarget(e) then
             used += premise
-            val r = f(get(e, premise))
+            val r0 = get(e)
+            val r = NarrowerCache.getOrElseUpdate(r0, premise, f(r0))
             logger.debug("Narrow {} to {} by {}", e.show, r.pp, premise.show)
             ctx(e) = r
     currentGoal()
@@ -50,7 +74,7 @@ class Narrower(goal: Goal) extends LazyLogging:
       || goal.premises.exists { case StrIn(`expr`, _) => true; case _ => false }
       || goal.conclusion.collectFirst { case `expr` => true }.isDefined
 
-  private def get(expr: Expr, premise: Expr): StrRE =
+  private def get(expr: Expr): StrRE =
     if ctx.contains(expr) then
       return ctx(expr)
 
@@ -137,11 +161,11 @@ class Narrower(goal: Goal) extends LazyLogging:
     case Not(StrIn(e, RegEx.Star(RegEx.Lit(a)))) => (e, _.filterExistsCharIn(~a))
   }
 
-  def filterPrefixUntilIndexOf(t: String, r: StrRE, f: StrRE => StrRE): StrRE =
+  private def filterPrefixUntilIndexOf(t: String, r: StrRE, f: StrRE => StrRE): StrRE =
     val rt = RegEx.word(t.toList)
     sum(for (r1, r2) <- r.findFirst(t.toList); rf = f(r1); if rf.nonEmpty yield rf * rt * r2)
 
-  def filterSuffixFromIndexOf(t: String, k: Int, r: StrRE, f: StrRE => StrRE): StrRE =
+  private def filterSuffixFromIndexOf(t: String, k: Int, r: StrRE, f: StrRE => StrRE): StrRE =
     require(0 <= k && k <= t.length)
     val rt1 = RegEx.word(t.toList.take(k))
     val rt2 = RegEx.word(t.toList.drop(k))

@@ -131,9 +131,13 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       safetyCheck(e, state) && safetyCheck(ei, state)
         && prove(And(Le(IntConst(0), ei), Lt(ei, StrLength(e))), state, () => IndexOutOfBounds(ei.range))
     case Substr(e, ei, ej) =>
-      safetyCheck(e, state) && safetyCheck(ei, state) && safetyCheck(ej, state)
-        && prove(Le(IntConst(0), ei), state, () => IndexOutOfBounds(ei.range))
-        && prove(Le(IntConst(0), ej), state, () => IndexOutOfBounds(ej.range))
+      val startCheck = ei match
+        case IntConst(0) => true
+        case _ => safetyCheck(ei, state) && prove(Le(IntConst(0), ei), state, () => IndexOutOfBounds(ei.range))
+      val endCheck = ej match
+        case StrLength(`e`) => true
+        case _ => safetyCheck(ej, state) && prove(Le(IntConst(0), ej), state, () => IndexOutOfBounds(ej.range))
+      safetyCheck(e, state) && startCheck && endCheck
 
     // List
     case ListSelect(e, ei) =>
