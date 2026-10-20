@@ -40,7 +40,7 @@ object Show extends LazyLogging:
   private def getLevel(expr: Expr): Int = expr match
     case _: Negate | _: Not | _: BitNot => LEVEL_PREFIX
     case _: Mul | _: Div | _: Mod => LEVEL_MUL
-    case _: Add | _: Sub | _: StrConcat | _: SetDiff => LEVEL_ADD
+    case _: Add | _: Sub | _: StrConcat | _: ListConcat | _: SetDiff => LEVEL_ADD
     case _: Eq | _: Ne | _: Le | _: Lt | _: Subset => LEVEL_REL
     case _: BitXor | _: BitShL | _: BitShR => LEVEL_BIT
     case _: BitAnd | _: SetInter => LEVEL_BIT_AND
@@ -115,17 +115,16 @@ object Show extends LazyLogging:
 
       // String conversions
       case StrToInt(e) => showMemberApply(e, "toInt")
-      case IntFormat(e, fmt) => showMemberApply(e, s"format($fmt)")
       case CharToCode(e) => showMemberApply(e, "toCode")
       case CodeToChar(e) => showMemberApply(e, "toChar")
 
       // String extensions
       case StrReverse(e) => showMemberApply(e, "reverse")
       case StrTrim(e) => showMemberApply(e, "trim")
-      case StrCount(e, ep) => showMemberApply(e, "count", ep)
       case StrSplit(e, et, None) => showMemberApply(e, "split", et)
-      case StrSplit(e, et, Some(em)) => showMemberApply(e, "split", et, em)
       case StrJoin(e, es) => showMemberApply(e, "join", es)
+      case StrCount(e, ep) => showMemberApply(e, "count", ep)
+      case IntFormat(e, fmt) => s"format($fmt, ${showExpr(e)})"
 
       // String higher-order
       case StrForall(e, ep) => showMemberApply(e, "forall", ep)
@@ -142,6 +141,8 @@ object Show extends LazyLogging:
       case ListSlice(e, ei, ListLength(e1)) if e1 == e => s"${showTighter(e)}[${showExpr(ei)}:]"
       case ListSlice(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
       case ListConcat(e1, e2) => showInfix("+", LEVEL_ADD, ASSOC_LEFT, e1, e2)
+      case ListIndexOf(e, ev, IntConst(0)) => showMemberApply(e, "indexOf", ev)
+      case ListIndexOf(e, ev, ei) => showMemberApply(e, "indexOf", ev, ei)
 
       // List: higher-order
       case ListForall(e, ep) => showMemberApply(e, "forall", ep)

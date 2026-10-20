@@ -34,4 +34,4 @@ extension (r: CountingRE)
     case Plus(r1, r2) => r1.min min r2.min
     case Comp(r1, r2) => r1.min + r2.min
 
-final case class IndexSet(neg: Set[Int], pos: CountingRE)
+final case class IndexSet(neg: Set[Int], pos: CountingRE, right: CountingRE)

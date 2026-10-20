@@ -42,13 +42,14 @@ object REOps extends LazyLogging:
 
     def absAt(index: Index): A = index match
       case Left(i) => r.absAt(i)
-      case Right(i) => r.absAtRight(i)
-      case First(w, k) =>
+      case Right(i) =>
+        require(0 < i)
+        r.absAtRight(i - 1)
+      case First(w, i, k) =>
         if 0 <= k && k < w.length then set.singleton(w(k).asInstanceOf[set.Symbol])
-        else r.dropIndexOf(w.asInstanceOf[List[set.Symbol]]).absAt(k)
-      case UnknownIndex =>
-        logger.warn(s"Cannot get character at unknown index for ${r.pp}")
-        r.alphabet
+        else r.dropIndexOf(w.asInstanceOf[List[set.Symbol]], i).absAt(k)
+      case Index.Range(from, until) =>
+        r.absSlice(from, until).alphabet
 
     /** Abstract operation for `s.take(n)`. */
     def absTake(n: Int): RegEx[A] =
@@ -71,6 +72,16 @@ object REOps extends LazyLogging:
       case Star(r1) =>
         for (a, r1r) <- r1.absSplitAt1 yield (a, r1r * r)
 
+    def absSplitAt(n: Int): List[(RegEx[A], RegEx[A])] =
+      require(n >= 0)
+      if n == 0 then List((One(), r))
+      else
+        for (a, r1) <- r.absSplitAt1; (r2, r3) <- r1.absSplitAt(n - 1) yield (Lit(a) * r2, r3)
+
+    def absSplitAtLast(n: Int): List[(RegEx[A], RegEx[A])] =
+      require(n < 0)
+      for (r1, r2) <- r.reverse.absSplitAt(-n) yield (r2.reverse, r1.reverse)
+
     /** Abstract operation for `s.slice(i, j)`. */
     def absSlice(i: Int, j: Int): RegEx[A] =
       require(0 <= i && i <= j)
@@ -87,6 +98,11 @@ object REOps extends LazyLogging:
 
     // Find
     /** Abstract operation for `s.contains(x)`. */
+    def absContainsElem(x: set.Symbol): BoolSet =
+      if r.findAny(x).isEmpty then BoolSet.False
+      else if r.filterNotContain(List(x)).isEmpty then BoolSet.True
+      else BoolSet.Full
+
     def absContains(t: List[set.Symbol]): BoolSet =
       if r.filterContains(t).isEmpty then BoolSet.False
       else if r.filterNotContain(t).isEmpty then BoolSet.True
@@ -105,26 +121,32 @@ object REOps extends LazyLogging:
       require(start >= 0)
       if start == 0 then r.findFirst(t)
       else
-        val rp = r.absTake(start)
-        for (r1, r2) <- r.absDrop(start).findFirst(t) yield (rp * r1, r2)
+        for
+          (r1, r2) <- r.absSplitAt(start)
+          (r2, r3) <- r2.findFirst(t)
+        yield (r1 * r2, r3)
 
-    def dropIndexOf(t: List[set.Symbol]): RegEx[A] =
-      word(t) * sum(r.findFirst(t).map(_._2))
+    def dropIndexOf(t: List[set.Symbol], start: Int = 0): RegEx[A] =
+      word(t) * sum(r.findFirst(t, start).map(_._2))
 
-    def takeIndexOf(t: List[set.Symbol]): RegEx[A] =
-      sum(r.findFirst(t).map(_._1))
+    def takeIndexOf(t: List[set.Symbol], start: Int = 0): RegEx[A] =
+      sum(r.findFirst(t, start).map(_._1))
 
     /** Abstract operation for `s.indexOf(x)`. */
-    def absIndexOf(t: List[set.Symbol]): IndexSet =
-      val neg = if r.filterNotContain(t).nonEmpty then Set(-1) else Set.empty
-      IndexSet(neg, takeIndexOf(t).absLength)
+    def absIndexOf(t: List[set.Symbol], start: Int = 0): IndexSet =
+      val neg = if r.absDrop(start).filterNotContain(t).nonEmpty then Set(-1) else Set.empty
+      val leftIndexSet = takeIndexOf(t, start).absLength
+      val rightIndexSet = dropIndexOf(t, start).absLength
+      IndexSet(neg, leftIndexSet, rightIndexSet)
+
+    def absIndexOfElem(x: set.Symbol, start: Int): IndexSet = absIndexOf(List(x), start)
 
     def absSlice(start: Index, end: Index): RegEx[A] = (start, end) match
       case (Left(i), Right(j)) => r.absDrop(i).absDropRight(j)
       case (Left(i), Left(j)) => r.absDrop(i).absTake(j - i)
       case (Right(i), Right(j)) => r.absDropRight(i).absTakeRight(j - i)
-      case (First(w, k), Right(0)) => r.dropIndexOf(w.asInstanceOf[List[set.Symbol]]).absDrop(k)
-      case (Left(0), First(w, 0)) => r.takeIndexOf(w.asInstanceOf[List[set.Symbol]])
+      case (First(w, i, k), Right(0)) => r.dropIndexOf(w.asInstanceOf[List[set.Symbol]], i).absDrop(k)
+      case (Left(0), First(w, i, 0)) => r.takeIndexOf(w.asInstanceOf[List[set.Symbol]], i)
       case _ =>
         logger.warn(s"Cannot slice ${r.pp} with indices $start and $end")
         Zero()
@@ -217,6 +239,8 @@ object REOps extends LazyLogging:
       case List(x) => r.filterNotContain1(x)
       case _ => r.filterNotContain2(t)
 
+    def filterNotContainElem(x: set.Symbol): RegEx[A] = r.filterNotContain1(x)
+
     private def filterNotContain1(x: set.Symbol): RegEx[A] =
       val a = r.alphabet
       if !a.contains(x) then r
@@ -260,23 +284,48 @@ object REOps extends LazyLogging:
       sum(for (r1, r2) <- r.findAny(x1) yield
         r1.filterNotContain1(x2) * symbol(x1) * r2.filterContains(List(x2)))
 
-    def filterElemAt(i: Int, f: A => A): RegEx[A] =
+    def filterElemWith(i: Int, f: A => A): RegEx[A] =
       if i == 0 then
         sum(for (a, r1) <- r.absSplitAt1; b = f(a); if b.nonEmpty yield Lit(b) * r1)
       else
-        sum(for (a, r1) <- r.absSplitAt1; r2 = r1.filterElemAt(i - 1, f); if r2.nonEmpty yield Lit(a) * r2)
+        sum(for (a, r1) <- r.absSplitAt1; r2 = r1.filterElemWith(i - 1, f); if r2.nonEmpty yield Lit(a) * r2)
+
+    def filterElemLastWith(i: Int, f: A => A): RegEx[A] =
+      require(i < 0)
+      r.reverse.filterElemWith(-i - 1, f).reverse
 
     def filterElemAtEq(i: Int, x: set.Symbol): RegEx[A] =
-      filterElemAt(i, a => if a.contains(x) then set.singleton(x) else set.empty)
+      filterElemWith(i, a => if a.contains(x) then set.singleton(x) else set.empty)
 
     def filterElemAtNe(i: Int, x: set.Symbol): RegEx[A] =
-      filterElemAt(i, a => a - x)
+      filterElemWith(i, a => a - x)
 
     def filterElemAtIn(i: Int, xs: List[set.Symbol]): RegEx[A] =
-      filterElemAt(i, a => a & xs)
+      filterElemWith(i, a => a & xs)
 
     def filterElemAtNotIn(i: Int, xs: List[set.Symbol]): RegEx[A] =
-      filterElemAt(i, a => a -- xs)
+      filterElemWith(i, a => a -- xs)
+
+    def filterSliceWith(from: Int, untilLast: Int, f: RegEx[A] => RegEx[A]): RegEx[A] =
+      require(from >= 0 && untilLast <= 0)
+      sum:
+        for
+          (r1, r2) <- r.absSplitAt(from)
+          (r2, r3) <- r2.absSplitAtLast(untilLast)
+          rf = f(r2)
+          if rf.nonEmpty
+        yield r1 * rf * r3
+
+    def filterSliceWith2(fromIndexOf: (List[set.Symbol], Int, Int), untilLast: Int,
+                         f: RegEx[A] => RegEx[A]): RegEx[A] =
+      require(untilLast <= 0)
+      sum:
+        for
+          (r1, r2) <- r.findFirst(fromIndexOf._1, fromIndexOf._2)
+          (r2, r3) <- (word(fromIndexOf._1) * r2).absDrop(fromIndexOf._3).absSplitAtLast(untilLast)
+          rf = f(r2)
+          if rf.nonEmpty
+        yield r1 * rf * r3
 
     private def constLength: Option[Int] =
       val r1 = r.absLength

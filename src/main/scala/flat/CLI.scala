@@ -110,7 +110,7 @@ object CLI extends LazyLogging:
         System.exit(1)
 
       reporter.printTo(Console.err) // print warnings if any
-      logger.debug("Hit rate: {}", NarrowerCache.hitRate)
+      logger.debug(f"Hit rate: ${NarrowerCache.hitRate}%.2f")
       logger.info("Checking passed: " + path.toString)
 
   private def collectFlan(path: os.Path): Seq[os.Path] =

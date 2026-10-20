@@ -40,6 +40,7 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
     case Ne(Var(x), NullConst()) =>
       require(ctx.lookup(x).isEmpty, s"optional type binder: $x")
       tm.mkTerm(NOT, encodeVarIsNull(x))
+    case Eq(_, NullConst()) | Ne(_, NullConst()) => tm.mkConst(bool)
     case Eq(e1, e2) => tm.mkTerm(EQUAL, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
     case Ne(e1, e2) => tm.mkTerm(DISTINCT, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
 
@@ -125,6 +126,8 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
       tm.mkTerm(SEQ_UPDATE, encodeExpr(e, ctx), encodeExpr(ei, ctx), tm.mkTerm(SEQ_UNIT, encodeExpr(ex, ctx)))
     case ListContains(e, ev) =>
       tm.mkTerm(SEQ_CONTAINS, encodeExpr(e, ctx), tm.mkTerm(SEQ_UNIT, encodeExpr(ev, ctx)))
+    case ListIndexOf(e, ev, ei) =>
+      tm.mkTerm(SEQ_INDEXOF, encodeExpr(e, ctx), tm.mkTerm(SEQ_UNIT, encodeExpr(ev, ctx)), encodeExpr(ei, ctx))
 
     // List: higher-order
     case _: ListForall => tm.mkConst(bool)
@@ -135,6 +138,7 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
     case ListFilter(e, ef) =>
       val seq = encodeExpr(e, ctx)
       tm.mkConst(seq.getSort)
+    case StrListIn(_, _) => tm.mkConst(bool)
 
     // Set
     case e@SetExpr(es) => mkSet(encodeSort(e.elemSort), es.map(encodeExpr(_, ctx)))
@@ -180,6 +184,9 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
 
     // Tuple
     case TupleSelect(i, e) => encodeTupleSelect(i, e, ctx)
+
+    // others
+    case _ => throw IllegalArgumentException(expr.getClass.getSimpleName)
 
   private val vars: mutable.Map[String, cvc5.Term] = mutable.Map.empty
 

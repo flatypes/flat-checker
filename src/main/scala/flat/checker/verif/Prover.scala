@@ -42,11 +42,16 @@ object Prover extends LazyLogging:
           solve(simpGoal)
 
   private def simplify(goal: Goal): Goal =
-    val premises = goal.premises.flatMap(_.simplify.conjuncts)
-    val goal1 = goal.copy(
-      conclusion = elim(goal.conclusion.simplify, premises),
-      premises = premises.map(elim(_, premises)))
-    unfold(subst(goal1))
+    val goal1 = justSimplify(goal)
+    val goal2 = goal1.copy(
+      conclusion = elim(goal1.conclusion, goal1.premises),
+      premises = goal1.premises.map(e => elim(e, goal1.premises)))
+    unfold(subst(justSimplify(goal2)))
+
+  private def justSimplify(goal: Goal): Goal =
+    goal.copy(
+      conclusion = goal.conclusion.simplify,
+      premises = goal.premises.flatMap(_.simplify.conjuncts))
 
   private def elim(expr: Expr, premises: List[Expr]): Expr =
     expr.transform:
@@ -55,22 +60,31 @@ object Prover extends LazyLogging:
       case Ite(e, _, e2) if premises.contains(Not(e).simplify) => e2
 
   private def subst(goal: Goal): Goal =
-    val eqs = mutable.Map.empty[String, Expr]
-    val used = ListBuffer.empty[Expr]
-    goal.premises.foreach:
-      case b@Le(Var(x), e) =>
-        val bRev = Le(e, Var(x))()
-        if goal.premises.contains(bRev) then
-          eqs(x) = e
-          used += b
-          used += bRev
-      case _ =>
-    if eqs.nonEmpty then
-      goal.copy(
-        premises = goal.premises.filterNot(used.contains).map(_.subst(eqs.toMap)),
-        conclusion = goal.conclusion.subst(eqs.toMap))
-    else
-      goal
+    val premises = ListBuffer.from(goal.premises)
+    var conclusion = goal.conclusion
+    while true do
+      val used = ListBuffer.empty[Expr]
+      val eq = premises.collectFirst:
+        case Eq(Var(x), e) if !goal.ctx(x).isInstanceOf[OptType] =>
+          used += Eq(Var(x), e)
+          x -> e
+        case Le(Var(x), e) if premises.contains(Le(e, Var(x))()) =>
+          used += Le(Var(x), e)
+          used += Le(e, Var(x))
+          x -> e
+        case Lt(Var(x), e) if premises.contains(Le(Sub(e, IntConst(1)), Var(x))()) =>
+          used += Lt(Var(x), e)
+          used += Le(Sub(e, IntConst(1)), Var(x))
+          x -> Sub(e, IntConst(1))()
+      eq match
+        case Some(x -> e) =>
+          logger.debug("Substituting {} -> {}", x, e.show)
+          premises.filterInPlace(!used.contains(_))
+          premises.mapInPlace(_.subst(Map(x -> e)))
+          conclusion = conclusion.subst(Map(x -> e))
+        case None =>
+          return goal.copy(premises = premises.toList, conclusion = conclusion)
+    goal
 
   private def unfold(goal: Goal): Goal =
     goal.conclusion match
@@ -84,6 +98,7 @@ object Prover extends LazyLogging:
     goal.conclusion == BoolConst(true)(noRange) || goal.premises.contains(goal.conclusion) || goal.premises.exists:
       case BoolConst(false) => true
       case StrIn(_, r) => r.isEmpty
+      case StrListIn(_, r) => r.isEmpty
       case Eq(e1, e2) => goal.premises.contains(Ne(e1, e2)())
       case Ne(e1, e2) => goal.premises.contains(Eq(e1, e2)())
       case Lt(e1, e2) => goal.premises.contains(Lt(e2, e1)())

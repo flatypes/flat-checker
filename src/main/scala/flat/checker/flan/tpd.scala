@@ -1,7 +1,7 @@
 package flat.checker.flan
 
-import flat.checker.domain.StrRE
 import flat.checker.domain.StrREOps.NumStrFormat
+import flat.checker.domain.{RegEx, StrRE}
 import flat.checker.verif.ProofError
 import org.eclipse.lsp4j.{Position, Range}
 
@@ -378,6 +378,13 @@ object tpd:
       case List(e1, e2) => ListConcat(e1, e2)(range)
       case _ => throw IllegalArgumentException("ListConcat must have exactly 2 subtrees")
 
+  final case class ListIndexOf(lst: Expr, elem: Expr, start: Expr = IntConst(0))
+                              (val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): ListIndexOf = subtrees match
+      case List(e, ex) => ListIndexOf(e, ex)(range)
+      case List(e, ex, ei) => ListIndexOf(e, ex, ei)(range)
+      case _ => throw IllegalArgumentException("ListIndexOf must have 2 or 3 subtrees")
+
   final case class ListLength(lst: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): ListLength = subtrees match
       case List(e) => ListLength(e)(range)
@@ -423,6 +430,11 @@ object tpd:
     override def rebuild(subtrees: List[Expr]): ListFilter = subtrees match
       case List(e, ep) => ListFilter(e, ep)(range)
       case _ => throw IllegalArgumentException("SeqFilter must have exactly 2 subtrees")
+
+  final case class StrListIn(lst: Expr, regEx: RegEx[StrRE])(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): StrListIn = subtrees match
+      case List(e) => StrListIn(e, regEx)(range)
+      case _ => throw IllegalArgumentException("StrListInRegEx must have exactly 1 subtree")
 
   // Set Operations
   final case class SetExpr(elems: List[Expr])(val elemSort: Type, val range: Range = noRange) extends Expr:

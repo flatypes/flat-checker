@@ -117,25 +117,29 @@ object builtin:
     case _ => Nil
 
   private def accessListMember(t: Type, name: String): List[Member] = name match
-    // access
+    case "contains" => List(Member(t -> bool, { case List(s, x) => ListContains(s, x) }))
     case "length" | "size" => List(Member(() -> int, { case List(s) => ListLength(s) }))
     case "select" => List(Member(int -> t, { case List(s, i) => ListSelect(s, i) }))
+    case "update" => List(Member((int, t) -> ListType(t), { case List(s, i, x) => ListUpdate(s, i, x) }))
     case "slice" => List(
       Member(int -> ListType(t), { case List(s, i) => ListSlice(s, i, ListLength(s)) }),
       Member((int, int) -> ListType(t), { case List(s, i, j) => ListSlice(s, i, j) }))
+    case "+" => List(Member(ListType(t) -> ListType(t), { case List(s1, s2) => ListConcat(s1, s2) }))
+    case "indexOf" => List(
+      Member(t -> int, { case List(s, x) => ListIndexOf(s, x) }),
+      Member((t, int) -> int, { case List(s, x, i) => ListIndexOf(s, x, i) }))
+
+    // sugars
     case "head" => List(Member(() -> t, { case List(s) => ListSelect(s, IntConst(0)) }))
     case "tail" => List(
       Member(() -> ListType(t), { case List(s) => ListSlice(s, IntConst(1), ListLength(s)) }))
     case "init" => List(
       Member(() -> ListType(t), { case List(s) => ListSlice(s, IntConst(0), Sub(ListLength(s), IntConst(1))) }))
     case "last" => List(Member(() -> t, { case List(s) => ListSelect(s, Sub(ListLength(s), IntConst(1))) }))
-    // construction
-    case "+" => List(Member(ListType(t) -> ListType(t), { case List(s1, s2) => StrConcat(s1, s2) }))
-    case "update" => List(Member((int, t) -> ListType(t), { case List(s, i, x) => ListUpdate(s, i, x) }))
-    // test
-    case "contains" => List(Member(t -> bool, { case List(s, x) => ListContains(s, x) }))
+
     // higher-order functions
     case "forall" => List(Member((t -> bool) -> bool, { case List(s, p) => ListForall(s, p) }))
+    case "exists" => List(Member((t -> bool) -> bool, { case List(s, p) => ListExists(s, p) }))
     case "map" => List(Member((t -> t) -> ListType(t), { case List(s, f) => ListMap(s, f) }))
     case "filter" => List(Member((t -> bool) -> ListType(t), { case List(s, p) => ListFilter(s, p) }))
     case _ => Nil

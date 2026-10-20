@@ -35,7 +35,7 @@ abstract class LinearSolver[A, B] extends LazyLogging:
         eqs(i)(j) = eqs(i).getOrElse(j, Zero()) + r
       i += 1
 
-    logger.debug("equations:\n{}\nwhere\n{}",
+    logger.trace("equations:\n{}\nwhere\n{}",
       (for (i, eq) <- eqs yield showEq(i, eq.toMap)).mkString("\n"),
       (for (x, i) <- inputs.zipWithIndex yield s"X_${i + 1} = f(${x.pp})").mkString("\n"))
 

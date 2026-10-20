@@ -87,8 +87,11 @@ object Simplifier extends LazyLogging:
           case (e1, e2) => Add(e1, e2)
       case Sub(e1, e2) =>
         (e1.simplify, e2.simplify) match
+          case (e, IntConst(0)) => e // e - 0 = e
+          case (e1, Sub(e2, e)) if e2 == e1 => e // e1 - (e1 - e) = e
+          case (e1, Sub(Sub(e2, e3), e4)) if e2 == e1 => Add(e3, e4) // e1 - (e1 - e3 - e4) = e3 + e4
+          case (Sub(e, IntConst(i)), IntConst(j)) => Sub(e, IntConst(i + j)) // e - i - j = e - (i + j)
           case (IntConst(i1), IntConst(i2)) => IntConst(i1 - i2)
-          case (e, IntConst(0)) => e
           case (e1, e2) => Sub(e1, e2)
       case Mul(e1, e2) =>
         (e1.simplify, e2.simplify) match
@@ -293,6 +296,9 @@ object Simplifier extends LazyLogging:
         (e.simplify, ev.simplify) match
           case (s@ListExpr(es), ex) if s.isConst && ex.isConst => BoolConst(es.contains(ex))
           case (e, ev) => ListContains(e, ev)
+      case ListIndexOf(e, ev, ei) =>
+        (e.simplify, ev.simplify, ei.simplify) match
+          case (lst, elem, start) => ListIndexOf(lst, elem, start)
 
       // List: higher-order
       case ListForall(e, ep) => ListForall(e.simplify, ep.simplify)

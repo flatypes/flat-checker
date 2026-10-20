@@ -1,6 +1,7 @@
 package flat.checker.domain
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.domain.REOps.filterNe
 
 /** A generic regular expression.
  * Names mirror the definition of a Kleene algebra. */
@@ -134,6 +135,6 @@ given [A](using set: SymbolSet[A]): SymbolSet[RegEx[A]] with
     def isEmpty: Boolean = r1.isEmpty
     def contains(x: Symbol): Boolean = r1.contains(x)
     def |(r2: RegEx[A]): RegEx[A] = r1 + r2
-    def -(x: Symbol): RegEx[A] = throw UnsupportedOperationException("RegEx subtraction is not supported")
+    def -(x: Symbol): RegEx[A] = r1.filterNe(x)
 
 type StrRE = RegEx[CharSet]

@@ -220,6 +220,10 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
       case tk1 ~ es ~ tk2 => TupleExpr(es)(Span(tk1.span.getStart, tk2.span.getEnd))
     }
 
+  private def size: Parser[Expr] =
+    "|" ~ expr ~ "|"
+      ^^ { case tk1 ~ e ~ tk2 => Access(e, Ident("size")(tk1.span))(Span(tk1.span.getStart, tk2.span.getEnd)) }
+
   private def fieldAccessOp: Parser[Expr => Expr] =
     "." ~> ident ^^ { f => e => Access(e, f)(Span(e.range.getStart, f.range.getEnd)) }
 
@@ -240,10 +244,6 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
         val args = if e2.isEmpty then List(arg1) else List(arg1, e2.get)
         e => Apply(Access(e, member)(Span(e.range.getStart, tk1.span.getEnd)), args)(tk.span.getEnd)
     }
-
-  private def size: Parser[Expr] =
-    "|" ~ expr ~ "|"
-      ^^ { case tk1 ~ e ~ tk2 => Access(e, Ident("size")(tk1.span))(Span(tk1.span.getStart, tk2.span.getEnd)) }
 
   // Parsing expressions
   private def pExpr: Parser[PExpr] = infixR("|" ^^^ (PUnion(_, _)), pConcat)
