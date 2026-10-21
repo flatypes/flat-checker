@@ -1,7 +1,7 @@
 package flat.checker.flan
 
 import flat.checker.domain.StrREOps.NumStrFormat
-import flat.checker.domain.{RegEx, StrRE}
+import flat.checker.domain.{CharSet, RegEx, StrRE}
 import flat.checker.verif.ProofError
 import org.eclipse.lsp4j.{Position, Range}
 
@@ -85,15 +85,11 @@ object tpd:
   final case class BoolConst(value: Boolean)(val range: Range) extends Expr:
     override def rebuild(subtrees: List[Expr]): BoolConst = this
 
+  final case class CharConst(value: Char)(val range: Range) extends Expr:
+    override def rebuild(subtrees: List[Expr]): CharConst = this
+
   final case class StrConst(value: String)(val range: Range) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrConst = this
-
-  object CharConst:
-    def apply(value: Char): StrConst = StrConst(value.toString)(noRange)
-
-    def unapply(e: Expr): Option[Char] = e match
-      case StrConst(s) if s.length == 1 => Some(s.head)
-      case _ => None
 
   final case class NullConst()(val range: Range) extends Expr:
     override def rebuild(subtrees: List[Expr]): NullConst = this
@@ -241,6 +237,27 @@ object tpd:
       case List(e, e1, e2) => Ite(e, e1, e2)(range)
       case _ => throw IllegalArgumentException("Ite must have exactly 3 subtrees")
 
+  // Char
+  final case class CharToCode(chr: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): CharToCode = subtrees match
+      case List(e) => CharToCode(e)(range)
+      case _ => throw IllegalArgumentException("CharToInt must have exactly 1 subtree")
+
+  final case class CodeToChar(int: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): CodeToChar = subtrees match
+      case List(e) => CodeToChar(e)(range)
+      case _ => throw IllegalArgumentException("CharFromInt must have exactly 1 subtree")
+
+  final case class CharToStr(chr: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): CharToStr = subtrees match
+      case List(e) => CharToStr(e)(range)
+      case _ => throw IllegalArgumentException("CharToStr must have exactly 1 subtree")
+
+  final case class CharIn(chr: Expr, set: CharSet)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): CharIn = subtrees match
+      case List(e) => CharIn(e, set)(range)
+      case _ => throw IllegalArgumentException("CharIn must have exactly 1 subtree")
+
   // String operations: access
   final case class StrLength(str: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrLength = subtrees match
@@ -260,7 +277,7 @@ object tpd:
   object Substr:
     def apply(seq: Expr, start: Expr)(range: Range): Substr = Substr(seq, start, StrLength(seq))(range)
 
-  // String: construction
+
   final case class StrConcat(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrConcat = subtrees match
       case List(e1, e2) => StrConcat(e1, e2)(range)
@@ -348,15 +365,6 @@ object tpd:
       case List(e) => IntFormat(e, fmt)(range)
       case _ => throw IllegalArgumentException("StringFromInt must have exactly 1 subtree")
 
-  final case class CharToCode(chr: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): CharToCode = subtrees match
-      case List(e) => CharToCode(e)(range)
-      case _ => throw IllegalArgumentException("CharToInt must have exactly 1 subtree")
-
-  final case class CodeToChar(int: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): CodeToChar = subtrees match
-      case List(e) => CodeToChar(e)(range)
-      case _ => throw IllegalArgumentException("CharFromInt must have exactly 1 subtree")
 
   // String: higher-order
   final case class StrForall(str: Expr, pred: Expr)(val range: Range = noRange) extends Expr:

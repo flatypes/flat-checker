@@ -23,6 +23,7 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
   def encodeExpr(expr: Expr, ctx: EncodingCtx): cvc5.Term = expr match
     case IntConst(v) => tm.mkInteger(v.toString)
     case BoolConst(v) => tm.mkBoolean(v)
+    case CharConst(v) => tm.mkString(escapeSMTString(v.toString), true)
     case StrConst(v) => tm.mkString(escapeSMTString(v), true)
     case NullConst() => throw IllegalArgumentException("NullConst")
     case Var(x) => ctx.lookup(x).getOrElse(encodeVar(x))
@@ -73,6 +74,13 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
     case Implies(e1, e2) => tm.mkTerm(IMPLIES, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
     case Ite(e, e1, e2) => tm.mkTerm(ITE, encodeExpr(e, ctx), encodeExpr(e1, ctx), encodeExpr(e2, ctx))
 
+    // Char
+    case CharToCode(e) => tm.mkTerm(STRING_TO_CODE, encodeExpr(e, ctx))
+    case CodeToChar(e) => tm.mkTerm(STRING_FROM_CODE, encodeExpr(e, ctx))
+    case CharToStr(e) => encodeExpr(e, ctx) // NOTE: chars are encoded as strings in cvc5
+    case _: CharIn => tm.mkConst(bool)
+
+
     // String
     case StrConcat(e1, e2) => tm.mkTerm(STRING_CONCAT, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
     case StrLength(e) => tm.mkTerm(STRING_LENGTH, encodeExpr(e, ctx))
@@ -103,8 +111,6 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
     case StrToUpper(e) => tm.mkTerm(STRING_TO_UPPER, encodeExpr(e, ctx))
 
     // String: conversion
-    case CharToCode(e) => tm.mkTerm(STRING_TO_CODE, encodeExpr(e, ctx))
-    case CodeToChar(e) => tm.mkTerm(STRING_FROM_CODE, encodeExpr(e, ctx))
     case StrToInt(e, IntConst(10)) => tm.mkTerm(STRING_TO_INT, encodeExpr(e, ctx))
     case StrToInt(e, _) => tm.mkConst(int)
     case IntFormat(e, _) => tm.mkTerm(STRING_FROM_INT, encodeExpr(e, ctx))

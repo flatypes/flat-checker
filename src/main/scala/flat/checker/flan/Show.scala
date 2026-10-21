@@ -2,15 +2,17 @@ package flat.checker.flan
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.Prettifier.pp
+import flat.checker.domain.{RegEx, given}
 import flat.checker.flan.tpd.*
 
 object Show extends LazyLogging:
   // Types and sorts
   extension (typ: Type)
     def show: String = typ match
-      case IntType => "Int"
-      case BoolType => "Bool"
-      case StrType => "Str"
+      case IntType => "int"
+      case BoolType => "bool"
+      case CharType => "char"
+      case StrType => "str"
       case ListType(t) => s"List[${t.show}]"
       case SetType(t) => s"Set[${t.show}]"
       case MapType(tk, tv) => s"Map[${tk.show}, ${tv.show}]"
@@ -59,6 +61,7 @@ object Show extends LazyLogging:
     val s = expr match
       case IntConst(i) => i.toString
       case BoolConst(b) => b.toString
+      case CharConst(c) => s"'${escapeChar(c)}'"
       case StrConst(s) => s"'${escapeString(s)}'"
       case NullConst() => "null"
       case Var(x) => showVar(x)
@@ -99,6 +102,12 @@ object Show extends LazyLogging:
       case Implies(e1, e2) => showInfix("⇒", LEVEL_ARROW, ASSOC_RIGHT, e1, e2)
       case Ite(e, e1, e2) => s"${showExpr(e)} ? ${showExpr(e1)} : ${showExpr(e2)}"
 
+      // Char
+      case CharToCode(e) => showMemberApply(e, "toCode")
+      case CodeToChar(e) => showMemberApply(e, "toChar")
+      case CharToStr(e) => showMemberApply(e, "toStr")
+      case CharIn(e, a) => s"${showExpr(e)} ∈ ${RegEx.symbolSet(a).pp}"
+
       // String
       case StrContains(e, et) => showMemberApply(e, "contains", et)
       case StrLength(e) => s"|${showExpr(e)}|"
@@ -111,13 +120,10 @@ object Show extends LazyLogging:
       case StrIndexOf(e, et, IntConst(0)) => showMemberApply(e, "indexOf", et)
       case StrIndexOf(e, et, ei) => showMemberApply(e, "indexOf", et, ei)
       case StrReplace(e, e1, e2) => showMemberApply(e, "replace", e1, e2)
-      case StrIn(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
 
       // String conversions
       case StrToInt(e, IntConst(10)) => showMemberApply(e, "toInt")
       case StrToInt(e, eb) => showMemberApply(e, "toInt", eb)
-      case CharToCode(e) => showMemberApply(e, "toCode")
-      case CodeToChar(e) => showMemberApply(e, "toChar")
 
       // String extensions
       case StrReverse(e) => showMemberApply(e, "reverse")
@@ -133,6 +139,8 @@ object Show extends LazyLogging:
       case StrToLower(e) => showMemberApply(e, "toLower")
       case StrToUpper(e) => showMemberApply(e, "toUpper")
 
+      case StrIn(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
+      case StrListIn(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
       // List
       case ListExpr(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
       case ListContains(e, ev) => showMemberApply(e, "contains", ev)

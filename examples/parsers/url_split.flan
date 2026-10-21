@@ -43,7 +43,7 @@ lang RelativeRef = RelativePart ("?" Query)? ("#" Fragment)?
 
 lang URL = URI | RelativeRef
 
-lang SchemeChars = r"[a-zA-Z0-9+\-.]*"
+val scheme_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+.-"
 
 def url_split(url: URL) -> (Scheme?, Authority?, Path, Query?, Fragment?):
     var scheme: Scheme? = None
@@ -53,7 +53,7 @@ def url_split(url: URL) -> (Scheme?, Authority?, Path, Query?, Fragment?):
     var rest: str = url
 
     var i = url.indexOf(':')
-    if i > 0 and url[0].isAsciiLetter and url[:i] in SchemeChars:
+    if i > 0 and url[0].isascii() and url[0].isalpha() and url[:i].forall(lambda c -> c in scheme_chars):
         scheme = url[:i].toLower
         rest = url[i+1:]
     if rest[:2] == "//":

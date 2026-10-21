@@ -10,7 +10,7 @@ from iso_date_format import Year, Month, Day
 
 /** Construct a date from a string in ISO 8601 format. */
 def parse_iso_date(date_string: ISODate) -> (Year, Month, Day):
-    if not date_string.isAscii:
+    if not date_string.isascii():
         raise "Argument must be an ASCII str"
 
     if len(date_string) not in {7, 8, 10}:

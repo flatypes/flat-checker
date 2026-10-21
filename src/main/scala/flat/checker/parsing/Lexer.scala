@@ -10,7 +10,7 @@ import scala.util.matching.Regex
 import scala.util.parsing.combinator.RegexParsers
 
 enum TokenType:
-  case INT, STR, R_STR, KEYWORD, IDENTIFIER, INDENT, DEDENT, NEWLINE
+  case INT, CHAR, STR, R_STR, KEYWORD, IDENTIFIER, INDENT, DEDENT, NEWLINE
 
 import flat.checker.parsing.TokenType.*
 
@@ -65,20 +65,18 @@ class Lexer(uri: String, text: String)(using reporter: Reporter) extends RegexPa
   private def nonEmptyLine: Parser[List[Token]] = elem(' ').* ~> (token <~ whitespace).+ <~ "\n" ^^ processLine
 
   private def token: Parser[Token] =
-    int | str | rStr | openingParen | closingParen | operator | keywordOrIdentifier
+    int | char | str | rStr | openingParen | closingParen | operator | keywordOrIdentifier
 
   private def int: Parser[Token] =
     withSpan("""[1-9](_?[0-9])*|0[bB](_?[01])+|0[oO](_?[0-7])+|0[xX](_?[0-9a-fA-F])+|0""".r) ^^ (Token(INT, _, _))
 
-  private def str: Parser[Token] = withSpan(singleQuotedStr | doubleQuotedStr) ^^ (Token(STR, _, _))
+  private def char: Parser[Token] =
+    withSpan("""'([^\n\\']|\\([\\'"abfnrtv]|u[0-9a-fA-F]{4}))'""".r) ^^ (Token(CHAR, _, _))
 
-  private def singleQuotedStr: Parser[String] = """'([^\n\\']|\\([\\'"abfnrtv]|u[0-9a-fA-F]{4}))'""".r
+  private def str: Parser[Token] =
+    withSpan(""""([^\n\\"]|\\([\\'"abfnrtv]|u[0-9a-fA-F]{4}))*"""".r) ^^ (Token(STR, _, _))
 
-  private def doubleQuotedStr: Parser[String] = """"([^\n\\"]|\\([\\'"abfnrtv]|u[0-9a-fA-F]{4}))*"""".r
-
-  private def rStr: Parser[Token] = withSpan(doubleQuotedRStr) ^^ (Token(R_STR, _, _))
-
-  private def doubleQuotedRStr: Parser[String] = """r"([^\n\\"]|\\[^\n])*"""".r
+  private def rStr: Parser[Token] = withSpan("""r"([^\n\\"]|\\[^\n])*"""".r) ^^ (Token(R_STR, _, _))
 
   private def openingParen: Parser[Token] =
     withSpan(elem('(') | '[' | '{')

@@ -12,7 +12,7 @@ def url_unsplit(scheme: Scheme?, netloc: Authority?, path: Path, query: Query?, 
     if scheme != None and scheme != "":
         url = scheme + ":" + url
     if query != None:
-        url = url + '?' + query
+        url = url + "?" + query
     if fragment != None:
-        url = url + '#' + fragment
+        url = url + "#" + fragment
     return url

@@ -22,6 +22,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     // Constants
     case untpd.IntConst(v) => (IntType, IntConst(v)(node.range), Nil)
     case untpd.BoolConst(v) => (BoolType, BoolConst(v)(node.range), Nil)
+    case untpd.CharConst(v) => (CharType, CharConst(v)(node.range), Nil)
     case untpd.StrConst(v) => (StrType, StrConst(v)(node.range), Nil)
     case untpd.NullConst() => (NullType, NullConst()(node.range), Nil)
 
@@ -140,7 +141,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     // Built-in function application
     case untpd.Apply(id@untpd.TermName(f), es) if builtins.contains(f) =>
       f match
-        case "len" => inferOperation(es.head, untpd.Ident("len")(id.range), es.tail, node.range, ctx)
+        case "len" => inferOperation(es.head, untpd.Ident("__len__")(id.range), es.tail, node.range, ctx)
         case "int" => es match
           case List(e) => inferOperation(e, untpd.Ident("__int__")(id.range), Nil, node.range, ctx)
           case List(e, eb) =>
@@ -150,7 +151,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
           case _ =>
             reporter.report(ctx.uri, ArityMismatch(node.range, 1, es.length))
             (NoType, NoExpr, Nil)
-        case "str" => inferOperation(es.head, untpd.Ident("toStr")(id.range), es.tail, node.range, ctx)
+        case "str" => inferOperation(es.head, untpd.Ident("__str__")(id.range), es.tail, node.range, ctx)
         case _ => throw NotImplementedError(s"Built-in function $f is not implemented")
 
     // Function application: others
@@ -245,16 +246,24 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       return (NoType, NoExpr, receiverSide)
 
     members.filter(_.funType.arity == es.length) match
-      case List(m) =>
-        val (args, argsSide) = checkArgs(es, m.funType.paramTypes, span, ctx)
-        val expr = m.impl(receiver, args)
-        val opSide = m.side(receiver, for (arg, e) <- args.zip(es) yield (arg, e.range))
-        (m.funType.returnType, expr, receiverSide ++ argsSide ++ opSide)
       case Nil =>
         reporter.report(ctx.uri, UndefinedName(op.range, op.name))
         (NoType, NoExpr, receiverSide)
-      case _ =>
-        throw UnsupportedOperationException(s"Ambiguous operation: ${op.name} for type $receiverType")
+      case List(m) =>
+        val (args, argsSide) = checkArgs(es, m.funType.paramTypes, span, ctx)
+        val expr = m.impl(receiver, args, span)
+        (m.funType.returnType, expr, receiverSide ++ argsSide)
+      case ms =>
+        val (argTypes, args, argSides) = es.map(infer(_, ctx)).unzip3
+        ms.filter(m => argTypes.zip(m.funType.paramTypes).forall(_.toSort.subsortOf(_))) match
+          case Nil =>
+            reporter.report(ctx.uri, TypeMismatch(span, "matching operation", s"${op.name} for type $receiverType"))
+            (NoType, NoExpr, receiverSide ++ argSides.flatten)
+          case List(m) =>
+            val expr = m.impl(receiver, args, span)
+            (m.funType.returnType, expr, receiverSide ++ argSides.flatten)
+          case _ =>
+            throw UnsupportedOperationException(s"Ambiguous operation: ${op.name} for type $receiverType")
 
   def checkArgs(es: List[untpd.Expr], ts: List[Type], span: Span, ctx: TypingCtx): (List[Expr], List[Stmt]) =
     if es.length != ts.length then

@@ -9,11 +9,11 @@ import flat.checker.flan.tpd.*
 object Simplifier extends LazyLogging:
   extension (expr: Expr)
     private def isConst: Boolean = expr match
-      case IntConst(_) | BoolConst(_) | StrConst(_) | NullConst() => true
+      case IntConst(_) | BoolConst(_) | CharConst(_) | StrConst(_) | NullConst() => true
       case _ => false
 
     def simplify: Expr = expr match
-      case IntConst(_) | BoolConst(_) | StrConst(_) | NullConst() | Var(_) => expr
+      case IntConst(_) | BoolConst(_) | CharConst(_) | StrConst(_) | NullConst() | Var(_) => expr
 
       // Functional
       case LambdaExpr(ps, e) => LambdaExpr(ps, e.simplify)
@@ -155,6 +155,16 @@ object Simplifier extends LazyLogging:
         (e1.simplify, e2.simplify) match
           case (IntConst(i1), IntConst(i2)) => IntConst(i1 >> i2.toInt)
           case (left, right) => BitShR(left, right)
+
+      // Char
+      case CharToStr(e) =>
+        e.simplify match
+          case CharConst(c) => StrConst(c.toString)
+          case chr => CharToStr(chr)
+      case CharIn(e, r) =>
+        e.simplify match
+          case CharConst(c) => BoolConst(r.contains(c))
+          case chr => CharIn(chr, r)
 
       // String: access
       case StrLength(e) =>
@@ -381,6 +391,7 @@ object Simplifier extends LazyLogging:
           case TupleExpr(es) => es(i)
           case es => TupleSelect(i, es)
 
+      case NoExpr => expr
       case _ => throw NotImplementedError(s"Simplifier.simplify(${expr.getClass.getSimpleName})")
 
     def toCNF: List[Expr] = expr match

@@ -29,7 +29,7 @@ def _parse_octet(octet_str: DecOctet) -> Byte:
     if octet_str == "":
         raise "Empty octet not permitted"
     # Reject non-ASCII digits.
-    if not octet_str.isAsciiDigit:
+    if not (octet_str.isascii() and octet_str.isdigit()):
         raise "Only decimal digits permitted"
     # We do the length check second, since the invalid character error
     # is likely to be more informative for the user

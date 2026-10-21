@@ -79,6 +79,8 @@ object untpd:
 
   final case class BoolConst(value: Boolean)(val range: Range) extends Expr
 
+  final case class CharConst(value: Char)(val range: Range) extends Expr
+
   final case class StrConst(value: String)(val range: Range) extends Expr
 
   final case class NullConst()(val range: Range) extends Expr

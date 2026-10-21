@@ -3,24 +3,20 @@ package flat.checker.typing
 import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.domain.{CharSet, RegEx, given}
 import flat.checker.flan.sorting.toSort
-import flat.checker.flan.tpd.{BoolType as bool, IntType as int, StrType as str, *}
+import flat.checker.flan.tpd.{BoolType as bool, CharType as char, IntType as int, StrType as str, *}
 import org.eclipse.lsp4j.Range
 
-final case class Member(funType: FunType,
-                        op: PartialFunction[List[Expr], Expr],
-                        pre: PartialFunction[List[(Expr, Range)], List[Stmt]] = PartialFunction.empty):
-  def impl(receiver: Expr, args: List[Expr]): Expr =
-    if op.isDefinedAt(receiver :: args) then op(receiver :: args)
+final case class Member(funType: FunType, op: PartialFunction[List[Expr], Range => Expr]):
+  def impl(receiver: Expr, args: List[Expr], span: Range): Expr =
+    if op.isDefinedAt(receiver :: args) then op(receiver :: args)(span)
     else
       throw new IllegalArgumentException(s"Invalid member access: $receiver.${args.mkString(", ")}")
-
-  def side(receiver: Expr, args: List[(Expr, Range)]): List[Stmt] =
-    if pre.isDefinedAt((receiver, noRange) :: args) then pre((receiver, noRange) :: args) else Nil
 
 object builtin:
   def accessMember(typ: Type, name: String): List[Member] = typ.toSort match
     case `int` => accessIntMember(name)
     case `bool` => accessBoolMember(name)
+    case `char` => accessCharMember(name)
     case `str` => accessStrMember(name)
     case ListType(t) => accessListMember(t, name)
     case SetType(t) => accessSetMember(t, name)
@@ -60,7 +56,7 @@ object builtin:
     case ">>" => List(Member(int -> int, { case List(n1, n2) => BitShR(n1, n2) }))
     // conversion
     case "toChar" => List(Member(() -> str, { case List(n) => CodeToChar(n) }))
-    case "toStr" => List(Member(() -> str, { case List(n) => IntFormat(n) }))
+    case "__str__" | "toStr" => List(Member(() -> str, { case List(n) => IntFormat(n) }))
     case _ => Nil
 
   private def accessBoolMember(name: String): List[Member] = name match
@@ -70,61 +66,86 @@ object builtin:
     case "==>" => List(Member(bool -> bool, { case List(b1, b2) => Implies(b1, b2) }))
     case _ => Nil
 
+  def f(): Unit =
+    val s = "hello"
+    s.contains('h') // This will call the accessStrMember method with name "contains"
+
+  private def accessCharMember(name: String): List[Member] = name match
+    case "toCode" => List(Member(() -> int, { case List(c) => CharToCode(c) }))
+    case "__str__" | "toStr" => List(Member(() -> str, { case List(c) => CharToStr(c) }))
+
+    // Classification
+    case "isascii" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.ascii) }))
+    case "isalpha" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiLetter) }))
+    case "isdigit" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiDecimal) }))
+    case "islower" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiLower) }))
+    case "isupper" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiUpper) }))
+    case "isspace" => List(Member(() -> bool, { case List(c) => CharIn(c, CharSet.asciiSpace) }))
+    case _ => Nil
+
   private def accessStrMember(name: String): List[Member] = name match
-    // access
-    case "len" | "size" => List(Member(() -> int, { case List(s) => StrLength(s) }))
-    case "charAt" | "select" => List(Member(int -> str, { case List(s, i) => CharAt(s, i) }))
-    case "substr" | "slice" => List(
+    case "contains" => List(
+      Member(char -> bool, { case List(s, c) => StrContains(s, CharToStr(c)) }),
+      Member(str -> bool, { case List(s, t) => StrContains(s, t) }))
+    case "__len__" | "length" => List(Member(() -> int, { case List(s) => StrLength(s) }))
+    case "__getitem__" | "charAt" => List(Member(int -> char, { case List(s, i) => CharAt(s, i) }))
+    case "slice" | "substring" => List(
       Member(int -> str, { case List(s, i) => Substr(s, i, StrLength(s)) }),
       Member((int, int) -> str, { case List(s, i, j) => Substr(s, i, j) }))
-    // construction
-    case "+" => List(Member(str -> str, { case List(s1, s2) => StrConcat(s1, s2) }))
-    case "reverse" => List(Member(() -> str, { case List(s) => StrReverse(s) }))
-    case "join" => List(Member(ListType(str) -> str, { case List(s, es) => StrJoin(s, es) }))
-    // test
-    case "startsWith" => List(Member(str -> bool, { case List(s, t) => StrStartsWith(s, t) }))
-    case "endsWith" => List(Member(str -> bool, { case List(s, t) => StrEndsWith(s, t) }))
-    case "isAscii" => List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.ascii).star) }))
-    case "isAsciiLower" =>
-      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiLower).star) }))
-    case "isAsciiUpper" =>
-      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiUpper).star) }))
-    case "isAsciiLetter" =>
-      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiLetter).star) }))
-    case "isAsciiDigit" =>
-      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiDecimal).star) }))
-    case "isAsciiSpace" =>
-      List(Member(() -> bool, { case List(s) => StrIn(s, RegEx.symbolSet(CharSet.asciiSpace).star) }))
-    // search
-    case "contains" => List(Member(str -> bool, { case List(s, t) => StrContains(s, t) }))
-    case "indexOf" => List(
+    case "__add__" | "+" | "concat" => List(Member(str -> str, { case List(s1, s2) => StrConcat(s1, s2) }))
+    case "startswith" | "startsWith" => List(Member(str -> bool, { case List(s, t) => StrStartsWith(s, t) }))
+    case "endswith" | "endsWith" => List(Member(str -> bool, { case List(s, t) => StrEndsWith(s, t) }))
+    case "find" | "indexOf" => List(
+      Member(char -> int, { case List(s, c) => StrIndexOf(s, CharToStr(c)) }),
+      Member((char, int) -> int, { case List(s, c, i) => StrIndexOf(s, CharToStr(c), i) }),
       Member(str -> int, { case List(s, t) => StrIndexOf(s, t) }),
       Member((str, int) -> int, { case List(s, t, i) => StrIndexOf(s, t, i) }))
-    case "count" => List(Member(str -> int, { case List(s, t) => StrCount(s, t) }))
-    case "split" => List(
-      Member(str -> ListType(str), { case List(s, t) => StrSplit(s, t) }),
-      Member((str, int) -> ListType(str), { case List(s, t, k) => StrSplit(s, t, Some(k)) }))
-    case "replace" => List(Member((str, str) -> str, { case List(s, t1, t2) => StrReplace(s, t1, t2) }))
-    // conversion
-    case "trim" => List(Member(() -> str, { case List(s) => StrTrim(s) }))
-    case "toLower" => List(Member(() -> str, { case List(s) => StrToLower(s) }))
-    case "toUpper" => List(Member(() -> str, { case List(s) => StrToUpper(s) }))
+    case "replace" => List(
+      Member((char, char) -> str, { case List(s, c1, c2) => StrReplace(s, CharToStr(c1), CharToStr(c2)) }),
+      Member((str, str) -> str, { case List(s, t1, t2) => StrReplace(s, t1, t2) }))
     case "__int__" => List(Member(() -> int, { case List(s) => StrToInt(s) }))
-    case "toCode" => List(Member(() -> int, { case List(s) => CharToCode(s) }))
+
+    // String extensions
+    case "reverse" => List(Member(() -> str, { case List(s) => StrReverse(s) }))
+    case "strip" | "trim" => List(Member(() -> str, { case List(s) => StrTrim(s) }))
+    case "split" => List(
+      Member(char -> ListType(str), { case List(s, c) => StrSplit(s, CharToStr(c)) }),
+      Member(str -> ListType(str), { case List(s, t) => StrSplit(s, t) }))
+    case "join" => List(Member(ListType(str) -> str, { case List(s, ts) => StrJoin(s, ts) }))
+    case "count" => List(
+      Member(char -> int, { case List(s, c) => StrCount(s, CharToStr(c)) }),
+      Member(str -> int, { case List(s, t) => StrCount(s, t) }))
+
     // String higher-order
-    case "forall" => List(Member((str -> bool) -> bool, { case List(s, f) => StrForall(s, f) }))
-    case "map" => List(Member((str -> str) -> str, { case List(s, f) => StrMap(s, f) }))
+    case "forall" => List(Member((char -> bool) -> bool, { case List(s, f) => StrForall(s, f) }))
+    case "map" => List(Member((char -> str) -> str, { case List(s, f) => StrMap(s, f) }))
+
+    // String classification
+    case "isascii" => List(Member(() -> bool, { case List(s) => mkStrIs(s, CharSet.ascii) }))
+    case "isalpha" => List(Member(() -> bool, { case List(s) => mkStrIs(s, CharSet.asciiLetter) }))
+    case "isdigit" => List(Member(() -> bool, { case List(s) => mkStrIs(s, CharSet.asciiDecimal) }))
+    case "islower" => List(Member(() -> bool, { case List(s) => mkStrIs(s, CharSet.asciiLower) }))
+    case "isupper" => List(Member(() -> bool, { case List(s) => mkStrIs(s, CharSet.asciiUpper) }))
+    case "isspace" => List(Member(() -> bool, { case List(s) => mkStrIs(s, CharSet.asciiSpace) }))
+
+    // Case manipulation
+    case "lower" | "toLower" => List(Member(() -> str, { case List(s) => StrToLower(s) }))
+    case "upper" | "toUpper" => List(Member(() -> str, { case List(s) => StrToUpper(s) }))
     case _ => Nil
+
+  private def mkStrIs(s: Expr, cs: CharSet): Range => Expr =
+    val re = RegEx.symbolSet(cs).star
+    StrForall(s, LambdaExpr(List("c" -> char), CharIn(Var("c"), cs)))
 
   private def accessListMember(t: Type, name: String): List[Member] = name match
     case "contains" => List(Member(t -> bool, { case List(s, x) => ListContains(s, x) }))
-    case "len" | "size" => List(Member(() -> int, { case List(s) => ListLength(s) }))
-    case "select" => List(Member(int -> t, { case List(s, i) => ListSelect(s, i) }))
+    case "__len__" | "size" => List(Member(() -> int, { case List(s) => ListLength(s) }))
+    case "__getitem__" | "select" => List(Member(int -> t, { case List(s, i) => ListSelect(s, i) }))
     case "update" => List(Member((int, t) -> ListType(t), { case List(s, i, x) => ListUpdate(s, i, x) }))
     case "slice" => List(
       Member(int -> ListType(t), { case List(s, i) => ListSlice(s, i, ListLength(s)) }),
       Member((int, int) -> ListType(t), { case List(s, i, j) => ListSlice(s, i, j) }))
-    case "+" => List(Member(ListType(t) -> ListType(t), { case List(s1, s2) => ListConcat(s1, s2) }))
+    case "__add__" | "+" => List(Member(ListType(t) -> ListType(t), { case List(s1, s2) => ListConcat(s1, s2) }))
     case "indexOf" => List(
       Member(t -> int, { case List(s, x) => ListIndexOf(s, x) }),
       Member((t, int) -> int, { case List(s, x, i) => ListIndexOf(s, x, i) }))

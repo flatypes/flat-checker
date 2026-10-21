@@ -18,6 +18,7 @@ enum Domain:
   case Index(len: Expr, set: IndexSet)
   case Num(set: NatRange)
   case Bool(set: BoolSet)
+  case Char(set: CharSet)
   case Str(set: StrRE)
   case StrList(set: RegEx[StrRE])
 
@@ -126,6 +127,19 @@ object Inferer extends LazyLogging:
             else Domain.Bool(BoolSet.Full)
           case _ => Domain.Top
 
+      // Char
+      case CharToStr(e) =>
+        infer(e) match
+          case Domain.Char(a) => Domain.Str(RegEx.symbolSet(a))
+          case _ => Domain.Top
+      case CharIn(e, a) =>
+        infer(e) match
+          case Domain.Char(b) =>
+            if b.subsetOf(a) then Domain.Bool(BoolSet.True)
+            else if (b & a).isEmpty then Domain.Bool(BoolSet.False)
+            else Domain.Bool(BoolSet.Full)
+          case _ => Domain.Top
+
       // String
       case StrContains(e, StrConst(t)) =>
         infer(e) match
@@ -209,6 +223,12 @@ object Inferer extends LazyLogging:
       case StrToUpper(e) =>
         infer(e) match
           case Domain.Str(r) => Domain.Str(r.absMap(_.map(_.toUpper)))
+          case _ => Domain.Top
+      case StrForall(e, LambdaExpr(List(c -> _), CharIn(Var(c1), a))) if c1 == c =>
+        infer(e) match
+          case Domain.Str(r) =>
+            if r.alphabet.subsetOf(a) then Domain.Bool(BoolSet.True)
+            else Domain.Bool(BoolSet.Full)
           case _ => Domain.Top
 
       // List

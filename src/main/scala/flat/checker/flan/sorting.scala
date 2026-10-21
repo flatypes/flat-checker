@@ -5,7 +5,7 @@ import flat.checker.flan.tpd.*
 object sorting:
   extension (typ: Type)
     def isSort: Boolean = typ match
-      case IntType | BoolType | StrType | NullType | NoType => true
+      case IntType | BoolType | CharType | StrType | NullType | NoType => true
       case ListType(t) => t.isSort
       case SetType(t) => t.isSort
       case MapType(tk, tv) => tk.isSort && tv.isSort

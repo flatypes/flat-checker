@@ -148,8 +148,8 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def unary: Parser[Expr] = prefix(unaryOp("not" | "~" | "-"), term)
 
   private def term: Parser[Expr] =
-    postfix(intConst | strConst | boolConst | nullConst | termRef | listExpr | setExpr | mapExpr | parenExpr,
-      fieldAccessOp | indexAccessOp | applyOp | sliceOp)
+    postfix(intConst | charConst | strConst | boolConst | nullConst | termRef | listExpr | setExpr | mapExpr
+      | parenExpr, fieldAccessOp | indexAccessOp | applyOp | sliceOp)
 
   private def intConst: Parser[IntConst] = INT ^^ { tk => IntConst(parseInt(tk.value))(tk.span) }
 
@@ -158,6 +158,8 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     else if s.startsWith("0o") || s.startsWith("0O") then BigInt(s.drop(2).replace("_", ""), 8)
     else if s.startsWith("0x") || s.startsWith("0X") then BigInt(s.drop(2).replace("_", ""), 16)
     else BigInt(s.replace("_", ""), 10)
+
+  private def charConst: Parser[CharConst] = CHAR ^^ { tk => CharConst(unescapeChar(tk.value))(tk.span) }
 
   private def unescapeChar(s: String): Char =
     val (c, j) = unescape(s, 1)
@@ -220,7 +222,7 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
 
   private def indexAccessOp: Parser[Expr => Expr] =
     "[" ~ expr ~ "]" ^^ { case tk1 ~ ei ~ tk =>
-      val member = Ident("select")(tk1.span)
+      val member = Ident("__getitem__")(tk1.span)
       e => Apply(Access(e, member)(Span(e.range.getStart, tk1.span.getEnd)), List(ei))(tk.span.getEnd)
     }
 
@@ -244,7 +246,8 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def pTerm: Parser[PExpr] =
     postfix(pStr | pRStr | pRef | pParen, pStarOp | pPlusOp | pOptOp | pRepOp)
 
-  private def pStr: Parser[PStr] = STR ^^ { tk => PStr(unescapeStr(tk.value)) }
+  private def pStr: Parser[PStr] =
+    CHAR ^^ { tk => PStr(unescapeChar(tk.value).toString) } | STR ^^ { tk => PStr(unescapeStr(tk.value)) }
 
   private def pRStr: Parser[PExpr] =
     R_STR ^^ { tk => RegParser(uri, tk.span.getStart).parse(tk.value.drop(2).dropRight(1)) }

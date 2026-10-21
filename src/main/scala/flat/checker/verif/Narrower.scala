@@ -128,15 +128,17 @@ class Narrower(goal: Goal) extends LazyLogging:
     case Le(IntConst(n), StrLength(e)) if n >= 0 => (e, _.filterLengthGe(n.toInt))
     case Lt(IntConst(n), StrLength(e)) if n >= -1 => (e, _.filterLengthGe(n.toInt + 1))
 
-    // CharAt: e[i] == c, e[i] != c, e[i] in cs, e[i] !in cs
+    // CharAt: e[i] == c, e[i] != c
     case Eq(CharAt(e, IntConst(i)), CharConst(c)) => (e, _.filterElemAtEq(i.toInt, c))
     case Eq(Substr(e, IntConst(i), IntConst(j)), StrConst(s)) if j == i + 1 && s.length == 1 =>
       (e, _.filterElemAtEq(i.toInt, s.head))
     case Ne(CharAt(e, IntConst(i)), CharConst(c)) => (e, _.filterElemAtNe(i.toInt, c))
     case Ne(Substr(e, IntConst(i), IntConst(j)), StrConst(s)) if j == i + 1 && s.length == 1 =>
       (e, _.filterElemAtNe(i.toInt, s.head))
-    case StrContains(CharAt(e, IntConst(i)), StrConst(cs)) => (e, _.filterElemWith(i.toInt, _ & CharSet.from(cs)))
-    case Not(StrContains(CharAt(e, IntConst(i)), StrConst(cs))) => (e, _.filterElemWith(i.toInt, _ -- cs))
+
+    // c in A, c not in A
+    case CharIn(CharAt(e, IntConst(i)), a) => (e, _.filterElemWith(i.toInt, _ & a))
+    case Not(CharIn(CharAt(e, IntConst(i)), a)) => (e, _.filterElemWith(i.toInt, _ & ~a))
 
     // Contain: e.contains(t)
     case StrContains(e, StrConst(t)) => (e, _.filterContains(t.toList))
@@ -186,11 +188,13 @@ class Narrower(goal: Goal) extends LazyLogging:
       if e1 == e && t1.length == 1 && t2.length == 1 && t1 != t2 =>
       (e, _.filterIndexOfLt(t1.head, t2.head))
 
-    // Chars in: s in A*
-    case StrIn(CharAt(e, IntConst(i)), RegEx.Star(RegEx.Lit(a))) => (e, _.filterElemWith(i.toInt, _ & a))
-    case Not(StrIn(CharAt(e, IntConst(i)), RegEx.Star(RegEx.Lit(a)))) => (e, _.filterElemWith(i.toInt, _ & ~a))
-    case StrIn(e, RegEx.Star(RegEx.Lit(a))) => (e, _.filterForallCharIn(a))
-    case Not(StrIn(e, RegEx.Star(RegEx.Lit(a)))) => (e, _.filterExistsCharIn(~a))
+    // s.forall(c => c in A)
+    case StrForall(e, LambdaExpr(List(c -> _), CharIn(Var(c1), a))) if c1 == c => (e, _.filterForallCharIn(a))
+    case Not(StrForall(e, LambdaExpr(List(c -> _), CharIn(Var(c1), a)))) if c1 == c => (e, _.filterExistsCharIn(~a))
+    case StrForall(e, LambdaExpr(List(c -> _), StrContains(StrConst(cs), CharToStr(Var(c1))))) if c1 == c =>
+      (e, _.filterForallCharIn(CharSet.from(cs)))
+    case Not(StrForall(e, LambdaExpr(List(c -> _), StrContains(StrConst(cs), CharToStr(Var(c1)))))) if c1 == c =>
+      (e, _.filterExistsCharIn(~CharSet.from(cs)))
   }
 
   private val symbolSet =
