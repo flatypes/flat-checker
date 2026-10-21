@@ -68,18 +68,13 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     case _ => FunType(List(left), right)(left.range.getStart)
 
   private def optType: Parser[Type] =
-    postfix(stdType | typeName | parenType | reftType, "?" ^^ { tk => t => OptType(t)(tk.span.getEnd) })
-
-  private def stdType: Parser[Type] =
-    "Int" ^^ { tk => IntType()(tk.span) }
-      | "Bool" ^^ { tk => BoolType()(tk.span) }
-      | "Str" ^^ { tk => StrType()(tk.span) }
-      | "List" ~ ("[" ~> typ) ~ "]" ^^ { case tk1 ~ t ~ tk2 => ListType(t)(Span(tk1.span.getStart, tk2.span.getEnd)) }
-      | "Set" ~ ("[" ~> typ) ~ "]" ^^ { case tk1 ~ t ~ tk2 => SetType(t)(Span(tk1.span.getStart, tk2.span.getEnd)) }
-      | "Map" ~ ("[" ~> typ) ~ ("," ~> typ) ~ "]"
-      ^^ { case tk1 ~ k ~ v ~ tk2 => MapType(k, v)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+    postfix(typeName | parenType | typeApply | reftType, "?" ^^ { tk => t => OptType(t)(tk.span.getEnd) })
 
   private def typeName: Parser[TypeName] = IDENTIFIER ^^ { tk => TypeName(tk.value)(tk.span) }
+
+  private def typeApply: Parser[TypeApply] =
+    ident ~ ("[" ~> rep1sep(typ, ",")) ~ "]"
+      ^^ { case id ~ ts ~ tk => TypeApply(id, ts)(Span(id.range.getStart, tk.span.getEnd)) }
 
   private def parenType: Parser[Type] =
     "(" ~ repsep(typ, ",") ~ ")" ^^ {
@@ -109,9 +104,9 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
 
   private def implies: Parser[Expr] = infixR(binaryOp("==>"), or)
 
-  private def or: Parser[Expr] = infixR(binaryOp("||"), and)
+  private def or: Parser[Expr] = infixR(binaryOp("or"), and)
 
-  private def and: Parser[Expr] = infixR(binaryOp("&&"), relational)
+  private def and: Parser[Expr] = infixR(binaryOp("and"), relational)
 
   private def relational: Parser[Expr] =
     chainedRelational("<=" | "<") | chainedRelational(">=" | ">")
@@ -123,15 +118,15 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
         val conds = for i <- cmps.indices yield
           val op = cmps(i)._1
           BinaryExpr(if i == 0 then e else cmps(i - 1)._2, Ident(op.value)(op.span), cmps(i)._2)
-        val andOp = Ident("&&")(e.range.getStart)
+        val andOp = Ident("and")(e.range.getStart)
         conds.reduceRight(BinaryExpr(_, andOp, _))
     }
 
   private def notIn: Parser[(Expr, Expr) => Expr] =
-    "!" ~ "in" ^^ {
+    "not" ~ "in" ^^ {
       case tk1 ~ tk2 =>
         val inOp = Ident("in")(tk2.span)
-        val notOp = Ident("prefix_!")(tk1.span)
+        val notOp = Ident("not")(tk1.span)
         (e1, e2) => Access(BinaryExpr(e1, inOp, e2), notOp)(Span(e1.range.getStart, e2.range.getEnd))
     }
 
@@ -150,11 +145,11 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def unaryOp(op: Parser[Token]): Parser[Expr => Expr] =
     op ^^ { tk => e => Access(e, Ident("prefix_" + tk.value)(tk.span))(Span(tk.span.getStart, e.range.getEnd)) }
 
-  private def unary: Parser[Expr] = prefix(unaryOp("!" | "~" | "-"), term)
+  private def unary: Parser[Expr] = prefix(unaryOp("not" | "~" | "-"), term)
 
   private def term: Parser[Expr] =
-    postfix(intConst | strConst | boolConst | nullConst | termRef | listExpr | setExpr | mapExpr
-      | parenExpr | size, fieldAccessOp | indexAccessOp | applyOp | sliceOp)
+    postfix(intConst | strConst | boolConst | nullConst | termRef | listExpr | setExpr | mapExpr | parenExpr,
+      fieldAccessOp | indexAccessOp | applyOp | sliceOp)
 
   private def intConst: Parser[IntConst] = INT ^^ { tk => IntConst(parseInt(tk.value))(tk.span) }
 
@@ -194,9 +189,9 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
       i = j
     sb.toString
 
-  private def boolConst: Parser[BoolConst] = ("true" | "false") ^^ { tk => BoolConst(tk.value.toBoolean)(tk.span) }
+  private def boolConst: Parser[BoolConst] = ("True" | "False") ^^ { tk => BoolConst(tk.value.toBoolean)(tk.span) }
 
-  private def nullConst: Parser[NullConst] = "null" ^^ { tk => NullConst()(tk.span) }
+  private def nullConst: Parser[NullConst] = "None" ^^ { tk => NullConst()(tk.span) }
 
   private def termRef: Parser[TermName] = IDENTIFIER ^^ { tk => TermName(tk.value)(tk.span) }
 
@@ -219,10 +214,6 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
       case _ ~ List(e) ~ _ => e
       case tk1 ~ es ~ tk2 => TupleExpr(es)(Span(tk1.span.getStart, tk2.span.getEnd))
     }
-
-  private def size: Parser[Expr] =
-    "|" ~ expr ~ "|"
-      ^^ { case tk1 ~ e ~ tk2 => Access(e, Ident("size")(tk1.span))(Span(tk1.span.getStart, tk2.span.getEnd)) }
 
   private def fieldAccessOp: Parser[Expr => Expr] =
     "." ~> ident ^^ { f => e => Access(e, f)(Span(e.range.getStart, f.range.getEnd)) }

@@ -64,15 +64,15 @@ object builtin:
     case _ => Nil
 
   private def accessBoolMember(name: String): List[Member] = name match
-    case "prefix_!" => List(Member(() -> bool, { case List(b) => Not(b) }))
-    case "&&" => List(Member(bool -> bool, { case List(b1, b2) => And(b1, b2) }))
-    case "||" => List(Member(bool -> bool, { case List(b1, b2) => Or(b1, b2) }))
+    case "and" => List(Member(bool -> bool, { case List(b1, b2) => And(b1, b2) }))
+    case "or" => List(Member(bool -> bool, { case List(b1, b2) => Or(b1, b2) }))
+    case "not" | "prefix_not" => List(Member(() -> bool, { case List(b) => Not(b) }))
     case "==>" => List(Member(bool -> bool, { case List(b1, b2) => Implies(b1, b2) }))
     case _ => Nil
 
   private def accessStrMember(name: String): List[Member] = name match
     // access
-    case "length" | "size" => List(Member(() -> int, { case List(s) => StrLength(s) }))
+    case "len" | "size" => List(Member(() -> int, { case List(s) => StrLength(s) }))
     case "charAt" | "select" => List(Member(int -> str, { case List(s, i) => CharAt(s, i) }))
     case "substr" | "slice" => List(
       Member(int -> str, { case List(s, i) => Substr(s, i, StrLength(s)) }),
@@ -118,7 +118,7 @@ object builtin:
 
   private def accessListMember(t: Type, name: String): List[Member] = name match
     case "contains" => List(Member(t -> bool, { case List(s, x) => ListContains(s, x) }))
-    case "length" | "size" => List(Member(() -> int, { case List(s) => ListLength(s) }))
+    case "len" | "size" => List(Member(() -> int, { case List(s) => ListLength(s) }))
     case "select" => List(Member(int -> t, { case List(s, i) => ListSelect(s, i) }))
     case "update" => List(Member((int, t) -> ListType(t), { case List(s, i, x) => ListUpdate(s, i, x) }))
     case "slice" => List(

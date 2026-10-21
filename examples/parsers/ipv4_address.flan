@@ -1,16 +1,16 @@
-// RFC 3986 IPv4 address
-// See https://www.rfc-editor.org/info/rfc3986/#appendix-A
-lang DecOctet = r'[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5]'
+# RFC 3986 IPv4 address
+# See https://www.rfc-editor.org/info/rfc3986/#appendix-A
+lang DecOctet = r"[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5]"
 lang IPv4Address = DecOctet "." DecOctet "." DecOctet "." DecOctet
 
-type U32 = {n: Int | 0 <= n < 2 ** 32}
+type U32 = {n: int | 0 <= n < 2 ** 32}
 
 def parse_ipv4_address(ip_str: IPv4Address) -> U32:
     if ip_str == "":
         raise "Address cannot be empty"
 
     var octets = ip_str.split('.')
-    if |octets| != 4:
+    if len(octets) != 4:
         raise "Expected 4 octets"
 
     var ip_int = 0
@@ -23,23 +23,23 @@ def parse_ipv4_address(ip_str: IPv4Address) -> U32:
         i += 1
     return ip_int
 
-type Byte = {n: Int | 0 <= n < 2 ** 8}
+type Byte = {n: int | 0 <= n < 2 ** 8}
 
 def _parse_octet(octet_str: DecOctet) -> Byte:
     if octet_str == "":
         raise "Empty octet not permitted"
-    // Reject non-ASCII digits.
-    if !octet_str.isAsciiDigit:
+    # Reject non-ASCII digits.
+    if not octet_str.isAsciiDigit:
         raise "Only decimal digits permitted"
-    // We do the length check second, since the invalid character error
-    // is likely to be more informative for the user
-    if |octet_str| > 3:
+    # We do the length check second, since the invalid character error
+    # is likely to be more informative for the user
+    if len(octet_str) > 3:
         raise "At most 3 characters permitted"
-    // Handle leading zeros as strict as glibc's inet_pton()
-    // See security bug bpo-36384
-    if octet_str != "0" && octet_str[0] == '0':
+    # Handle leading zeros as strict as glibc's inet_pton()
+    # See security bug bpo-36384
+    if octet_str != "0" and octet_str[0] == '0':
         raise "Leading zeros are not permitted"
-    // Convert to integer (we know digits are legal)
+    # Convert to integer (we know digits are legal)
     var octet_int = octet_str.toInt
     if octet_int > 255:
         raise "Octet > 255 not permitted"

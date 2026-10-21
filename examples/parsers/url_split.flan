@@ -1,12 +1,12 @@
-// https://datatracker.ietf.org/doc/html/rfc3986.html
-lang C = r"[a-zA-Z0-9\-._~!$&'()*+,;=]" // unreserved / sub-delims
-lang H = r"[0-9a-fA-F]" // HEXDIG
-lang PctEncoded = "%" H H
-
-lang Scheme = r"[a-zA-Z][a-zA-Z0-9+\-.]*"
-
 from ipv4_address import IPv4Address
 from ipv6_address import IPv6Address
+
+# RFC 3986 URI
+# See https://datatracker.ietf.org/doc/html/rfc3986.html
+lang C = r"[a-zA-Z0-9\-._~!$&'()*+,;=]" # unreserved / sub-delims
+lang H = r"[0-9a-fA-F]" # HEXDIG
+lang PctEncoded = "%" H H
+lang Scheme = r"[a-zA-Z][a-zA-Z0-9+\-.]*"
 
 lang IPvFuture = "v" H+ "." (C | ":")+
 lang IPLiteral = "[" (IPv6Address | IPvFuture) "]"
@@ -19,15 +19,16 @@ lang Authority = (UserInfo "@")? Host (":" Port)?
 
 lang PChar = C | PctEncoded | ":" | "@"
 lang Segment = PChar*
-lang SegmentNz = PChar+ // non-zero-length segment
-lang SegmentNzNc = (C | PctEncoded | "@")+ // non-zero-length segment without any colon
+lang SegmentNz = PChar+ # non-zero-length segment
+lang SegmentNzNc = (C | PctEncoded | "@")+ # non-zero-length segment without any colon
 
-lang PathAbEmpty = ("/" Segment)* // begins with "/" or is empty
-lang PathAbsolute = "/" (SegmentNz ("/" Segment)*)? // begins with "/" but not "//"
-lang PathNoScheme = SegmentNzNc ("/" Segment)* // begins with a non-colon segment
-lang PathRootless = SegmentNz ("/" Segment)* // begins with a segment
-lang PathEmpty = "" // zero characters
-// NOTE: PathAbsolute | PathEmpty <: PathAbEmpty, PathNoScheme <: PathRootless
+lang PathAbEmpty = ("/" Segment)* # begins with "/" or is empty
+lang PathAbsolute = "/" (SegmentNz ("/" Segment)*)? # begins with "/" but not "//"
+lang PathNoScheme = SegmentNzNc ("/" Segment)* # begins with a non-colon segment
+lang PathRootless = SegmentNz ("/" Segment)* # begins with a segment
+lang PathEmpty = "" # zero characters
+
+# NOTE: PathAbsolute | PathEmpty <: PathAbEmpty, PathNoScheme <: PathRootless
 lang Path = PathAbEmpty | PathRootless
 lang RelativePath = PathAbEmpty | PathNoScheme
 
@@ -45,22 +46,22 @@ lang URL = URI | RelativeRef
 lang SchemeChars = r"[a-zA-Z0-9+\-.]*"
 
 def url_split(url: URL) -> (Scheme?, Authority?, Path, Query?, Fragment?):
-    var scheme: Scheme? = null
-    var netloc: Authority? = null
-    var query: Query? = null
-    var fragment: Fragment? = null
-    var rest: Str = url
+    var scheme: Scheme? = None
+    var netloc: Authority? = None
+    var query: Query? = None
+    var fragment: Fragment? = None
+    var rest: str = url
 
     var i = url.indexOf(':')
-    if i > 0 && url[0].isAsciiLetter && url[:i] in SchemeChars:
+    if i > 0 and url[0].isAsciiLetter and url[:i] in SchemeChars:
         scheme = url[:i].toLower
         rest = url[i+1:]
     if rest[:2] == "//":
         var (auth, s) = _split_netloc(rest)
-        if (('[' in auth && ']' !in auth) ||
-            (']' in auth && '[' !in auth)):
+        if (('[' in auth and ']' not in auth) or
+            (']' in auth and '[' not in auth)):
             raise "Invalid IPv6 URL"
-        if '[' in auth && ']' in auth:
+        if '[' in auth and ']' in auth:
             _check_bracketed_netloc(auth)
         netloc = auth
         rest = s
@@ -78,8 +79,8 @@ lang NetURLRest = PathAbEmpty ("?" Query)? ("#" Fragment)?
 lang NetURL = "//" Authority NetURLRest
 
 def _split_netloc(url: NetURL) -> (Authority, NetURLRest):
-    var delim = |url|   // position of end of domain part of url, default is end
-    // Unfold for-loop: for c in '/?#'
+    var delim = len(url)   # position of end of domain part of url, default is end
+    # Unfold for-loop: for c in '/?#'
     var wdelim = url.indexOf('/', 2)
     if wdelim >= 0:
         delim = delim < wdelim ? delim : wdelim
@@ -102,14 +103,14 @@ def _check_bracketed_netloc(netloc: BrNetLoc):
     var bracketed = i >= 0 ? hostname_and_port[i+1:] : ""
     var hostname: Str = ""
     if have_open_br:
-        // No data is allowed before a bracket.
+        # No data is allowed before a bracket.
         if before_bracket != "":
             raise "Invalid IPv6 URL"
         i = bracketed.indexOf(']')
         hostname = i >= 0 ? bracketed[:i] : bracketed
         var port = i >= 0 ? bracketed[i+1:] : ""
-        // No data is allowed after the bracket but before the port delimiter.
-        if port != "" && !port.startsWith(":"):
+        # No data is allowed after the bracket but before the port delimiter.
+        if port != "" and not port.startsWith(":"):
             raise "Invalid IPv6 URL"
     else:
         i = hostname_and_port.indexOf(':')
@@ -119,11 +120,11 @@ def _check_bracketed_netloc(netloc: BrNetLoc):
 lang BrHost = IPv6Address | IPvFuture
 lang IPvFutureRE = r"v[a-fA-F0-9]+\..+"
 
-// Valid bracketed hosts are defined in
-// https://www.rfc-editor.org/rfc/rfc3986#page-49 and https://url.spec.whatwg.org/
+# Valid bracketed hosts are defined in
+# https://www.rfc-editor.org/rfc/rfc3986#page-49 and https://url.spec.whatwg.org/
 def _check_bracketed_host(hostname: BrHost):
     if hostname.startsWith("v"):
-        if hostname !in IPvFutureRE:
+        if hostname not in IPvFutureRE:
             raise "IPvFuture address is invalid"
     else:
         parse_ipv6_address(hostname)

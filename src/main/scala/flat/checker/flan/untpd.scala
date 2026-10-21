@@ -140,19 +140,9 @@ object untpd:
   sealed trait Type:
     val range: Range
 
-  final case class IntType()(val range: Range) extends Type
-
-  final case class BoolType()(val range: Range) extends Type
-
-  final case class StrType()(val range: Range) extends Type
-
-  final case class ListType(elemType: Type)(val range: Range) extends Type
-
-  final case class SetType(elemType: Type)(val range: Range) extends Type
-
-  final case class MapType(keyType: Type, valueType: Type)(val range: Range) extends Type
-
   final case class TypeName(name: String)(val range: Range) extends Type
+
+  final case class TypeApply(constr: Ident, args: List[Type])(val range: Range) extends Type
 
   final case class TupleType(elemTypes: List[Type])(val range: Range) extends Type:
     def arity: Int = elemTypes.length

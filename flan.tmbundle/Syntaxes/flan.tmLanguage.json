@@ -1,0 +1,93 @@
+{
+  "name": "flan",
+  "scopeName": "source.flan",
+  "fileTypes": [
+    "flan"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#functions"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.flan",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.block.flan",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.flan",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.flan",
+              "match": "\\\\."
+            }
+          ]
+        },
+        {
+          "name": "string.quoted.double.flan",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.flan",
+              "match": "\\\\."
+            }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.flan",
+          "match": "\\b(pass|assume|assert|raise|if|else|return|while|break|continue|for|in|is|and|or|not)\\b"
+        },
+        {
+          "name": "storage.type.flan",
+          "match": "\\b(type|val|lang|def|var)\\b"
+        },
+        {
+          "name": "keyword.other.flan",
+          "match": "\\b(lambda|from|import|requires|ensures|invariant|int|bool|char|str|list|set|dict|len)\\b"
+        },
+        {
+          "name": "constant.language.flan",
+          "match": "\\b(True|False|None)\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.flan",
+      "match": "\\b\\d+(\\.\\d+)?\\b"
+    },
+    "functions": {
+      "name": "entity.name.function.flan",
+      "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*(?=\\s*\\()"
+    }
+  }
+}

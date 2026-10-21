@@ -539,6 +539,8 @@ object tpd:
 
   case object BoolType extends Type
 
+  case object CharType extends Type
+
   case object StrType extends Type
 
   final case class ListType(elemType: Type) extends Type

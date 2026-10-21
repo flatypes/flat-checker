@@ -1,60 +1,18 @@
-// https://datatracker.ietf.org/doc/html/rfc3986.html
-lang C = r"[a-zA-Z0-9\-._~!$&'()*+,;=]" // unreserved / sub-delims
-lang H = r"[0-9a-fA-F]" // HEXDIG
-lang PctEncoded = "%" H H
-
-lang Scheme = r"[a-zA-Z][a-zA-Z0-9+\-.]*"
-
-from ipv4_address import IPv4Address
-from ipv6_address import IPv6Address
-
-lang IPvFuture = "v" H+ "." (C | ":")+
-lang IPLiteral = "[" (IPv6Address | IPvFuture) "]"
-lang RegName = (C | PctEncoded)*
-lang Host = IPLiteral | IPv4Address | RegName
-
-lang UserInfo = (C | PctEncoded | ":")*
-lang Port = r"[0-9]*"
-lang Authority = (UserInfo "@")? Host (":" Port)?
-
-lang PChar = C | PctEncoded | ":" | "@"
-lang Segment = PChar*
-lang SegmentNz = PChar+ // non-zero-length segment
-lang SegmentNzNc = (C | PctEncoded | "@")+ // non-zero-length segment without any colon
-
-lang PathAbEmpty = ("/" Segment)* // begins with "/" or is empty
-lang PathAbsolute = "/" (SegmentNz ("/" Segment)*)? // begins with "/" but not "//"
-lang PathNoScheme = SegmentNzNc ("/" Segment)* // begins with a non-colon segment
-lang PathRootless = SegmentNz ("/" Segment)* // begins with a segment
-lang PathEmpty = "" // zero characters
-// NOTE: PathAbsolute | PathEmpty <: PathAbEmpty, PathNoScheme <: PathRootless
-lang Path = PathAbEmpty | PathRootless
-lang RelativePath = PathAbEmpty | PathNoScheme
-
-lang Query = (PChar | "/" | "?")*
-lang Fragment = (PChar | "/" | "?")*
-
-lang HierPart = ("//" Authority PathAbEmpty) | PathAbsolute | PathRootless | PathEmpty
-lang URI = Scheme ":" HierPart ("?" Query)? ("#" Fragment)?
-
-lang RelativePart = ("//" Authority PathAbEmpty) | PathAbsolute | PathNoScheme | PathEmpty
-lang RelativeRef = RelativePart ("?" Query)? ("#" Fragment)?
-
-lang URL = URI | RelativeRef
+from url_split import Scheme, Authority, Path, Query, Fragment, URL, RelativePath
 
 def url_unsplit(scheme: Scheme?, netloc: Authority?, path: Path, query: Query?, fragment: Fragment?) -> URL:
-    requires scheme == null ==> path in RelativePath
+    requires scheme == None ==> path in RelativePath
     var url: Str = path
-    if netloc != null:
-        if url != '' && url[:1] != '/':
-            url = '/' + url
-        url = '//' + netloc + url
-    else if url[:2] == '//':
-        url = '//' + url
-    if scheme != null && scheme != '':
-        url = scheme + ':' + url
-    if query != null:
+    if netloc != None:
+        if url != "" and url[:1] != "/":
+            url = "/" + url
+        url = "//" + netloc + url
+    else if url[:2] == "//":
+        url = "//" + url
+    if scheme != None and scheme != "":
+        url = scheme + ":" + url
+    if query != None:
         url = url + '?' + query
-    if fragment != null:
+    if fragment != None:
         url = url + '#' + fragment
     return url

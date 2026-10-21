@@ -1,8 +1,8 @@
 from iso_date_format import Y, M, D
 
 lang CalendarDate = Y M D | Y '-' M '-' D
-lang W = r'W(0[1-9]|[1-4][0-9]|5[0-3])'
-lang Wd = r'[1-7]'
+lang W = r"W(0[1-9]|[1-4][0-9]|5[0-3])"
+lang Wd = r"[1-7]"
 lang WeekDate = Y W Wd? | Y '-' W ('-' Wd)?
 lang ISODate = CalendarDate | WeekDate
 
@@ -10,47 +10,47 @@ from iso_date_format import Year, Month, Day
 
 /** Construct a date from a string in ISO 8601 format. */
 def parse_iso_date(date_string: ISODate) -> (Year, Month, Day):
-    if !date_string.isAscii:
-        raise 'Argument must be an ASCII str'
+    if not date_string.isAscii:
+        raise "Argument must be an ASCII str"
 
-    if |date_string| !in {7, 8, 10}:
-        raise 'Invalid iso format string'
+    if len(date_string) not in {7, 8, 10}:
+        raise "Invalid iso format string"
 
     return _parse_iso_format_date(date_string)
 
 def _parse_iso_format_date(dtstr: ISODate) -> (Year, Month, Day):
-    // It is assumed that this is an ASCII-only string of lengths 7, 8 or 10.
-    assert |dtstr| in {7, 8, 10}
-    var year = dtstr[0:4].toInt
+    # It is assumed that this is an ASCII-only string of lengths 7, 8 or 10.
+    assert len(dtstr) in {7, 8, 10}
+    var year = int(dtstr[0:4])
     var has_sep = dtstr[4] == '-'
 
     var pos = 4 + (has_sep ? 1 : 0)
-    if dtstr[pos:pos + 1] == 'W':
-        // YYYY-?Www-?D?
+    if dtstr[pos:pos + 1] == "W":
+        # YYYY-?Www-?D?
         pos += 1
-        var weekno = dtstr[pos:pos + 2].toInt
+        var weekno = int(dtstr[pos:pos + 2])
         pos += 2
 
         var dayno = 1
-        if |dtstr| > pos:
-            if (dtstr[pos:pos + 1] == '-') != has_sep:
-                raise 'Inconsistent use of dash separator'
+        if len(dtstr) > pos:
+            if (dtstr[pos:pos + 1] == "-") != has_sep:
+                raise "Inconsistent use of dash separator"
 
             pos += has_sep ? 1 : 0
-            dayno = dtstr[pos:pos + 1].toInt
+            dayno = int(dtstr[pos:pos + 1])
 
         return _iso_week_to_gregorian(year, weekno, dayno)
     else:
-        var month = dtstr[pos:pos + 2].toInt
+        var month = int(dtstr[pos:pos + 2])
         pos += 2
         if (dtstr[pos:pos + 1] == '-') != has_sep:
-            raise 'Inconsistent use of dash separator'
+            raise "Inconsistent use of dash separator"
 
         pos += has_sep ? 1 : 0
-        var day = dtstr[pos:pos + 2].toInt
+        var day = int(dtstr[pos:pos + 2])
         return (year, month, day)
 
-type Week = {w: Int | 1 <= w && w <= 53}
-type WeekDay = {d: Int | 1 <= d && d <= 7}
+type Week = {w: Int | 1 <= w <= 53}
+type WeekDay = {d: Int | 1 <= d <= 7}
 
 def _iso_week_to_gregorian(year: Year, week: Week, day: WeekDay) -> (Year, Month, Day)

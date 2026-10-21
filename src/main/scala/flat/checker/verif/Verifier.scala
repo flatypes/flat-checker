@@ -200,6 +200,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
     else
       reporter.report(state.uri, err())
       logger.warn("Goal {} ❌", number)
+      reporter.printTo(System.err)
       System.exit(1)
       false
 

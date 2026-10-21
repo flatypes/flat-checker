@@ -58,11 +58,11 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       (BoolType, Ne(left, right)(node.range), leftSide ++ rightSide)
 
     // Operations: logical that may introduce assumptions
-    case untpd.BinaryExpr(e1, untpd.Ident("&&"), e2) =>
+    case untpd.BinaryExpr(e1, untpd.Ident("and"), e2) =>
       val (left, leftSide) = check(e1, BoolType, ctx)
       val (right, rightSide) = check(e2, BoolType, assume(left, ctx))
       (BoolType, And(left, right)(node.range), leftSide ++ rightSide)
-    case untpd.BinaryExpr(e1, untpd.Ident("||"), e2) =>
+    case untpd.BinaryExpr(e1, untpd.Ident("or"), e2) =>
       val (left, leftSide) = check(e1, BoolType, ctx)
       val (right, rightSide) = check(e2, BoolType, assume(Not(left), ctx))
       (BoolType, Or(left, right)(node.range), leftSide ++ rightSide)
@@ -137,6 +137,14 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       val fresh = "fresh_" + freshCounter.getAndIncrement()
       (info.returnType, Var(fresh)(node.range), argsSide ++ List(MethodCall(List(fresh), m, args)(node.range)))
 
+    // Built-in function application
+    case untpd.Apply(id@untpd.TermName(f), es) if builtins.contains(f) =>
+      f match
+        case "len" => inferOperation(es.head, untpd.Ident("len")(id.range), es.tail, node.range, ctx)
+        case "int" => inferOperation(es.head, untpd.Ident("toInt")(id.range), es.tail, node.range, ctx)
+        case "str" => inferOperation(es.head, untpd.Ident("toStr")(id.range), es.tail, node.range, ctx)
+        case _ => throw NotImplementedError(s"Built-in function $f is not implemented")
+
     // Function application: others
     case untpd.Apply(e, es) =>
       val (typ, fun, funSide) = infer(e, ctx)
@@ -151,6 +159,8 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
 
     case _ =>
       throw NotImplementedError(s"Type inference for ${node.getClass.getSimpleName} is not implemented")
+
+  private val builtins = Set("len", "ord", "chr", "str", "int", "bool", "char")
 
   private def narrow(x: String, typ: Type, ctx: TypingCtx): Type = typ match
     case OptType(t) =>
@@ -306,12 +316,6 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.PAllChar => RegEx.symbolSet(CharSet.full)
 
   def unfold(node: untpd.Type, ctx: TypingCtx): Type = node match
-    case untpd.IntType() => IntType
-    case untpd.BoolType() => BoolType
-    case untpd.StrType() => StrType
-    case untpd.ListType(t) => ListType(unfold(t, ctx))
-    case untpd.SetType(t) => SetType(unfold(t, ctx))
-    case untpd.MapType(tk, tv) => MapType(unfold(tk, ctx), unfold(tv, ctx))
     case t@untpd.TypeName(x) =>
       ctx.lookup(x) match
         case Some(TypeInfo(_, typ)) => typ
@@ -319,9 +323,34 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
         case Some(_) =>
           reporter.reportNotType(t.range, x)
           NoType
-        case None =>
-          reporter.report(ctx.uri, UndefinedName(t.range, x))
-          NoType
+        case None => x match
+          case "int" | "Int" => IntType
+          case "bool" | "Bool" => BoolType
+          case "char" | "Char" => CharType
+          case "str" | "Str" => StrType
+          case _ =>
+            reporter.report(ctx.uri, UndefinedName(t.range, x))
+            NoType
+
+    case t@untpd.TypeApply(id, ts) =>
+      id.name match
+        case "list" | "List" =>
+          if ts.length != 1 then
+            reporter.report(ctx.uri, ArityMismatch(t.range, 1, ts.length))
+          val elem = unfold(ts.head, ctx)
+          ListType(elem)
+        case "set" | "Set" =>
+          if ts.length != 1 then
+            reporter.report(ctx.uri, ArityMismatch(t.range, 1, ts.length))
+          val elem = unfold(ts.head, ctx)
+          SetType(elem)
+        case "dict" | "Map" =>
+          if ts.length != 2 then
+            reporter.report(ctx.uri, ArityMismatch(t.range, 2, ts.length))
+          val key = unfold(ts.head, ctx)
+          val value = if ts.length >= 2 then unfold(ts(1), ctx) else NoType
+          MapType(key, value)
+
     case untpd.TupleType(ts) => TupleType(ts.map(unfold(_, ctx)))
     case untpd.FunType(ts, t) => FunType(ts.map(unfold(_, ctx)), unfold(t, ctx))
     case untpd.OptType(t) => OptType(unfold(t, ctx))

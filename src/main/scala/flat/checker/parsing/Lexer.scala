@@ -17,19 +17,29 @@ import flat.checker.parsing.TokenType.*
 final case class Token(typ: TokenType, value: String, span: Span)
 
 val operators: List[String] = List(
-  ",", ":", ".", "=", "->", "?",
-  "!", "-", "~",
-  "+", "*", "/", "%", "**", "==", "!=", "<=", "<", ">=", ">",
-  "&&", "||", "==>", "&", "|", "^", "<<", ">>",
-  "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "<<=", ">>=",
+  // Arithmetic
+  "+", "-", "*", "**", "/", "//", "%",
+  // Comparison
+  "==", "!=", "<=", "<", ">=", ">",
+  // Bitwise
+  "&", "|", "^", "~", "<<", ">>",
+  // Assignment
+  "+=", "-=", "*=", "**=", "/=", "//=", "%=",
+  "&=", "|=", "^=", "<<=", ">>=",
+  // Enclosing
+  "(", ")", "[", "]", "{", "}",
+  // Other
+  ",", ":", "!", ";", "=", "->", ".", "@", "?", "==>"
 ).sortBy(_.length).reverse
 
 val keywords: List[String] = List(
-  "from", "import", "type", "val", "lang", "def", "requires", "ensures",
-  "true", "false", "null", "in", "lambda",
-  "pass", "var", "assume", "assert", "raise", "if", "else", "return",
-  "while", "invariant", "break", "continue", "for",
-  "Int", "Bool", "Str", "List", "Set", "Map"
+  // Python
+  "and", "as", "assert", "break", "continue", "def", "elif", "else", "for", "from",
+  "if", "import", "in", "is", "lambda", "not", "or", "pass", "raise", "return",
+  "while", "True", "False", "None",
+  // Extensions
+  "type", "val", "var", "lang",
+  "assume", "requires", "ensures", "invariant",
 )
 
 val tabSize = 4
@@ -44,7 +54,7 @@ class Lexer(uri: String, text: String)(using reporter: Reporter) extends RegexPa
 
   private def emptyLine: Parser[List[Token]] = whitespace ~> "\n" ^^^ Nil
 
-  private val comment = """//[^\n]*|/\*([^*]|\*(?!/))*\*/"""
+  private val comment = """#[^\n]*|/\*([^*]|\*(?!/))*\*/"""
 
   private val ws1: Parser[String] = Regex("""([ \f\t]|""" + comment + """|\\\n)*""")
 
@@ -62,13 +72,11 @@ class Lexer(uri: String, text: String)(using reporter: Reporter) extends RegexPa
 
   private def str: Parser[Token] = withSpan(singleQuotedStr | doubleQuotedStr) ^^ (Token(STR, _, _))
 
-  private def singleQuotedStr: Parser[String] = """'([^\n\\']|\\([\\'"abfnrtv]|u[0-9a-fA-F]{4}))*'""".r
+  private def singleQuotedStr: Parser[String] = """'([^\n\\']|\\([\\'"abfnrtv]|u[0-9a-fA-F]{4}))'""".r
 
   private def doubleQuotedStr: Parser[String] = """"([^\n\\"]|\\([\\'"abfnrtv]|u[0-9a-fA-F]{4}))*"""".r
 
-  private def rStr: Parser[Token] = withSpan(singleQuotedRStr | doubleQuotedRStr) ^^ (Token(R_STR, _, _))
-
-  private def singleQuotedRStr: Parser[String] = """r'([^\n\\']|\\[^\n])*'""".r
+  private def rStr: Parser[Token] = withSpan(doubleQuotedRStr) ^^ (Token(R_STR, _, _))
 
   private def doubleQuotedRStr: Parser[String] = """r"([^\n\\"]|\\[^\n])*"""".r
 
