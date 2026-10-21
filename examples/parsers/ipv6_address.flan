@@ -110,4 +110,15 @@ def parse_ipv6_address(ip_str: IPv6Address) -> int:
         i += 1
     return ip_int
 
-def _parse_hextet(hextet: H16) -> int
+lang HEX_DIGITS = r"[0-9a-fA-F]*"
+
+def _parse_hextet(hextet_str: H16) -> int:
+    # Reject non-ASCII digits.
+    if hextet_str not in HEX_DIGITS:
+        raise "Only hex digits permitted"
+    # We do the length check second, since the invalid character error
+    # is likely to be more informative for the user
+    if len(hextet_str) > 4:
+        raise "At most 4 characters permitted"
+    # Length check means we can skip checking the integer value
+    return int(hextet_str, 16)

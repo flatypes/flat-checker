@@ -109,7 +109,7 @@ object builtin:
     case "trim" => List(Member(() -> str, { case List(s) => StrTrim(s) }))
     case "toLower" => List(Member(() -> str, { case List(s) => StrToLower(s) }))
     case "toUpper" => List(Member(() -> str, { case List(s) => StrToUpper(s) }))
-    case "toInt" => List(Member(() -> int, { case List(s) => StrToInt(s) }))
+    case "__int__" => List(Member(() -> int, { case List(s) => StrToInt(s) }))
     case "toCode" => List(Member(() -> int, { case List(s) => CharToCode(s) }))
     // String higher-order
     case "forall" => List(Member((str -> bool) -> bool, { case List(s, f) => StrForall(s, f) }))

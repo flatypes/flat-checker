@@ -114,7 +114,8 @@ object Show extends LazyLogging:
       case StrIn(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
 
       // String conversions
-      case StrToInt(e) => showMemberApply(e, "toInt")
+      case StrToInt(e, IntConst(10)) => showMemberApply(e, "toInt")
+      case StrToInt(e, eb) => showMemberApply(e, "toInt", eb)
       case CharToCode(e) => showMemberApply(e, "toCode")
       case CodeToChar(e) => showMemberApply(e, "toChar")
 

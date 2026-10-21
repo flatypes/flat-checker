@@ -40,7 +40,7 @@ def _parse_octet(octet_str: DecOctet) -> Byte:
     if octet_str != "0" and octet_str[0] == '0':
         raise "Leading zeros are not permitted"
     # Convert to integer (we know digits are legal)
-    var octet_int = octet_str.toInt
+    var octet_int = int(octet_str, 10)
     if octet_int > 255:
         raise "Octet > 255 not permitted"
     return octet_int

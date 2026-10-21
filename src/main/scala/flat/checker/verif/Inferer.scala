@@ -165,9 +165,9 @@ object Inferer extends LazyLogging:
           case _ => Domain.Top
 
       // String conversions
-      case StrToInt(e) =>
+      case StrToInt(e, IntConst(radix)) =>
         infer(e) match
-          case Domain.Str(r) => Domain.Num(r.absToInt())
+          case Domain.Str(r) => Domain.Num(r.absToInt(radix.toInt))
           case _ => Domain.Top
       case IntFormat(e, fmt) =>
         e match

@@ -337,10 +337,10 @@ object tpd:
       case List(e) => StrToUpper(e)(range)
       case _ => throw IllegalArgumentException("StringToUpper must have exactly 1 subtree")
 
-  final case class StrToInt(str: Expr)(val range: Range = noRange) extends Expr:
+  final case class StrToInt(str: Expr, base: Expr = IntConst(10))(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrToInt = subtrees match
-      case List(e) => StrToInt(e)(range)
-      case _ => throw IllegalArgumentException("StringToInt must have exactly 1 subtree")
+      case List(e, eb) => StrToInt(e, eb)(range)
+      case _ => throw IllegalArgumentException("StringToInt must have exactly 2 subtrees")
 
   final case class IntFormat(int: Expr, fmt: NumStrFormat = NumStrFormat())
                             (val range: Range = noRange) extends Expr:

@@ -246,10 +246,10 @@ object Simplifier extends LazyLogging:
         e.simplify match
           case StrConst(s) => StrConst(s.toUpperCase)
           case e => StrToUpper(e)
-      case StrToInt(e) =>
-        e.simplify match
-          case StrConst(s) => IntConst(s.toInt)
-          case e => StrToInt(e)
+      case StrToInt(e, eb) =>
+        (e.simplify, eb.simplify) match
+          case (StrConst(s), IntConst(b)) => IntConst(BigInt(s, b.toInt))
+          case (e, eb) => StrToInt(e, eb)
       case IntFormat(e, fmt) =>
         e.simplify match
           case IntConst(i) => StrConst(i.toString)

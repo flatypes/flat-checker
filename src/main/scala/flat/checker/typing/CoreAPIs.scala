@@ -141,7 +141,15 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.Apply(id@untpd.TermName(f), es) if builtins.contains(f) =>
       f match
         case "len" => inferOperation(es.head, untpd.Ident("len")(id.range), es.tail, node.range, ctx)
-        case "int" => inferOperation(es.head, untpd.Ident("toInt")(id.range), es.tail, node.range, ctx)
+        case "int" => es match
+          case List(e) => inferOperation(e, untpd.Ident("__int__")(id.range), Nil, node.range, ctx)
+          case List(e, eb) =>
+            val (str, side) = check(e, StrType, ctx)
+            val (base, baseSide) = check(eb, IntType, ctx)
+            (IntType, StrToInt(str, base)(node.range), side ++ baseSide)
+          case _ =>
+            reporter.report(ctx.uri, ArityMismatch(node.range, 1, es.length))
+            (NoType, NoExpr, Nil)
         case "str" => inferOperation(es.head, untpd.Ident("toStr")(id.range), es.tail, node.range, ctx)
         case _ => throw NotImplementedError(s"Built-in function $f is not implemented")
 
@@ -160,7 +168,8 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case _ =>
       throw NotImplementedError(s"Type inference for ${node.getClass.getSimpleName} is not implemented")
 
-  private val builtins = Set("len", "ord", "chr", "str", "int", "bool", "char")
+  private val builtins = Set("abs", "all", "any", "bool", "chr", "dict", "divmod", "filter",
+    "hex", "int", "len", "list", "map", "max", "min", "oct", "ord", "reversed", "set", "str", "sum", "zip")
 
   private def narrow(x: String, typ: Type, ctx: TypingCtx): Type = typ match
     case OptType(t) =>
