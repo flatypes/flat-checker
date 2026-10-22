@@ -306,16 +306,105 @@ object REOps extends LazyLogging:
     def filterElemAtNotIn(i: Int, xs: List[set.Symbol]): RegEx[A] =
       filterElemWith(i, a => a -- xs)
 
-    def filterSliceWith(from: Int, untilLast: Int, f: RegEx[A] => RegEx[A]): RegEx[A] =
-      require(from >= 0 && untilLast <= 0)
+    def absSplitAt(indexOf: List[set.Symbol], start: Int, offset: Int): List[(RegEx[A], RegEx[A])] =
+      if offset == 0 then
+        val pat = word(indexOf)
+        for (before, after) <- r.findFirst(indexOf, start) yield (before, pat * after)
+      else if offset == indexOf.length then
+        val pat = word(indexOf)
+        for (before, after) <- r.findFirst(indexOf, start) yield (before * pat, after)
+      else if 0 < offset && offset < indexOf.length then
+        val pat1 = word(indexOf.take(offset))
+        val pat2 = word(indexOf.drop(offset))
+        for (before, after) <- r.findFirst(indexOf, start) yield (before * pat1, pat2 * after)
+      else if offset > indexOf.length then
+        val pat = word(indexOf)
+        for
+          (before, after) <- r.findFirst(indexOf, start)
+          (r1, r2) <- after.absSplitAt(offset - indexOf.length)
+        yield (before * pat * r1, r2)
+      else // offset < 0
+        val pat = word(indexOf)
+        for
+          (before, after) <- r.findFirst(indexOf, start)
+          (r1, r2) <- before.absSplitAtLast(offset)
+        yield (r1, r2 * pat * after)
+
+    // Filter slice
+    def filterSliceWith(from: Int, f: RegEx[A] => RegEx[A]): RegEx[A] =
       sum:
         for
-          (r1, r2) <- r.absSplitAt(from)
-          (r2, r3) <- r2.absSplitAtLast(untilLast)
-          rf = f(r2)
-          if rf.nonEmpty
-        yield r1 * rf * r3
+          (left, right) <- if from >= 0 then r.absSplitAt(from) else r.absSplitAtLast(from)
+          filtered = f(right)
+          if filtered.nonEmpty
+        yield left * filtered
 
+    def filterSliceWith(fromIndexOf: List[set.Symbol], start: Int, offset: Int, f: RegEx[A] => RegEx[A]): RegEx[A] =
+      require(start >= 0)
+      sum:
+        for
+          (left, right) <- r.absSplitAt(fromIndexOf, start, offset)
+          filtered = f(right)
+          if filtered.nonEmpty
+        yield left * filtered
+
+    def filterSliceWith(fromLeft: Int, until: Int, f: RegEx[A] => RegEx[A]): RegEx[A] =
+      require(fromLeft >= 0)
+      sum:
+        for
+          (left, right) <- if until >= 0 then r.absSplitAt(until) else r.absSplitAtLast(until)
+          (skipped, target) <- left.absSplitAt(fromLeft)
+          filtered = f(target)
+          if filtered.nonEmpty
+        yield skipped * filtered * right
+
+    def filterSliceWith(fromLeft: Int, untilIndexOf: List[set.Symbol], start: Int, offset: Int,
+                        f: RegEx[A] => RegEx[A]): RegEx[A] =
+      require(fromLeft >= 0 && start >= 0)
+      sum:
+        for
+          (left, right) <- r.absSplitAt(untilIndexOf, start, offset)
+          (skipped, target) <- left.absSplitAt(fromLeft)
+          filtered = f(target)
+          if filtered.nonEmpty
+        yield skipped * filtered * right
+
+    def filterSliceFromRightWith(fromRight: Int, untilRight: Int, f: RegEx[A] => RegEx[A]): RegEx[A] =
+      require(fromRight >= 0 && untilRight < 0)
+      sum:
+        for
+          (left, right) <- r.absSplitAtLast(fromRight)
+          (target, skipped) <- right.absSplitAtLast(untilRight)
+          filtered = f(target)
+          if filtered.nonEmpty
+        yield left * filtered * skipped
+
+    def filterSliceWith(fromIndexOf: List[set.Symbol], start: Int, offset: Int, untilRight: Int,
+                        f: RegEx[A] => RegEx[A]): RegEx[A] =
+      require(start >= 0 && untilRight < 0, s"start = $start, untilRight = $untilRight")
+      sum:
+        for
+          (left, right) <- r.absSplitAt(fromIndexOf, start, offset)
+          (target, skipped) <- right.absSplitAtLast(untilRight)
+          filtered = f(target)
+          if filtered.nonEmpty
+        yield left * filtered * skipped
+
+    def filterForall(f: A => A): RegEx[A] = r match
+      case Zero() | One() => r
+      case Lit(d) => symbolSet(f(d))
+      case Plus(r1, r2) => r1.filterForall(f) + r2.filterForall(f)
+      case Comp(r1, r2) => r1.filterForall(f) * r2.filterForall(f)
+      case Star(r1) => r1.filterForall(f).star
+
+    def filterExists(f: A => A): RegEx[A] = r match
+      case Zero() | One() => Zero()
+      case Lit(d) => symbolSet(f(d))
+      case Plus(r1, r2) => r1.filterExists(f) + r2.filterExists(f)
+      case Comp(r1, r2) => r1.filterExists(f) * r2 + r1 * r2.filterExists(f)
+      case Star(r1) => r * r1.filterExists(f) * r
+
+    @deprecated
     def filterSliceWith2(fromIndexOf: (List[set.Symbol], Int, Int), untilLast: Int,
                          f: RegEx[A] => RegEx[A]): RegEx[A] =
       require(untilLast <= 0)

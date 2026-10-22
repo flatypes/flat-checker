@@ -3,7 +3,7 @@ package flat
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.parsing.Parser
 import flat.checker.typing.Typer
-import flat.checker.verif.{NarrowerCache, Verifier}
+import flat.checker.verif.{NarrowCache, Verifier}
 import flat.checker.{Reporter, Source}
 import flat.util.{Aggregator, MetricCollector}
 import scopt.OParser
@@ -110,7 +110,7 @@ object CLI extends LazyLogging:
         System.exit(1)
 
       reporter.printTo(Console.err) // print warnings if any
-      logger.debug(f"Hit rate: ${NarrowerCache.hitRate}%.2f")
+      logger.debug(f"Hit rate: ${NarrowCache.hitRate}%.2f")
       logger.info("Checking passed: " + path.toString)
 
   private def collectFlan(path: os.Path): Seq[os.Path] =
