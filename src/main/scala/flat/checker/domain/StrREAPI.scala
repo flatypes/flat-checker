@@ -1,8 +1,34 @@
 package flat.checker.domain
 
+import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.REOps.*
 
-object StrREAPI:
+enum AIndex:
+  /** Constant index. If positive, left to right. Otherwise, right to left. */
+  case Const(i: Int)
+  /** Index of the first occurrence of the element/slice. */
+  case Of(s: String, start: Int, offset: Int)
+  case End
+
+final case class AIndexRange(from: AIndex, until: AIndex)
+
+object StrREAPI extends LazyLogging:
+  // Operations
+  def charAt(r: StrRE, at: AIndex | AIndexRange): CharSet = at match
+    case AIndex.Const(i) => if i >= 0 then r.absAt(i) else r.absAtRight(-i)
+    case AIndex.Of(s, _, _) => CharSet(s.head)
+    case AIndex.End => throw IllegalArgumentException("Cannot get element at end index")
+    case AIndexRange(from, until) => substr(r, from, until).alphabet
+
+  def substr(r: StrRE, from: AIndex, until: AIndex): StrRE =
+    (from, until) match
+      case (AIndex.Const(i), AIndex.End) => r.absSlice(i)
+      case (AIndex.Of(s, i, k), AIndex.End) => r.absSlice(s.toList, i, k)
+      case (AIndex.Const(i), AIndex.Const(j)) if i >= 0 => r.absSlice(i, j)
+      case (AIndex.Const(i), AIndex.Of(s, j, k)) if i >= 0 => r.absSlice(i, s.toList, j, k)
+      case (AIndex.Of(s, i, k), AIndex.Const(j)) if j < 0 => r.absSlice(s.toList, i, k, j)
+      case _ => throw new IllegalArgumentException(s"slice $r from $from until $until")
+
   // Equality
   def filterEq(s: String): StrRE => StrRE = r => r.filterEq(s.toList)
 
@@ -45,24 +71,29 @@ object StrREAPI:
   def filterIndexOfGe(t: String, start: Int, i: Int): StrRE => StrRE = r => r.filterIndexOfGe(t.toList, start, i)
 
   // Higher-order filters
-  def filterElemWith(i: Int, f: CharSet => CharSet): StrRE => StrRE = r => r.filterElemWith(i, f)
-
-  def filterSliceWith(from: Int, f: StrRE => StrRE): StrRE => StrRE = r => r.filterSliceWith(from, f)
-
-  def filterSliceWith(fromIndexOf: List[Char], start: Int, offset: Int, f: StrRE => StrRE): StrRE => StrRE =
-    r => r.filterSliceWith(fromIndexOf, start, offset, f)
-
-  def filterSliceWith(fromLeft: Int, until: Int, f: StrRE => StrRE): StrRE => StrRE =
-    r => r.filterSliceWith(fromLeft, until, f)
-
-  def filterSliceWith(fromLeft: Int, untilIndexOf: List[Char], start: Int, offset: Int,
-                      f: StrRE => StrRE): StrRE => StrRE =
-    r => r.filterSliceWith(fromLeft, untilIndexOf, start, offset, f)
-
-  def filterSliceWith(fromIndexOf: List[Char], start: Int, offset: Int, untilLast: Int,
-                      f: StrRE => StrRE): StrRE => StrRE =
-    r => r.filterSliceWith(fromIndexOf, start, offset, untilLast, f)
-
   def filterForall(f: CharSet => CharSet): StrRE => StrRE = r => r.filterForall(f)
 
   def filterExists(f: CharSet => CharSet): StrRE => StrRE = r => r.filterExists(f)
+
+  def filterCharWith(at: AIndex | AIndexRange, f: CharSet => CharSet): StrRE => StrRE = at match
+    case AIndex.Const(i) => r => r.filterElemWith(i, f)
+    case AIndex.End => throw new IllegalArgumentException("AIndex.End out of bound")
+    case AIndex.Of(s, i, k) => throw new IllegalArgumentException("AIndex.Of does not make sense here")
+    case AIndexRange(from, until) =>
+      tryFilterSubstrWith(from, until, filterExists(f)).getOrElse:
+        logger.warn("fallback [{}, {}) to [0, -1)", from, until)
+        filterExists(f)
+
+  def filterSubstrWith(from: AIndex, until: AIndex, f: StrRE => StrRE): StrRE => StrRE =
+    tryFilterSubstrWith(from, until, f).getOrElse:
+      logger.warn("give up filtering [{}, {})", from, until)
+      identity
+
+  private def tryFilterSubstrWith(from: AIndex, until: AIndex, f: StrRE => StrRE): Option[StrRE => StrRE] =
+    (from, until) match
+      case (AIndex.Const(i), AIndex.End) => Some(r => r.filterSliceWith(i, f))
+      case (AIndex.Of(s, i, k), AIndex.End) => Some(r => r.filterSliceWith(s.toList, i, k, f))
+      case (AIndex.Const(i), AIndex.Const(j)) if i >= 0 => Some(r => r.filterSliceWith(i, j, f))
+      case (AIndex.Const(i), AIndex.Of(s, j, k)) if i >= 0 => Some(r => r.filterSliceWith(i, s.toList, j, k, f))
+      case (AIndex.Of(s, i, k), AIndex.Const(j)) if j < 0 => Some(r => r.filterSliceWith(s.toList, i, k, j, f))
+      case _ => None

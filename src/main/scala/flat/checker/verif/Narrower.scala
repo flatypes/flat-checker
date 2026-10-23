@@ -1,13 +1,15 @@
 package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.domain.*
 import flat.checker.domain.Prettifier.pp
+import flat.checker.domain.REOps.filterIndexOfLt
+import flat.checker.domain.{*, given}
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class Narrower(goal: Goal) extends LazyLogging:
   private val charTypes = mutable.Map.empty[Expr, CharSet]
@@ -15,82 +17,149 @@ class Narrower(goal: Goal) extends LazyLogging:
   private val strListTypes = mutable.Map.empty[Expr, ListRE]
 
   def narrow: Goal =
+    val conds = ListBuffer.empty[Expr]
     goal.premises.foreach:
-      case CharIn(e, a) =>
-        charTypes(e) = a
       case StrIn(e, r) =>
         strTypes(e) = r
       case StrListIn(e, r) =>
         strListTypes(e) = r
-      case _ =>
-
-    goal.premises.foreach(narrowCond(using _))
+      case e =>
+        conds += e
+    conds.foreach(narrowCond(using _))
     newGoal()
 
-  private def narrowCond(using cond: Expr): Unit = cond match
-    // Char equality
-    case Eq(e, CharConst(c)) => narrowChar(e, _ & CharSet(c))
-    case Ne(e, CharConst(c)) => narrowChar(e, _ - c)
-    // Str equality
-    case Eq(e, StrConst(s)) => narrowStr(e, StrREAPI.filterEq(s))
-    case Ne(e, StrConst(s)) => narrowStr(e, StrREAPI.filterNe(s))
-    // Char membership
-    case CharIn(e, a) => narrowChar(e, _ & a)
-    case Not(CharIn(e, a)) => narrowChar(e, _ & ~a)
-    // Length comparison
+  private def narrowCond(using cond: Expr): Unit =
+    matchCharCond(cond).map(narrowCharTarget(_, _))
+      .orElse { matchStrCond(cond).map(narrowStrTarget(_, _)) }
+      .orElse { matchStrListCond(cond).map(narrowStrListTarget(_, _)) }
+
+  private def narrowCharTarget(expr: Expr, f: CharSet => CharSet)(using cond: Expr): Unit = expr match
+    case CharAt(e, ei) =>
+      val index = IndexInferer.inferStrIndex(ei, e, goal)
+      narrowStrTarget(e, StrREAPI.filterCharWith(index, f))
+    case _ =>
+      val a0 = charTypes.getOrElse(expr, Inferer.inferChar(expr, newGoal()))
+      val a1 = NarrowCache.getOrElseUpdate(expr, a0, cond, f(a0))
+      charTypes(expr) = a1
+      logger.debug("Narrow {} by {} to {}", expr.show, cond.show, a1)
+
+  @tailrec
+  private def narrowStrTarget(expr: Expr, f: StrRE => StrRE)(using cond: Expr): Unit = expr match
+    case Substr(e, ei, ej) =>
+      (IndexInferer.inferStrIndex(ei, e, goal), IndexInferer.inferStrIndex(ej, e, goal)) match
+        case (from: AIndex, until: AIndex) => narrowStrTarget(e, StrREAPI.filterSubstrWith(from, until, f))
+        case _ => logger.warn("Cannot narrow {} from {} until {}", expr.show, ei.show, ej.show)
+    case ElemAt(e, ei) =>
+      val index = IndexInferer.inferListIndex(ei, e, goal)
+      narrowStrListTarget(e, ListREAPI.filterElemWith(index, f))
+    case _ =>
+      val r0 = strTypes.getOrElse(expr, Inferer.inferStr(expr, newGoal()))
+      val r1 = NarrowCache.getOrElseUpdate(expr, r0, cond, f(r0))
+      strTypes(expr) = r1
+      logger.debug("Narrow {} by {} to {}", expr.show, cond.show, r1.pp)
+
+  @tailrec
+  private def narrowStrListTarget(expr: Expr, f: ListRE => ListRE)(using cond: Expr): Unit = expr match
+    case ListSlice(e, ei, ej) =>
+      (IndexInferer.inferListIndex(ei, e, goal), IndexInferer.inferListIndex(ej, e, goal)) match
+        case (from: AIndex, until: AIndex) => narrowStrListTarget(e, ListREAPI.filterSliceWith(from, until, f))
+        case _ => logger.warn("Cannot narrow {} from {} until {}", expr.show, ei.show, ej.show)
+    case _ =>
+      val r0 = strListTypes.getOrElse(expr, Inferer.inferStrList(expr, newGoal()))
+      val r1 = NarrowCache.getOrElseUpdate(expr, r0, cond, f(r0))
+      strListTypes(expr) = r1
+      logger.debug("Narrow {} by {} to {}", expr.show, cond.show, r1.pp)
+
+  private def newGoal(): Goal =
+    goal.copy(premises = goal.premises
+      ++ (for (e, a) <- charTypes yield CharIn(e, a)())
+      ++ (for (e, r) <- strTypes yield StrIn(e, r)())
+      ++ (for (e, r) <- strListTypes yield StrListIn(e, r)()))
+
+  private def matchCharCond(cond: Expr): Option[(Expr, CharSet => CharSet)] = cond match
+    // e ∈ a
+    case CharIn(e, a) => Some((e, _ & a))
+    case Not(CharIn(e, a)) => Some((e, _ & ~a))
+    // e == c
+    case Eq(e, CharConst(c)) => Some((e, _ & CharSet(c)))
+    case Ne(e, CharConst(c)) => Some((e, _ - c))
+    // e in cs
+    case StrContains(StrConst(cs), CharToStr(e)) => Some((e, _ & CharSet.from(cs)))
+    case Not(StrContains(StrConst(cs), CharToStr(e))) => Some((e, _ & ~CharSet.from(cs)))
+    case _ => None
+
+  private def matchStrCond(cond: Expr): Option[(Expr, StrRE => StrRE)] = cond match
+    // e == s
+    case Eq(e, StrConst(s)) => Some((e, StrREAPI.filterEq(s)))
+    case Ne(e, StrConst(s)) => Some((e, StrREAPI.filterNe(s)))
+    // s in e
+    case StrContains(e, StrConst(s)) => Some((e, StrREAPI.filterContains(s)))
+    case Not(StrContains(e, StrConst(s))) => Some((e, StrREAPI.filterNotContain(s)))
+    // |e| == n
     case StrLenCmp(e, op, i) => op match
       case CmpOp.EQ =>
-        if i >= 0 then narrowStr(e, StrREAPI.filterLengthEq(i)) else narrowStr(e, _ => RegEx.Zero())
+        if i >= 0 then Some((e, StrREAPI.filterLengthEq(i))) else Some((e, _ => RegEx.Zero()))
       case CmpOp.NE =>
-        if i == 0 then narrowStr(e, StrREAPI.filterLengthGe(1))
-        else if i > 0 then narrowStr(e, StrREAPI.filterLengthNe(i))
-        else narrowStr(e, identity)
+        if i == 0 then Some((e, StrREAPI.filterLengthGe(1)))
+        else if i > 0 then Some((e, StrREAPI.filterLengthNe(i)))
+        else None
       case CmpOp.LE =>
-        if i >= 0 then narrowStr(e, StrREAPI.filterLengthLe(i)) else narrowStr(e, _ => RegEx.Zero())
+        if i >= 0 then Some((e, StrREAPI.filterLengthLe(i))) else Some((e, _ => RegEx.Zero()))
       case CmpOp.LT =>
-        if i > 0 then narrowStr(e, StrREAPI.filterLengthLe(i - 1)) else narrowStr(e, _ => RegEx.Zero())
+        if i > 0 then Some((e, StrREAPI.filterLengthLe(i - 1))) else Some((e, _ => RegEx.Zero()))
       case CmpOp.GE =>
-        if i > 0 then narrowStr(e, StrREAPI.filterLengthGe(i)) else narrowStr(e, identity)
+        if i > 0 then Some((e, StrREAPI.filterLengthGe(i))) else None
       case CmpOp.GT =>
-        if i >= 0 then narrowStr(e, StrREAPI.filterLengthGe(i + 1)) else narrowStr(e, identity)
-    // Contains
-    case StrContains(e, CharConst(c)) => narrowStr(e, StrREAPI.filterContains(c))
-    case StrContains(e, StrConst(s)) => narrowStr(e, StrREAPI.filterContains(s))
-    case Not(StrContains(e, CharConst(c))) => narrowStr(e, StrREAPI.filterNotContain(c))
-    case Not(StrContains(e, StrConst(s))) => narrowStr(e, StrREAPI.filterNotContain(s))
-    // Prefix & Suffix
-    case StrStartsWith(e, StrConst(s)) => narrowStr(e, StrREAPI.filterStartsWith(s))
-    case Not(StrStartsWith(e, StrConst(s))) => narrowStr(e, StrREAPI.filterNotStartWith(s))
-    case StrEndsWith(e, StrConst(s)) => narrowStr(e, StrREAPI.filterEndsWith(s))
-    case Not(StrEndsWith(e, StrConst(s))) => narrowStr(e, StrREAPI.filterNotEndWith(s))
-    // IndexOf is negative
-    case Eq(StrIndexOf(e, StrConst(t), IntConst(k)), IntConst(-1)) =>
-      narrowStr(e, StrREAPI.filterIndexOfNeg(t, k.toInt))
-    case Le(StrIndexOf(e, StrConst(t), IntConst(k)), IntConst(-1)) =>
-      narrowStr(e, StrREAPI.filterIndexOfNeg(t, k.toInt))
-    case Lt(StrIndexOf(e, StrConst(t), IntConst(k)), IntConst(0)) =>
-      narrowStr(e, StrREAPI.filterIndexOfNeg(t, k.toInt))
-    // IndexOf inequalities
-    case Eq(StrIndexOf(e, StrConst(t), IntConst(k)), IntConst(n)) if n >= 0 =>
-      narrowStr(e, StrREAPI.filterIndexOfEq(t, k.toInt, n.toInt))
-    case Le(StrIndexOf(e, StrConst(t), IntConst(k)), IntConst(n)) if n >= 0 =>
-      narrowStr(e, StrREAPI.filterIndexOfLe(t, k.toInt, n.toInt))
-    case Lt(StrIndexOf(e, StrConst(t), IntConst(k)), IntConst(n)) if n > 0 =>
-      narrowStr(e, StrREAPI.filterIndexOfLe(t, k.toInt, n.toInt - 1))
-    case Le(IntConst(n), StrIndexOf(e, StrConst(t), IntConst(k))) if n >= 0 =>
-      narrowStr(e, StrREAPI.filterIndexOfGe(t, k.toInt, n.toInt))
-    case Lt(IntConst(n), StrIndexOf(e, StrConst(t), IntConst(k))) if n >= -1 =>
-      narrowStr(e, StrREAPI.filterIndexOfGe(t, k.toInt, n.toInt + 1))
-    case Le(StrLength(e1), StrIndexOf(e, StrConst(t), IntConst(k))) if e1 == e => // |s| <= s.indexOf(t, k)
-      narrowStr(e, r => RegEx.Zero())
-    case Lt(StrLength(e1), StrIndexOf(e, StrConst(t), IntConst(k))) if e1 == e => // |s| < s.indexOf(t, k)
-      narrowStr(e, r => RegEx.Zero())
-    // Forall
-    case StrForall(e, LambdaExpr(List(x -> _), StrContains(StrConst(cs), CharToStr(Var(x1))))) if x1 == x =>
-      narrowStr(e, StrREAPI.filterForall(_ & CharSet.from(cs)))
-    case Not(StrForall(e, LambdaExpr(List(x -> _), StrContains(StrConst(cs), CharToStr(Var(x1)))))) if x1 == x =>
-      narrowStr(e, StrREAPI.filterExists(_ & ~CharSet.from(cs)))
-    case _ => ()
+        if i >= 0 then Some((e, StrREAPI.filterLengthGe(i + 1))) else None
+
+    // e.startsWith(s)
+    case StrStartsWith(e, StrConst(s)) => Some((e, StrREAPI.filterStartsWith(s)))
+    case Not(StrStartsWith(e, StrConst(s))) => Some((e, StrREAPI.filterNotStartWith(s)))
+    case StrEndsWith(e, StrConst(s)) => Some((e, StrREAPI.filterEndsWith(s)))
+    case Not(StrEndsWith(e, StrConst(s))) => Some((e, StrREAPI.filterNotEndWith(s)))
+
+    // e.indexOf(c1, i) < e.indexOf(c2, i)
+    case Cmp(StrIndexOf(e, StrConst(s1), IntConst(i)), CmpOp.LT | CmpOp.LE,
+      StrIndexOf(e1, StrConst(s2), IntConst(i1)))
+      if e1 == e && i1 == i && s1.length == 1 && s2.length == 1 && s1 != s2 =>
+      val c1 = s1.head
+      val c2 = s2.head
+      Some((e, r => r.filterIndexOfLt(c1, c2, i.toInt)))
+
+    // e.indexOf(s, i) == k
+    case StrIndexOfCmp(e, s, i, op, e1) => (op, e1) match
+      case (CmpOp.EQ, IntConst(k)) =>
+        if k >= 0 then Some((e, StrREAPI.filterIndexOfEq(s, i, k.toInt)))
+        else if k == -1 then Some((e, StrREAPI.filterIndexOfNeg(s, i)))
+        else Some((e, _ => RegEx.Zero()))
+      case (CmpOp.LE, IntConst(k)) =>
+        if k >= 0 then Some((e, StrREAPI.filterIndexOfLe(s, i, k.toInt)))
+        else if k == -1 then Some((e, StrREAPI.filterIndexOfNeg(s, i)))
+        else Some((e, _ => RegEx.Zero()))
+      case (CmpOp.LT, IntConst(k)) =>
+        if k > 0 then Some((e, StrREAPI.filterIndexOfLe(s, i, k.toInt - 1)))
+        else if k == 0 then Some((e, StrREAPI.filterIndexOfNeg(s, i)))
+        else Some((e, _ => RegEx.Zero()))
+      case (CmpOp.GE, IntConst(k)) =>
+        if k >= 0 then Some((e, StrREAPI.filterIndexOfGe(s, i, k.toInt)))
+        else None
+      case (CmpOp.GT, IntConst(k)) =>
+        if k >= -1 then Some((e, StrREAPI.filterIndexOfGe(s, i, k.toInt + 1)))
+        else None
+      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, StrLen(`e`)) => Some((e, _ => RegEx.Zero()))
+      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, Add(StrLen(`e`), IntConst(i))) if i > 0 => Some((e, _ => RegEx.Zero()))
+      case _ => None
+
+    // e.forall(lambda x -> ex)
+    case StrForall(e, LambdaExpr(List(x -> _), ex)) =>
+      matchCharCond(ex) match
+        case Some((Var(`x`), f)) => Some((e, StrREAPI.filterForall(f)))
+        case _ => None
+    case Not(StrForall(e, LambdaExpr(List(x -> _), ex))) =>
+      matchCharCond(Not(ex)) match
+        case Some((Var(`x`), f)) => Some((e, StrREAPI.filterExists(f)))
+        case _ => None
+    case _ => None
 
   object Cmp:
     def unapply(expr: Expr): Option[(Expr, CmpOp, Expr)] = expr match
@@ -104,75 +173,25 @@ class Narrower(goal: Goal) extends LazyLogging:
     def unapply(expr: Expr): Option[(Expr, CmpOp, Int)] =
       for
         (e1, op, e2) <- Cmp.unapply(expr)
-        len <- expr.collectFirst { case e@StrLength(_) => e }
+        len <- expr.collectFirst { case e@StrLen(_) => e }
         (resultOp, result) <- InequalitySolver.isolate(len, (e1, op, e2))
         i <- result match {case IntConst(i) => Some(i); case _ => None}
       yield (len.str, resultOp, i.toInt)
 
-  private def narrowChar(expr: Expr, f: CharSet => CharSet)(using cond: Expr): Unit = expr match
-    case CharAt(e, ei) =>
-      IndexInferer.inferStrIndex(ei, e, goal) match
-        case AIndex.Left(i) => narrowStr(e, StrREAPI.filterElemWith(i, f))
-        case at =>
-          throw new UnsupportedOperationException(s"narrow ${expr.show} at $at")
-    case _ =>
-      val a0 = charTypes.getOrElse(expr, Inferer.inferChar(expr, newGoal()))
-      val a1 = NarrowCache.getOrElseUpdate(expr, a0, cond, f(a0))
-      charTypes(expr) = a1
-      logger.debug("Narrow {} by {} to {}", expr.show, cond.show, a1)
+  object StrIndexOfCmp:
+    def unapply(expr: Expr): Option[(Expr, String, Int, CmpOp, Expr)] =
+      for
+        (e1, op, e2) <- Cmp.unapply(expr)
+        (target, e, s, i) <- expr.collectFirst:
+          case target@StrIndexOf(e, StrConst(s), IntConst(i)) if i >= 0 => (target, e, s, i.toInt)
+        (resultOp, result) <- InequalitySolver.isolate(target, (e1, op, e2))
+      yield (e, s, i, resultOp, result)
 
-  @tailrec
-  private def narrowStr(expr: Expr, f: StrRE => StrRE)(using cond: Expr): Unit = expr match
-    case Substr(e, ei, ej) =>
-      (IndexInferer.inferStrIndex(ei, e, goal), IndexInferer.inferStrIndex(ej, e, goal)) match
-        case (AIndex.Left(i), AIndex.Right(0)) => narrowStr(e, StrREAPI.filterSliceWith(i, f))
-        case (AIndex.Right(i), AIndex.Right(0)) => narrowStr(e, StrREAPI.filterSliceWith(-i, f))
-        case (AIndex.Of(s, i, k), AIndex.Right(0)) => narrowStr(e, StrREAPI.filterSliceWith(s, i, k, f))
-        case (AIndex.Left(i), AIndex.Left(j)) => narrowStr(e, StrREAPI.filterSliceWith(i, j, f))
-        case (AIndex.Left(i), AIndex.Right(j)) => narrowStr(e, StrREAPI.filterSliceWith(i, -j, f))
-        case (AIndex.Left(i), AIndex.Of(s, j, k)) => narrowStr(e, StrREAPI.filterSliceWith(i, s, j, k, f))
-        case (AIndex.Of(s, i, k), AIndex.Right(j)) => narrowStr(e, StrREAPI.filterSliceWith(s, i, k, -j, f))
-        case (start, end) =>
-          throw new UnsupportedOperationException(s"narrow ${expr.show} from $start until $end")
-    case ListSelect(e, ei) =>
-      IndexInferer.inferListIndex(ei, e, goal) match
-        case AIndex.Left(i) => narrowStrList(e, ListREAPI.filterElemWith(i, f))
-        case AIndex.Right(i) if i > 0 => narrowStrList(e, ListREAPI.filterElemWith(-i, f))
-        case AIndexRange(from, until) =>
-          val f1 = ListREAPI.filterExists(f)
-          (from, until) match
-            case (AIndex.Left(i), AIndex.Right(0)) => narrowStrList(e, ListREAPI.filterSliceWith(i, f1))
-            case (AIndex.Right(i), AIndex.Right(0)) => narrowStrList(e, ListREAPI.filterSliceWith(-i, f1))
-            case (AIndex.Of(s, i, k), AIndex.Right(0)) => narrowStrList(e, ListREAPI.filterSliceWith(s, i, k, f1))
-            case (AIndex.Left(i), AIndex.Left(j)) => narrowStrList(e, ListREAPI.filterSliceWith(i, j, f1))
-            case (AIndex.Left(i), AIndex.Right(j)) => narrowStrList(e, ListREAPI.filterSliceWith(i, -j, f1))
-            case (AIndex.Left(i), AIndex.Of(s, j, k)) => narrowStrList(e, ListREAPI.filterSliceWith(i, s, j, k, f1))
-            case (AIndex.Of(s, i, k), AIndex.Right(j)) => narrowStrList(e, ListREAPI.filterSliceWith(s, i, k, -j, f1))
-            case (start, end) =>
-              throw new UnsupportedOperationException(s"narrow ${expr.show} from $start until $end")
-        case at =>
-          throw new UnsupportedOperationException(s"narrow ${expr.show} at $at")
-    case _ =>
-      val r0 = strTypes.getOrElse(expr, Inferer.inferStr(expr, newGoal()))
-      val r1 = NarrowCache.getOrElseUpdate(expr, r0, cond, f(r0))
-      strTypes(expr) = r1
-      logger.debug("Narrow {} by {} to {}", expr.show, cond.show, r1.pp)
-
-  @tailrec
-  private def narrowStrList(expr: Expr, f: ListRE => ListRE)(using cond: Expr): Unit = expr match
-    case ListSlice(e, IntConst(i), ListLength(e1)) if e1 == e =>
-      narrowStrList(e, ListREAPI.filterSliceWith(i.toInt, f))
-    case _ =>
-      val r0 = strListTypes.getOrElse(expr, Inferer.inferStrList(expr, newGoal()))
-      val r1 = NarrowCache.getOrElseUpdate(expr, r0, cond, f(r0))
-      strListTypes(expr) = r1
-      logger.debug("Narrow {} by {} to {}", expr.show, cond.show, r1.pp)
-
-  private def newGoal(): Goal =
-    goal.copy(premises = goal.premises
-      ++ (for (e, a) <- charTypes yield CharIn(e, a)())
-      ++ (for (e, r) <- strTypes yield StrIn(e, r)())
-      ++ (for (e, r) <- strListTypes yield StrListIn(e, r)()))
+  private def matchStrListCond(cond: Expr): Option[(Expr, ListRE => ListRE)] = cond match
+    // s in e
+    case ListContains(e, StrConst(s)) => Some((e, ListREAPI.filterContains(s)))
+    case Not(ListContains(e, StrConst(s))) => Some((e, ListREAPI.filterNotContain(s)))
+    case _ => None
 
 object NarrowCache:
   private val cache = mutable.Map.empty[(Expr, Any, Expr), Any]

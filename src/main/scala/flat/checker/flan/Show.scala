@@ -110,9 +110,9 @@ object Show extends LazyLogging:
 
       // String
       case StrContains(e, et) => showMemberApply(e, "contains", et)
-      case StrLength(e) => s"|${showExpr(e)}|"
+      case StrLen(e) => s"|${showExpr(e)}|"
       case CharAt(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
-      case Substr(e, ei, StrLength(e1)) if e1 == e => s"${showTighter(e)}[${showExpr(ei)}:]"
+      case Substr(e, ei, StrLen(e1)) if e1 == e => s"${showTighter(e)}[${showExpr(ei)}:]"
       case Substr(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
       case StrConcat(e1, e2) => showInfix("+", LEVEL_ADD, ASSOC_LEFT, e1, e2)
       case StrStartsWith(e, et) => showMemberApply(e, "startsWith", et)
@@ -144,10 +144,10 @@ object Show extends LazyLogging:
       // List
       case ListExpr(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
       case ListContains(e, ev) => showMemberApply(e, "contains", ev)
-      case ListLength(e) => s"|${showExpr(e)}|"
-      case ListSelect(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
+      case ListLen(e) => s"|${showExpr(e)}|"
+      case ElemAt(e, ei) => s"${showTighter(e)}[${showExpr(ei)}]"
       case ListUpdate(e, ei, ev) => s"${showTighter(e)}[${showExpr(ei)} = ${showExpr(ev)}]"
-      case ListSlice(e, ei, ListLength(e1)) if e1 == e => s"${showTighter(e)}[${showExpr(ei)}:]"
+      case ListSlice(e, ei, ListLen(e1)) if e1 == e => s"${showTighter(e)}[${showExpr(ei)}:]"
       case ListSlice(e, ei, ej) => s"${showTighter(e)}[${showExpr(ei)}:${showExpr(ej)}]"
       case ListConcat(e1, e2) => showInfix("+", LEVEL_ADD, ASSOC_LEFT, e1, e2)
       case ListIndexOf(e, ev, IntConst(0)) => showMemberApply(e, "indexOf", ev)

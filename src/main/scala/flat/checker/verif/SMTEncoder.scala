@@ -83,7 +83,7 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
 
     // String
     case StrConcat(e1, e2) => tm.mkTerm(STRING_CONCAT, encodeExpr(e1, ctx), encodeExpr(e2, ctx))
-    case StrLength(e) => tm.mkTerm(STRING_LENGTH, encodeExpr(e, ctx))
+    case StrLen(e) => tm.mkTerm(STRING_LENGTH, encodeExpr(e, ctx))
     case CharAt(e, ei) => tm.mkTerm(STRING_CHARAT, encodeExpr(e, ctx), encodeExpr(ei, ctx))
     case Substr(e, ei, ej) =>
       val start = encodeExpr(ei, ctx)
@@ -122,8 +122,8 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
 
     // List
     case e@ListExpr(es) => mkSeq(encodeSort(e.elemSort), es.map(encodeExpr(_, ctx)))
-    case ListLength(e) => tm.mkTerm(SEQ_LENGTH, encodeExpr(e, ctx))
-    case ListSelect(e, ei) => tm.mkTerm(SEQ_NTH, encodeExpr(e, ctx), encodeExpr(ei, ctx))
+    case ListLen(e) => tm.mkTerm(SEQ_LENGTH, encodeExpr(e, ctx))
+    case ElemAt(e, ei) => tm.mkTerm(SEQ_NTH, encodeExpr(e, ctx), encodeExpr(ei, ctx))
     case ListSlice(e, ei, ej) =>
       val start = encodeExpr(ei, ctx)
       val end = encodeExpr(ej, ctx)

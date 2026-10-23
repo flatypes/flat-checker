@@ -127,7 +127,7 @@ object Simplifier extends LazyLogging:
       case Lt(e1, e2) =>
         (e1.simplify, e2.simplify) match
           case (IntConst(i1), IntConst(i2)) => BoolConst(i1 < i2)
-          case (StrIndexOf(e1, _, _), StrLength(e2)) if e1 == e2 => BoolConst(true)  // s.indexOf(t) < |s|
+          case (StrIndexOf(e1, _, _), StrLen(e2)) if e1 == e2 => BoolConst(true)  // s.indexOf(t) < |s|
           case (e1, e2) => Lt(e1, e2)
 
       // Integer bitwise
@@ -167,10 +167,10 @@ object Simplifier extends LazyLogging:
           case chr => CharIn(chr, r)
 
       // String: access
-      case StrLength(e) =>
+      case StrLen(e) =>
         e.simplify match
           case StrConst(s) => IntConst(s.length)
-          case e => StrLength(e)
+          case e => StrLen(e)
       case CharAt(e, ei) =>
         (e.simplify, ei.simplify) match
           case (StrConst(s), IntConst(i)) => CharConst(s.charAt(i.intValue))
@@ -281,14 +281,14 @@ object Simplifier extends LazyLogging:
 
       // List
       case e@ListExpr(es) => ListExpr(es.map(_.simplify))(e.elemSort, e.range)
-      case ListLength(e) =>
+      case ListLen(e) =>
         e.simplify match
           case s@ListExpr(es) => IntConst(es.size)
-          case e => ListLength(e)
-      case ListSelect(e, ei) =>
+          case e => ListLen(e)
+      case ElemAt(e, ei) =>
         (e.simplify, ei.simplify) match
           case (s@ListExpr(es), IntConst(i)) => es(i.intValue)
-          case (e, ei) => ListSelect(e, ei)
+          case (e, ei) => ElemAt(e, ei)
       case ListSlice(e, ei, ej) =>
         (e.simplify, ei.simplify, ej.simplify) match
           case (lst@ListExpr(es), IntConst(i), IntConst(j)) =>

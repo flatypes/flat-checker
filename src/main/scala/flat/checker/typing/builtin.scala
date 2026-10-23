@@ -87,10 +87,10 @@ object builtin:
     case "contains" => List(
       Member(char -> bool, { case List(s, c) => StrContains(s, CharToStr(c)) }),
       Member(str -> bool, { case List(s, t) => StrContains(s, t) }))
-    case "__len__" | "length" => List(Member(() -> int, { case List(s) => StrLength(s) }))
+    case "__len__" | "length" => List(Member(() -> int, { case List(s) => StrLen(s) }))
     case "__getitem__" | "charAt" => List(Member(int -> char, { case List(s, i) => CharAt(s, i) }))
     case "slice" | "substring" => List(
-      Member(int -> str, { case List(s, i) => Substr(s, i, StrLength(s)) }),
+      Member(int -> str, { case List(s, i) => Substr(s, i, StrLen(s)) }),
       Member((int, int) -> str, { case List(s, i, j) => Substr(s, i, j) }))
     case "__add__" | "+" | "concat" => List(Member(str -> str, { case List(s1, s2) => StrConcat(s1, s2) }))
     case "startswith" | "startsWith" => List(Member(str -> bool, { case List(s, t) => StrStartsWith(s, t) }))
@@ -139,11 +139,11 @@ object builtin:
 
   private def accessListMember(t: Type, name: String): List[Member] = name match
     case "contains" => List(Member(t -> bool, { case List(s, x) => ListContains(s, x) }))
-    case "__len__" | "size" => List(Member(() -> int, { case List(s) => ListLength(s) }))
-    case "__getitem__" | "select" => List(Member(int -> t, { case List(s, i) => ListSelect(s, i) }))
+    case "__len__" | "size" => List(Member(() -> int, { case List(s) => ListLen(s) }))
+    case "__getitem__" | "select" => List(Member(int -> t, { case List(s, i) => ElemAt(s, i) }))
     case "update" => List(Member((int, t) -> ListType(t), { case List(s, i, x) => ListUpdate(s, i, x) }))
     case "slice" => List(
-      Member(int -> ListType(t), { case List(s, i) => ListSlice(s, i, ListLength(s)) }),
+      Member(int -> ListType(t), { case List(s, i) => ListSlice(s, i, ListLen(s)) }),
       Member((int, int) -> ListType(t), { case List(s, i, j) => ListSlice(s, i, j) }))
     case "__add__" | "+" => List(Member(ListType(t) -> ListType(t), { case List(s1, s2) => ListConcat(s1, s2) }))
     case "indexOf" => List(
@@ -151,12 +151,12 @@ object builtin:
       Member((t, int) -> int, { case List(s, x, i) => ListIndexOf(s, x, i) }))
 
     // sugars
-    case "head" => List(Member(() -> t, { case List(s) => ListSelect(s, IntConst(0)) }))
+    case "head" => List(Member(() -> t, { case List(s) => ElemAt(s, IntConst(0)) }))
     case "tail" => List(
-      Member(() -> ListType(t), { case List(s) => ListSlice(s, IntConst(1), ListLength(s)) }))
+      Member(() -> ListType(t), { case List(s) => ListSlice(s, IntConst(1), ListLen(s)) }))
     case "init" => List(
-      Member(() -> ListType(t), { case List(s) => ListSlice(s, IntConst(0), Sub(ListLength(s), IntConst(1))) }))
-    case "last" => List(Member(() -> t, { case List(s) => ListSelect(s, Sub(ListLength(s), IntConst(1))) }))
+      Member(() -> ListType(t), { case List(s) => ListSlice(s, IntConst(0), Sub(ListLen(s), IntConst(1))) }))
+    case "last" => List(Member(() -> t, { case List(s) => ElemAt(s, Sub(ListLen(s), IntConst(1))) }))
 
     // higher-order functions
     case "forall" => List(Member((t -> bool) -> bool, { case List(s, p) => ListForall(s, p) }))

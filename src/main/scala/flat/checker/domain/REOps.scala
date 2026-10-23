@@ -37,8 +37,8 @@ object REOps extends LazyLogging:
       r.absDrop(i).first
 
     def absAtRight(i: Int): A =
-      require(0 <= i)
-      r.reverse.absDrop(i).first
+      require(0 < i)
+      r.reverse.absDrop(i - 1).first
 
     def absAt(index: Index): A = index match
       case Left(i) => r.absAt(i)
@@ -83,9 +83,9 @@ object REOps extends LazyLogging:
       for (r1, r2) <- r.reverse.absSplitAt(-n) yield (r2.reverse, r1.reverse)
 
     /** Abstract operation for `s.slice(i, j)`. */
-    def absSlice(i: Int, j: Int): RegEx[A] =
-      require(0 <= i && i <= j)
-      r.absDrop(i).absTake(j - i)
+//    def absSlice(i: Int, j: Int): RegEx[A] =
+//      require(0 <= i && i <= j)
+//      r.absDrop(i).absTake(j - i)
 
     /** Abstract operation for `s.startsWith(t)`. */
     def absStartsWith(t: List[set.Symbol]): BoolSet =
@@ -140,6 +140,26 @@ object REOps extends LazyLogging:
       IndexSet(neg, leftIndexSet, rightIndexSet)
 
     def absIndexOfElem(x: set.Symbol, start: Int): IndexSet = absIndexOf(List(x), start)
+
+    def absSlice(from: Int): RegEx[A] =
+      if from >= 0 then r.absDrop(from) else r.absDropRight(-from)
+
+    def absSlice(fromIndexOf: List[set.Symbol], start: Int, offset: Int): RegEx[A] =
+      require(start >= 0)
+      sum(absSplitAt(fromIndexOf, start, offset).map(_._2))
+
+    def absSlice(fromLeft: Int, until: Int): RegEx[A] =
+      require(fromLeft >= 0)
+      if until >= 0 then r.absTake(until).absDrop(fromLeft)
+      else r.absDrop(fromLeft).absDropRight(-until)
+
+    def absSlice(fromLeft: Int, untilIndexOf: List[set.Symbol], start: Int, offset: Int): RegEx[A] =
+      require(fromLeft >= 0 && start >= 0)
+      sum(for (left, _) <- r.absSplitAt(untilIndexOf, start, offset) yield left.absDrop(fromLeft))
+
+    def absSlice(fromIndexOf: List[set.Symbol], start: Int, offset: Int, untilLast: Int): RegEx[A] =
+      require(start >= 0 && untilLast < 0)
+      sum(for (_, right) <- r.absSplitAt(fromIndexOf, start, offset) yield right.absDropRight(-untilLast))
 
     def absSlice(start: Index, end: Index): RegEx[A] = (start, end) match
       case (Left(i), Right(j)) => r.absDrop(i).absDropRight(j)
@@ -279,32 +299,15 @@ object REOps extends LazyLogging:
       require(n >= 0)
       sum(for (r1, r2) <- findFirst(t, start); rf = r1.filterLengthGe(n); if rf.nonEmpty yield rf * word(t) * r2)
 
-    def filterIndexOfLt(x1: set.Symbol, x2: set.Symbol): RegEx[A] =
+    def filterIndexOfLt(x1: set.Symbol, x2: set.Symbol, start: Int): RegEx[A] =
       // Assume both character exist
-      sum(for (r1, r2) <- r.findAny(x1) yield
-        r1.filterNotContain1(x2) * symbol(x1) * r2.filterContains(List(x2)))
-
-    def filterElemWith(i: Int, f: A => A): RegEx[A] =
-      if i == 0 then
-        sum(for (a, r1) <- r.absSplitAt1; b = f(a); if b.nonEmpty yield Lit(b) * r1)
-      else
-        sum(for (a, r1) <- r.absSplitAt1; r2 = r1.filterElemWith(i - 1, f); if r2.nonEmpty yield Lit(a) * r2)
-
-    def filterElemLastWith(i: Int, f: A => A): RegEx[A] =
-      require(i < 0)
-      r.reverse.filterElemWith(-i - 1, f).reverse
-
-    def filterElemAtEq(i: Int, x: set.Symbol): RegEx[A] =
-      filterElemWith(i, a => if a.contains(x) then set.singleton(x) else set.empty)
-
-    def filterElemAtNe(i: Int, x: set.Symbol): RegEx[A] =
-      filterElemWith(i, a => a - x)
-
-    def filterElemAtIn(i: Int, xs: List[set.Symbol]): RegEx[A] =
-      filterElemWith(i, a => a & xs)
-
-    def filterElemAtNotIn(i: Int, xs: List[set.Symbol]): RegEx[A] =
-      filterElemWith(i, a => a -- xs)
+      sum:
+        for
+          (left, right) <- r.findFirst(List(x1), start)
+          leftFiltered = left.filterNotContain1(x2)
+          rightFiltered = right.filterContains(List(x2))
+          if leftFiltered.nonEmpty && rightFiltered.nonEmpty
+        yield leftFiltered * symbol(x1) * rightFiltered
 
     def absSplitAt(indexOf: List[set.Symbol], start: Int, offset: Int): List[(RegEx[A], RegEx[A])] =
       if offset == 0 then
@@ -329,6 +332,15 @@ object REOps extends LazyLogging:
           (before, after) <- r.findFirst(indexOf, start)
           (r1, r2) <- before.absSplitAtLast(offset)
         yield (r1, r2 * pat * after)
+
+    def filterElemWith(i: Int, f: A => A): RegEx[A] =
+      sum:
+        for
+          (left, right) <- if i >= 0 then r.absSplitAt(i) else r.absSplitAtLast(i)
+          (target, skipped) <- right.absSplitAt1
+          filtered = f(target)
+          if filtered.nonEmpty
+        yield left * Lit(filtered) * skipped
 
     // Filter slice
     def filterSliceWith(from: Int, f: RegEx[A] => RegEx[A]): RegEx[A] =

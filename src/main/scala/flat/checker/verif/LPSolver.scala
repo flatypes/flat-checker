@@ -1,5 +1,6 @@
 package flat.checker.verif
 
+import com.typesafe.scalalogging.LazyLogging
 import flat.checker.flan.*
 import flat.checker.flan.tpd.*
 import org.apache.commons.math.optimization.GoalType
@@ -10,7 +11,7 @@ import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters.*
 import scala.util.{Success, Try}
 
-class LPSolver(constraints: List[Expr]):
+class LPSolver(constraints: List[Expr]) extends LazyLogging:
   def solveMin(expr: Expr): Option[Int] =
     val objective = prepareObjective(expr)
     val solver = new SimplexSolver
@@ -40,11 +41,11 @@ class LPSolver(constraints: List[Expr]):
     val m = mutable.Map.empty[Int, Double]
     var const = 0.0
     e1.summands.foreach:
-      case IntConst(n) => const -= n.intValue
+      case IntConst(n) => const -= n.toDouble
       case Negate(e) => m += lookup(e) -> -1.0
       case e => m += lookup(e) -> 1.0
     e2.summands.foreach:
-      case IntConst(n) => const += n.intValue
+      case IntConst(n) => const += n.toDouble
       case Negate(e) => m += lookup(e) -> 1.0
       case e => m += lookup(e) -> -1.0
     val rel = op match
@@ -70,14 +71,24 @@ class LPSolver(constraints: List[Expr]):
     val m = mutable.Map.empty[Int, Double]
     var const = 0.0
     objective.summands.foreach:
-      case IntConst(n) => const += n.intValue
+      case IntConst(n) => const += n.toDouble
       case Negate(e) => m += lookup(e) -> -1.0
       case e => m += lookup(e) -> 1.0
     LinearObjectiveFunction(mkCoefficients(m.toMap), const)
 
   extension (expr: Expr)
-    private def summands: List[Expr] = expr match
+    private def summands: List[Expr] = getSummands match
+      case Nil => List(IntConst(0))
+      case es => es
+
+    private def getSummands: List[Expr] = expr match
+      case IntConst(0) => Nil
       case Add(e1, e2) => e1.summands ++ e2.summands
-      case Sub(e1, e2) => e1.summands ++ e2.summands.map(Negate(_))
-      case Negate(e) => e.summands.map(Negate(_))
-      case e => List(e)
+      // NOTE: negation is necessary to simplify the expression to a sum of terms
+      case Sub(e1, e2) => e1.summands ++ e2.summands.map(_.negation)
+      case _ => List(expr)
+
+    private def negation: Expr = expr match
+      case IntConst(n) => IntConst(-n)
+      case Negate(e) => e
+      case _ => Negate(expr)

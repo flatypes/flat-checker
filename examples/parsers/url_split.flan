@@ -67,12 +67,12 @@ def url_split(url: URL) -> (Scheme?, Authority?, Path, Query?, Fragment?):
         rest = s
     if '#' in rest:
         i = rest.indexOf('#')
-        rest = rest[:i]
         fragment = rest[i+1:]
+        rest = rest[:i]
     if '?' in rest:
         i = rest.indexOf('?')
-        rest = rest[:i]
         query = rest[i+1:]
+        rest = rest[:i]
     return (scheme, netloc, rest, query, fragment)
 
 lang NetURLRest = PathAbEmpty ("?" Query)? ("#" Fragment)?

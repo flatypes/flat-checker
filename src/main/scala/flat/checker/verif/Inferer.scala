@@ -1,12 +1,10 @@
 package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.domain.Index.{First, Left, Right}
 import flat.checker.domain.Prettifier.pp
 import flat.checker.domain.REOps.*
 import flat.checker.domain.StrREOps.*
 import flat.checker.domain.{*, given}
-import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
 
 import scala.collection.mutable
@@ -123,7 +121,6 @@ object Inferer extends LazyLogging:
       case Eq(e, StrConst(t)) =>
         infer(e) match
           case Domain.Str(r) =>
-            logger.debug("Infer {} = {}: {}", e.show, t, r.pp)
             if r.filterEq(t.toList).isEmpty then Domain.Bool(BoolSet.False)
             else if r.filterNe(t.toList).isEmpty then Domain.Bool(BoolSet.True)
             else Domain.Bool(BoolSet.Full)
@@ -154,18 +151,22 @@ object Inferer extends LazyLogging:
         infer(e) match
           case Domain.Str(r) => Domain.Bool(r.absContains(t.toList))
           case _ => Domain.Top
-      case StrLength(e) =>
+      case StrLen(e) =>
         infer(e) match
           case Domain.Str(r) => Domain.Nat(r.absLength)
           case _ => Domain.Top
       case CharAt(e, ei) =>
         infer(e) match
           case Domain.Str(r) =>
-            Domain.Str(RegEx.symbolSet(r.absAt(inferIndex(ei, e, isStr = true))))
+            val index = IndexInferer.inferStrIndex(ei, e, goal)
+            Domain.Char(StrREAPI.charAt(r, index))
           case _ => Domain.Top
       case Substr(e, ei, ej) =>
         infer(e) match
-          case Domain.Str(r) => Domain.Str(r.absSlice(inferIndex(ei, e, isStr = true), inferIndex(ej, e, isStr = true)))
+          case Domain.Str(r) =>
+            (IndexInferer.inferStrIndex(ei, e, goal), IndexInferer.inferStrIndex(ej, e, goal)) match
+              case (from: AIndex, until: AIndex) => Domain.Str(StrREAPI.substr(r, from, until))
+              case _ => Domain.Top
           case _ => Domain.Top
       case StrConcat(e1, e2) =>
         (infer(e1), infer(e2)) match
@@ -181,7 +182,7 @@ object Inferer extends LazyLogging:
           case _ => Domain.Top
       case StrIndexOf(e, StrConst(t), IntConst(i)) =>
         infer(e) match
-          case Domain.Str(r) => Domain.Index(StrLength(e), r.absIndexOf(t.toList, i.toInt))
+          case Domain.Str(r) => Domain.Index(StrLen(e), r.absIndexOf(t.toList, i.toInt))
           case _ => Domain.Top
       case StrReplace(e, StrConst(t1), StrConst(t2)) =>
         infer(e) match
@@ -252,18 +253,22 @@ object Inferer extends LazyLogging:
           case Domain.StrList(r) =>
             Domain.Bool(REOps.absContainsElem[RegEx[CharSet]](r)(using symbolSet)(t.toList))
           case _ => Domain.Top
-      case ListLength(e) =>
+      case ListLen(e) =>
         infer(e) match
           case Domain.StrList(r) => Domain.Nat(r.absLength)
           case _ => Domain.Top
-      case ListSelect(e, ei) =>
+      case ElemAt(e, ei) =>
         infer(e) match
-          case Domain.StrList(r) => Domain.Str(r.absAt(inferIndex(ei, e, isStr = false)))
+          case Domain.StrList(r) =>
+            val index = IndexInferer.inferListIndex(ei, e, goal)
+            Domain.Str(ListREAPI.elemAt(r, index))
           case _ => Domain.Top
       case ListSlice(e, ei, ej) =>
         infer(e) match
-          case Domain.StrList(r) => Domain.StrList(r.absSlice(inferIndex(ei, e, isStr = false),
-            inferIndex(ej, e, isStr = false)))
+          case Domain.StrList(r) =>
+            (IndexInferer.inferListIndex(ei, e, goal), IndexInferer.inferListIndex(ej, e, goal)) match
+              case (from: AIndex, until: AIndex) => Domain.StrList(ListREAPI.slice(r, from, until))
+              case _ => Domain.Top
           case _ => Domain.Top
       case ListConcat(e1, e2) =>
         (infer(e1), infer(e2)) match
@@ -273,7 +278,7 @@ object Inferer extends LazyLogging:
       case ListIndexOf(e, StrConst(t), IntConst(i)) if i >= 0 =>
         infer(e) match
           case Domain.StrList(r) =>
-            Domain.Index(ListLength(e), REOps.absIndexOfElem[RegEx[CharSet]](r)(using symbolSet)(t.toList, i.toInt))
+            Domain.Index(ListLen(e), REOps.absIndexOfElem[RegEx[CharSet]](r)(using symbolSet)(t.toList, i.toInt))
           case _ => Domain.Top
 
       // Others
@@ -293,18 +298,3 @@ object Inferer extends LazyLogging:
     infer(expr)(using goal) match
       case Domain.StrList(r) => r
       case _ => RegEx.Lit(RegEx.full).star
-
-  @deprecated
-  private def inferIndex(idx: Expr, seq: Expr, isStr: Boolean)(using goal: Goal): Index = idx match
-    case IntConst(i) if 0 <= i => Left(i.intValue)
-    case StrLength(`seq`) => Right(0)
-    case ListLength(`seq`) => Right(0)
-    case Add(StrLength(`seq`), IntConst(i)) if 0 <= i => Right(0)
-    case Add(ListLength(`seq`), IntConst(i)) if 0 <= i => Right(0)
-    case Sub(StrLength(`seq`), IntConst(i)) if 0 < i => Right(i.intValue)
-    case Sub(ListLength(`seq`), IntConst(i)) if 0 < i => Right(i.intValue)
-    case Add(IntConst(i), Sub(StrLength(`seq`), IntConst(j))) if 0 <= i - j => Right(i.intValue - j.intValue)
-    case Add(IntConst(i), Sub(ListLength(`seq`), IntConst(j))) if 0 <= i - j => Right(i.intValue - j.intValue)
-    case StrIndexOf(`seq`, StrConst(s), IntConst(i)) => First(s.toList, i.toInt)
-    case Add(StrIndexOf(`seq`, StrConst(s), IntConst(i)), IntConst(k)) => First(s.toList, i.toInt, k.toInt)
-    case _ => Index.Range(Left(0), Right(0)) // unknown index

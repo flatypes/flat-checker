@@ -259,9 +259,9 @@ object tpd:
       case _ => throw IllegalArgumentException("CharIn must have exactly 1 subtree")
 
   // String operations: access
-  final case class StrLength(str: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): StrLength = subtrees match
-      case List(s) => StrLength(s)(range)
+  final case class StrLen(str: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): StrLen = subtrees match
+      case List(s) => StrLen(s)(range)
       case _ => throw IllegalArgumentException("SeqLength must have exactly 1 subtree")
 
   final case class CharAt(str: Expr, idx: Expr)(val range: Range = noRange) extends Expr:
@@ -275,7 +275,7 @@ object tpd:
       case _ => throw IllegalArgumentException("SeqSlice must have 3 subtrees")
 
   object Substr:
-    def apply(seq: Expr, start: Expr)(range: Range): Substr = Substr(seq, start, StrLength(seq))(range)
+    def apply(seq: Expr, start: Expr)(range: Range): Substr = Substr(seq, start, StrLen(seq))(range)
 
 
   final case class StrConcat(left: Expr, right: Expr)(val range: Range = noRange) extends Expr:
@@ -393,14 +393,14 @@ object tpd:
       case List(e, ex, ei) => ListIndexOf(e, ex, ei)(range)
       case _ => throw IllegalArgumentException("ListIndexOf must have 2 or 3 subtrees")
 
-  final case class ListLength(lst: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): ListLength = subtrees match
-      case List(e) => ListLength(e)(range)
+  final case class ListLen(lst: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): ListLen = subtrees match
+      case List(e) => ListLen(e)(range)
       case _ => throw IllegalArgumentException("ListLength must have exactly 1 subtree")
 
-  final case class ListSelect(lst: Expr, idx: Expr)(val range: Range = noRange) extends Expr:
-    override def rebuild(subtrees: List[Expr]): ListSelect = subtrees match
-      case List(e, ei) => ListSelect(e, ei)(range)
+  final case class ElemAt(lst: Expr, idx: Expr)(val range: Range = noRange) extends Expr:
+    override def rebuild(subtrees: List[Expr]): ElemAt = subtrees match
+      case List(e, ei) => ElemAt(e, ei)(range)
       case _ => throw IllegalArgumentException("ListAt must have exactly 2 subtrees")
 
   final case class ListSlice(lst: Expr, start: Expr, end: Expr)(val range: Range = noRange) extends Expr:
