@@ -37,12 +37,22 @@ class Narrower(goal: Goal) extends LazyLogging:
     // Char membership
     case CharIn(e, a) => narrowChar(e, _ & a)
     case Not(CharIn(e, a)) => narrowChar(e, _ & ~a)
-    // Length inequalities
-    case Eq(StrLength(e), IntConst(n)) => narrowStr(e, StrREAPI.filterLengthEq(n.toInt))
-    case Le(StrLength(e), IntConst(n)) => narrowStr(e, StrREAPI.filterLengthLe(n.toInt))
-    case Le(IntConst(n), StrLength(e)) => narrowStr(e, StrREAPI.filterLengthGe(n.toInt))
-    case Lt(StrLength(e), IntConst(n)) => narrowStr(e, StrREAPI.filterLengthLe(n.toInt - 1))
-    case Lt(IntConst(n), StrLength(e)) => narrowStr(e, StrREAPI.filterLengthGe(n.toInt + 1))
+    // Length comparison
+    case StrLenCmp(e, op, i) => op match
+      case CmpOp.EQ =>
+        if i >= 0 then narrowStr(e, StrREAPI.filterLengthEq(i)) else narrowStr(e, _ => RegEx.Zero())
+      case CmpOp.NE =>
+        if i == 0 then narrowStr(e, StrREAPI.filterLengthGe(1))
+        else if i > 0 then narrowStr(e, StrREAPI.filterLengthNe(i))
+        else narrowStr(e, identity)
+      case CmpOp.LE =>
+        if i >= 0 then narrowStr(e, StrREAPI.filterLengthLe(i)) else narrowStr(e, _ => RegEx.Zero())
+      case CmpOp.LT =>
+        if i > 0 then narrowStr(e, StrREAPI.filterLengthLe(i - 1)) else narrowStr(e, _ => RegEx.Zero())
+      case CmpOp.GE =>
+        if i > 0 then narrowStr(e, StrREAPI.filterLengthGe(i)) else narrowStr(e, identity)
+      case CmpOp.GT =>
+        if i >= 0 then narrowStr(e, StrREAPI.filterLengthGe(i + 1)) else narrowStr(e, identity)
     // Contains
     case StrContains(e, CharConst(c)) => narrowStr(e, StrREAPI.filterContains(c))
     case StrContains(e, StrConst(s)) => narrowStr(e, StrREAPI.filterContains(s))
@@ -81,6 +91,23 @@ class Narrower(goal: Goal) extends LazyLogging:
     case Not(StrForall(e, LambdaExpr(List(x -> _), StrContains(StrConst(cs), CharToStr(Var(x1)))))) if x1 == x =>
       narrowStr(e, StrREAPI.filterExists(_ & ~CharSet.from(cs)))
     case _ => ()
+
+  object Cmp:
+    def unapply(expr: Expr): Option[(Expr, CmpOp, Expr)] = expr match
+      case Eq(e1, e2) => Some((e1, CmpOp.EQ, e2))
+      case Ne(e1, e2) => Some((e1, CmpOp.NE, e2))
+      case Le(e1, e2) => Some((e1, CmpOp.LE, e2))
+      case Lt(e1, e2) => Some((e1, CmpOp.LT, e2))
+      case _ => None
+
+  object StrLenCmp:
+    def unapply(expr: Expr): Option[(Expr, CmpOp, Int)] =
+      for
+        (e1, op, e2) <- Cmp.unapply(expr)
+        len <- expr.collectFirst { case e@StrLength(_) => e }
+        (resultOp, result) <- InequalitySolver.isolate(len, (e1, op, e2))
+        i <- result match {case IntConst(i) => Some(i); case _ => None}
+      yield (len.str, resultOp, i.toInt)
 
   private def narrowChar(expr: Expr, f: CharSet => CharSet)(using cond: Expr): Unit = expr match
     case CharAt(e, ei) =>

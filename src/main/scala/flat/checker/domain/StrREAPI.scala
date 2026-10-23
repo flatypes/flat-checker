@@ -11,6 +11,8 @@ object StrREAPI:
   // Length
   def filterLengthEq(n: Int): StrRE => StrRE = r => r.filterLengthEq(n)
 
+  def filterLengthNe(n: Int): StrRE => StrRE = r => r.filterLengthLe(n - 1) + r.filterLengthGe(n + 1)
+
   def filterLengthLe(n: Int): StrRE => StrRE = r => r.filterLengthLe(n)
 
   def filterLengthGe(n: Int): StrRE => StrRE = r => r.filterLengthGe(n)
