@@ -12,14 +12,14 @@ import java.util.concurrent.atomic.AtomicInteger
 class Verifier(using reporter: Reporter) extends LazyLogging:
   def verify(module: Module): Unit =
     val methodSigs = for m <- module.body yield
-      m.name -> MethodSig(m.params, m.returnType, m.requires, m.ensures)
+      m.name -> MethodSig(m.params, m.returnType, m.requires, m.ensures, m.locals)
     val state = State(module.uri, methodSigs.toMap)
     for m <- module.body do
       execMethod(m.body, state.copy(currentMethod = Some(m.name)))
 
   private def execMethod(body: List[Stmt], state: State): Unit =
     val sig = state.getMethodSig
-    val initState = state.pushed.declare(sig.params).havoc(sig.paramNames.toSet)
+    val initState = state.declare(sig.params ++ sig.locals).havoc(sig.paramNames.toSet)
     execBody(body, List(assume(sig.pre, initState)))
 
   private def execBody(body: List[Stmt], states: List[State]): List[State] =
@@ -34,16 +34,15 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
     case ExprStmt(e) =>
       safetyCheck(e, state)
       List(state)
-    case Declare(x, t, Some(e)) =>
-      assign(x, e, state.declare(x, t))
-    case Declare(x, t, None) =>
-      List(state.declare(x, t).havoc(x))
     case Assign(x, e) =>
-      assign(x, e, state)
+      if safetyCheck(e, state) && typeCheck(e, state.getType(x), state) then
+        List(state.assign(x, eval(e, state)))
+      else
+        Nil
     case Havoc(x) =>
       List(state.havoc(x))
 
-    case s@MethodCall(xs, m, es) =>
+    case s@MethodCall(ys, m, es) =>
       val sig = state.methods(m)
       // Check preconditions
       val safe = es.map(safetyCheck(_, state))
@@ -53,16 +52,16 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
         for b <- sig.applyPre(es) do
           prove(b, state, () => PreNotProved(s.range))
       // Assume postconditions
-      val newState = xs match
+      val newState = ys match
         case Nil => state
         case List(x) =>
           val updatedState = state.declare(x, sig.returnType).havoc(x)
           if safe.forall(_ == true) then assume(sig.applyPost(es, List(Var(x))), updatedState)
           else updatedState
         case _ => sig.returnType match
-          case TupleType(ts) if xs.length == ts.length =>
-            val updatedState = state.declare(xs.zip(ts)).havoc(xs.toSet)
-            if safe.forall(_ == true) then assume(sig.applyPost(es, xs.map(Var(_))), updatedState)
+          case TupleType(ts) if ys.length == ts.length =>
+            val updatedState = state.declare(ys.zip(ts)).havoc(ys.toSet)
+            if safe.forall(_ == true) then assume(sig.applyPost(es, ys.map(Var(_))), updatedState)
             else updatedState
           case _ =>
             throw new IllegalArgumentException("invalid number of return variables for method call")
@@ -173,12 +172,6 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       case (MapExpr(eks, evs), MapType(tk, tv)) =>
         eks.forall(typeCheck(_, tk, state)) && evs.forall(typeCheck(_, tv, state))
       case _ => hasType(expr, typ).forall(prove(_, state, () => ReftNotProved(expr.range)))
-
-  private def assign(variable: String, expr: Expr, state: State): List[State] =
-    if safetyCheck(expr, state) && typeCheck(expr, state.getType(variable), state) then
-      List(state.assign(variable, eval(expr, state)))
-    else
-      Nil
 
   private inline def assume(expr: Expr, state: State): State =
     state.copy(conds = state.conds :+ eval(expr, state))

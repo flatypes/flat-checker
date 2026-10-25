@@ -2,7 +2,7 @@ from url_split import Scheme, Authority, Path, Query, Fragment, URL, RelativePat
 
 def url_unsplit(scheme: Scheme?, netloc: Authority?, path: Path, query: Query?, fragment: Fragment?) -> URL:
     requires scheme == None ==> path in RelativePath
-    var url: Str = path
+    url: str = path
     if netloc != None:
         if url != "" and url[:1] != "/":
             url = "/" + url

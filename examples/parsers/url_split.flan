@@ -46,18 +46,18 @@ lang URL = URI | RelativeRef
 val scheme_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+.-"
 
 def url_split(url: URL) -> (Scheme?, Authority?, Path, Query?, Fragment?):
-    var scheme: Scheme? = None
-    var netloc: Authority? = None
-    var query: Query? = None
-    var fragment: Fragment? = None
-    var rest: str = url
+    scheme: Scheme? = None
+    netloc: Authority? = None
+    query: Query? = None
+    fragment: Fragment? = None
+    rest: str = url
 
-    var i = url.indexOf(':')
+    i = url.indexOf(':')
     if i > 0 and url[0].isascii() and url[0].isalpha() and url[:i].forall(lambda c -> c in scheme_chars):
         scheme = url[:i].toLower
         rest = url[i+1:]
     if rest[:2] == "//":
-        var (auth, s) = _split_netloc(rest)
+        (auth, s) = _split_netloc(rest)
         if (('[' in auth and ']' not in auth) or
             (']' in auth and '[' not in auth)):
             raise "Invalid IPv6 URL"
@@ -79,9 +79,9 @@ lang NetURLRest = PathAbEmpty ("?" Query)? ("#" Fragment)?
 lang NetURL = "//" Authority NetURLRest
 
 def _split_netloc(url: NetURL) -> (Authority, NetURLRest):
-    var delim = len(url)   # position of end of domain part of url, default is end
+    delim = len(url)   # position of end of domain part of url, default is end
     # Unfold for-loop: for c in '/?#'
-    var wdelim = url.indexOf('/', 2)
+    wdelim = url.indexOf('/', 2)
     if wdelim >= 0:
         delim = delim < wdelim ? delim : wdelim
     wdelim = url.indexOf('?', 2)
@@ -95,20 +95,20 @@ def _split_netloc(url: NetURL) -> (Authority, NetURLRest):
 lang BrNetLoc = (UserInfo "@")? IPLiteral (":" Port)?
 
 def _check_bracketed_netloc(netloc: BrNetLoc):
-    var i = netloc.indexOf('@')
-    var hostname_and_port = i >= 0 ? netloc[i+1:] : netloc
+    i = netloc.indexOf('@')
+    hostname_and_port = i >= 0 ? netloc[i+1:] : netloc
     i = hostname_and_port.indexOf('[')
-    var before_bracket = i >= 0 ? hostname_and_port[:i] : hostname_and_port
-    var have_open_br = i >= 0
-    var bracketed = i >= 0 ? hostname_and_port[i+1:] : ""
-    var hostname: Str = ""
+    before_bracket = i >= 0 ? hostname_and_port[:i] : hostname_and_port
+    have_open_br = i >= 0
+    bracketed = i >= 0 ? hostname_and_port[i+1:] : ""
+    hostname: Str = ""
     if have_open_br:
         # No data is allowed before a bracket.
         if before_bracket != "":
             raise "Invalid IPv6 URL"
         i = bracketed.indexOf(']')
         hostname = i >= 0 ? bracketed[:i] : bracketed
-        var port = i >= 0 ? bracketed[i+1:] : ""
+        port = i >= 0 ? bracketed[i+1:] : ""
         # No data is allowed after the bracket but before the port delimiter.
         if port != "" and not port.startsWith(":"):
             raise "Invalid IPv6 URL"

@@ -135,8 +135,13 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.Apply(untpd.TermName(m), es) if ctx.lookup(m).exists(_.isInstanceOf[MethodInfo]) =>
       val info = ctx.lookup(m).get.asInstanceOf[MethodInfo]
       val (args, argsSide) = checkArgs(es, info.paramTypes, node.range, ctx)
-      val fresh = "fresh_" + freshCounter.getAndIncrement()
-      (info.returnType, Var(fresh)(node.range), argsSide ++ List(MethodCall(List(fresh), m, args)(node.range)))
+      val returnNames = info.returnType match
+        case TupleType(ts) => ts.indices.map(_ => s"fresh_${freshCounter.getAndIncrement()}").toList
+        case _ => List(s"fresh_${freshCounter.getAndIncrement()}")
+      val returnVar = returnNames match
+        case List(x) => Var(x)(node.range)
+        case _ => TupleExpr(returnNames.map(Var(_)(node.range)))(node.range)
+      (info.returnType, returnVar, argsSide ++ List(MethodCall(returnNames, m, args)(node.range)))
 
     // Built-in function application
     case untpd.Apply(id@untpd.TermName(f), es) if builtins.contains(f) =>

@@ -1,9 +1,9 @@
-lang ABStar = r'(ab)*'
+lang ABStar = r"(ab)*"
 
 def f():
-    var s: ABStar = ''
-    var i = 0
+    s: ABStar = ""
+    i = 0
     while i < 10:
-        s += 'ab'
+        s += "ab"
         i += 1
-    assert 'c' !in s
+    assert 'c' not in s

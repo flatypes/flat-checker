@@ -33,8 +33,10 @@ object untpd:
 
   final case class ExprStmt(expr: Expr) extends Stmt
 
+  @deprecated
   final case class VarDecl(left: Pat, right: Expr) extends Stmt
 
+  @deprecated
   sealed trait Pat:
     val range: Range
 
@@ -43,7 +45,12 @@ object untpd:
 
   final case class TuplePat(elems: List[Pat])(val range: Range) extends Pat
 
-  final case class Assign(left: Ident, right: Expr) extends Stmt
+  @deprecated
+  final case class OldAssign(left: Ident, right: Expr) extends Stmt
+
+  final case class Assign(left: Expr, right: Expr) extends Stmt
+
+  final case class AnnAssign(ident: Ident, typ: Type, value: Option[Expr]) extends Stmt
 
   // Proof derivatives
   final case class Assume(expr: Expr) extends Stmt
@@ -85,29 +92,31 @@ object untpd:
 
   final case class NullConst()(val range: Range) extends Expr
 
+  // The following can appear in the assignment left-hand side
   final case class TermName(name: String)(val range: Range) extends Expr
 
   final case class TupleExpr(elems: List[Expr])(val range: Range) extends Expr
 
-  final case class LambdaExpr(params: List[Param], value: Expr)(val range: Range) extends Expr
+  final case class ListExpr(elems: List[Expr])(val range: Range) extends Expr
 
-  final case class Apply(fun: Expr, args: List[Expr])(endPos: Position) extends Expr:
-    override val range: Range = Range(fun.range.getStart, endPos)
+  // Built-in operations
+  final case class SetExpr(elems: List[Expr])(val range: Range) extends Expr
 
-  // Operations
+  final case class MapExpr(items: List[(Expr, Expr)])(val range: Range) extends Expr
+
+  final case class Ite(cond: Expr, thenExpr: Expr, elseExpr: Expr) extends Expr:
+    override val range: Range = Range(cond.range.getStart, elseExpr.range.getEnd)
+
   final case class Access(receiver: Expr, member: Ident)(val range: Range) extends Expr
 
   final case class BinaryExpr(left: Expr, op: Ident, right: Expr) extends Expr:
     override val range: Range = Range(left.range.getStart, right.range.getEnd)
 
-  final case class Ite(cond: Expr, thenExpr: Expr, elseExpr: Expr) extends Expr:
-    override val range: Range = Range(cond.range.getStart, elseExpr.range.getEnd)
+  // General functions
+  final case class LambdaExpr(params: List[Param], value: Expr)(val range: Range) extends Expr
 
-  final case class ListExpr(elems: List[Expr])(val range: Range) extends Expr
-
-  final case class SetExpr(elems: List[Expr])(val range: Range) extends Expr
-
-  final case class MapExpr(items: List[(Expr, Expr)])(val range: Range) extends Expr
+  final case class Apply(fun: Expr, args: List[Expr])(endPos: Position) extends Expr:
+    override val range: Range = Range(fun.range.getStart, endPos)
 
   // Formal Languages
   sealed trait PExpr

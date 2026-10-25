@@ -1,7 +1,7 @@
-lang AStar = r'a*'
+lang AStar = r"a*"
 
 def f(s1: AStar?, s2: AStar) -> AStar:
-    if s1 != null:
+    if s1 != None:
         return s1 + s2
     else:
         return s2
@@ -9,7 +9,7 @@ def f(s1: AStar?, s2: AStar) -> AStar:
 type Nat = {n: Int | n >= 0}
 
 def g(n: Nat?, m: Nat) -> Nat:
-    if m > 0 && n != null:
+    if m > 0 and n != None:
         return n + m
     else:
         return 0

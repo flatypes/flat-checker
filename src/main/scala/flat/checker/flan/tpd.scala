@@ -9,14 +9,13 @@ object tpd:
   final case class Module(uri: String, body: List[MethodDef])
 
   final case class MethodDef(name: String, params: List[(String, Type)], returnType: Type,
-                             requires: List[Expr], ensures: List[Expr], body: List[Stmt])
+                             requires: List[Expr], ensures: List[Expr],
+                             locals: List[(String, Type)], body: List[Stmt])
 
   // Local statements
   sealed trait Stmt
 
   final case class ExprStmt(expr: Expr) extends Stmt
-
-  final case class Declare(name: String, typ: Type, init: Option[Expr] = None) extends Stmt
 
   final case class Assign(variable: String, value: Expr) extends Stmt
 

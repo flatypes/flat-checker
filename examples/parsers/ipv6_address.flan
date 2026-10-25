@@ -24,17 +24,17 @@ def parse_ipv6_address(ip_str: IPv6Address) -> int:
     if len(ip_str) > 45:
         raise "At most 45 characters expected"
 
-    var _max_parts = HEXTET_COUNT + 1
-    var parts = ip_str.split(':')
+    _max_parts = HEXTET_COUNT + 1
+    parts = ip_str.split(':')
 
     # An IPv6 address needs at least 2 colons (3 parts).
-    var _min_parts = 3
+    _min_parts = 3
     if len(parts) < _min_parts:
         raise "At least 3 parts expected"
 
     # If the address has an IPv4-style suffix, convert it to hexadecimal.
     if '.' in parts.last:
-        var ipv4_int = parse_ipv4_address(parts.last)
+        ipv4_int = parse_ipv4_address(parts.last)
         parts = parts.init
         parts += ["%x" % ((ipv4_int >> 16) & 0xFFFF),
                   "%x" % (ipv4_int & 0xFFFF)]
@@ -47,8 +47,8 @@ def parse_ipv6_address(ip_str: IPv6Address) -> int:
 
     # Disregarding the endpoints, find '::' with nothing in between.
     # This indicates that a run of zeroes has been skipped.
-    var skip_index = -1
-    var i = 1
+    skip_index = -1
+    i = 1
     while i < len(parts) - 1:
         invariant 1 <= i < len(parts)
         invariant skip_index != -1 ? skip_index < i and skip_index == parts.indexOf("", 1) : "" not in parts[1:i]
@@ -61,13 +61,13 @@ def parse_ipv6_address(ip_str: IPv6Address) -> int:
 
     # parts_hi is the number of parts to copy from above/before the '::'
     # parts_lo is the number of parts to copy from below/after the '::'
-    var parts_hi = 0
-    var parts_lo = 0
-    var parts_skipped = 0
+    parts_hi = 0
+    parts_lo = 0
+    parts_skipped = 0
     if skip_index != -1:
         # If we found a '::', then check if it also covers the endpoints.
-        var parts_hi = skip_index
-        var parts_lo = len(parts) - skip_index - 1
+        parts_hi = skip_index
+        parts_lo = len(parts) - skip_index - 1
         if parts[0] == "":
             parts_hi -= 1
             if parts_hi != 0:
@@ -76,7 +76,7 @@ def parse_ipv6_address(ip_str: IPv6Address) -> int:
             parts_lo -= 1
             if parts_lo != 0:
                 raise "Trailing ':' only permitted as part of '::'"
-        var parts_skipped = HEXTET_COUNT - (parts_hi + parts_lo)
+        parts_skipped = HEXTET_COUNT - (parts_hi + parts_lo)
         if parts_skipped < 1:
             raise "Expected at most 7 other parts with '::'"
     else:
@@ -94,7 +94,7 @@ def parse_ipv6_address(ip_str: IPv6Address) -> int:
         parts_skipped = 0
 
     # Now, parse the hextets into a 128-bit integer.
-    var ip_int = 0
+    ip_int = 0
     i = 0
     while i < parts_hi:
         invariant 0 <= i <= parts_hi

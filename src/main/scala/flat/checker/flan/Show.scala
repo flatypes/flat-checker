@@ -221,8 +221,6 @@ object Show extends LazyLogging:
   private def showStmt(stmt: Stmt, level: Int): String =
     val s = stmt match
       case ExprStmt(e) => showExpr(e) + "\n"
-      case Declare(x, t, Some(e)) => s"var ${showVar(x)}: ${t.show} = ${showExpr(e)}\n"
-      case Declare(x, t, None) => s"var ${showVar(x)}: ${t.show} = *\n"
       case Assign(x, e) => s"${showVar(x)} = ${showExpr(e)}\n"
       case Havoc(x) => s"${showVar(x)} = *\n"
       case Assume(e) => s"assume ${showExpr(e)}\n"
@@ -238,9 +236,6 @@ object Show extends LazyLogging:
         s"while ${showExpr(e)}:\n$body"
       case Break() => "break\n"
       case Continue() => "continue\n"
-      case For(x, e, _, b) =>
-        val body = b.map(showStmt(_, level + 1)).mkString
-        s"for ${showVar(x)} in ${showExpr(e)}:\n$body"
     "  " * level + s
 
   extension (stmt: Stmt)

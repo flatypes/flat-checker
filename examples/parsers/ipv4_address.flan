@@ -9,12 +9,12 @@ def parse_ipv4_address(ip_str: IPv4Address) -> U32:
     if ip_str == "":
         raise "Address cannot be empty"
 
-    var octets = ip_str.split('.')
+    octets = ip_str.split('.')
     if len(octets) != 4:
         raise "Expected 4 octets"
 
-    var ip_int = 0
-    var i = 0
+    ip_int = 0
+    i = 0
     while i < 4:
         invariant 0 <= i <= 4
         invariant 0 <= ip_int < 2 ** (8 * i)
@@ -40,7 +40,7 @@ def _parse_octet(octet_str: DecOctet) -> Byte:
     if octet_str != "0" and octet_str[0] == '0':
         raise "Leading zeros are not permitted"
     # Convert to integer (we know digits are legal)
-    var octet_int = int(octet_str, 10)
+    octet_int = int(octet_str, 10)
     if octet_int > 255:
         raise "Octet > 255 not permitted"
     return octet_int

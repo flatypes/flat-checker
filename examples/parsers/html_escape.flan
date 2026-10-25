@@ -5,7 +5,7 @@ lang Safe = r"([^&<>\"']|&[A-Za-z]+;|&#x[0-9A-Fa-f]+;)*"
 # characters, both double quote (") and single quote (') characters are also
 # translated.
 def escape(html: str) -> Safe:
-    var s = html
+    s = html
     s = s.replace("&", "&amp;") # Must be done first!
     s = s.replace("<", "&lt;")
     s = s.replace(">", "&gt;")

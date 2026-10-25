@@ -3,7 +3,9 @@ package flat.checker.verif
 import flat.checker.flan.*
 import flat.checker.flan.tpd.*
 
-final case class MethodSig(params: List[(String, Type)], returnType: Type, pre: List[Expr], post: List[Expr]):
+final case class MethodSig(params: List[(String, Type)], returnType: Type,
+                           pre: List[Expr], post: List[Expr],
+                           locals: List[(String, Type)]):
   def paramNames: List[String] = params.map(_._1)
 
   def paramTypes: List[Type] = params.map(_._2)
@@ -35,8 +37,8 @@ enum Signal:
 final case class State(uri: String,
                        methods: Map[String, MethodSig],
                        currentMethod: Option[String] = None,
-                       typeStack: List[Map[String, Type]] = List(Map.empty),
-                       symbolicStack: List[Map[String, Expr]] = List(Map.empty),
+                       types: Map[String, Type] = Map.empty,
+                       symbolicValues: Map[String, Expr] = Map.empty,
                        symbolicVars: Map[String, Type] = Map.empty,
                        conds: List[Expr] = Nil,
                        counters: Map[String, Int] = Map.empty,
@@ -45,30 +47,24 @@ final case class State(uri: String,
     require(currentMethod.isDefined, "Current method is not defined")
     methods(currentMethod.get)
 
-  def pushed: State = copy(symbolicStack = Map.empty :: symbolicStack)
+  def getType(name: String): Type = types(name)
 
-  def getType(name: String): Type =
-    typeStack.collectFirst { case m if m.contains(name) => m(name) }
-      .getOrElse(throw new RuntimeException(s"Variable $name not found in sort stack"))
-
-  def getSymbolicValue(name: String): Expr =
-    symbolicStack.collectFirst { case m if m.contains(name) => m(name) }
-      .getOrElse(throw new RuntimeException(s"Variable $name not found in value stack"))
+  def getSymbolicValue(name: String): Expr = symbolicValues(name)
 
   def declare(name: String, typ: Type): State =
-    copy(typeStack = typeStack.head + (name -> typ) :: typeStack.tail)
+    copy(types = types + (name -> typ))
 
   def declare(varsWithTypes: List[(String, Type)]): State =
-    copy(typeStack = typeStack.head ++ varsWithTypes.toMap :: typeStack.tail)
+    copy(types = types ++ varsWithTypes.toMap)
 
   def assign(name: String, value: Expr): State =
-    copy(symbolicStack = symbolicStack.head + (name -> value) :: symbolicStack.tail)
+    copy(symbolicValues = symbolicValues + (name -> value))
 
   def havoc(name: String): State =
     val newCount = counters.getOrElse(name, 0)
     val freshName = name + "$" + newCount
     copy(counters = counters + (name -> (newCount + 1)),
       symbolicVars = symbolicVars + (freshName -> getType(name)),
-      symbolicStack = symbolicStack.head + (name -> Var(freshName)) :: symbolicStack.tail)
+      symbolicValues = symbolicValues + (name -> Var(freshName)))
 
   def havoc(names: Set[String]): State = names.foldLeft(this)(_.havoc(_))
