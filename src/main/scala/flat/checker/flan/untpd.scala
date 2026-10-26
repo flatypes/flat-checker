@@ -33,21 +33,6 @@ object untpd:
 
   final case class ExprStmt(expr: Expr) extends Stmt
 
-  @deprecated
-  final case class VarDecl(left: Pat, right: Expr) extends Stmt
-
-  @deprecated
-  sealed trait Pat:
-    val range: Range
-
-  final case class PatVar(ident: Ident, typ: Option[Type]) extends Pat:
-    override val range: Range = if typ.isEmpty then ident.range else Range(ident.range.getStart, typ.get.range.getEnd)
-
-  final case class TuplePat(elems: List[Pat])(val range: Range) extends Pat
-
-  @deprecated
-  final case class OldAssign(left: Ident, right: Expr) extends Stmt
-
   final case class Assign(left: Expr, right: Expr) extends Stmt
 
   final case class AnnAssign(ident: Ident, typ: Type, value: Option[Expr]) extends Stmt
@@ -94,6 +79,8 @@ object untpd:
 
   // The following can appear in the assignment left-hand side
   final case class TermName(name: String)(val range: Range) extends Expr
+
+  final case class IndexAccess(receiver: Expr, index: Expr)(val range: Range) extends Expr
 
   final case class TupleExpr(elems: List[Expr])(val range: Range) extends Expr
 

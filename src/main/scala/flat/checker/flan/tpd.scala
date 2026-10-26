@@ -36,7 +36,7 @@ object tpd:
 
   final case class While(cond: Expr, invariants: List[Expr], body: List[Stmt]) extends Stmt
 
-  final case class For(name: String, iter: Expr, inv: Expr, body: List[Stmt]) extends Stmt
+  final case class UnrolledFor(variable: String, values: List[Expr], body: List[Stmt]) extends Stmt
 
   final case class Return(value: Expr = NoExpr)(val range: Range) extends Stmt
 

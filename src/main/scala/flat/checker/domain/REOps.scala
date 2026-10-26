@@ -299,6 +299,11 @@ object REOps extends LazyLogging:
       require(n >= 0)
       sum(for (r1, r2) <- findFirst(t, start); rf = r1.filterLengthGe(n); if rf.nonEmpty yield rf * word(t) * r2)
 
+    def filterIndexOfRightGe(t: List[set.Symbol], start: Int, n: Int): RegEx[A] =
+      require(n >= 0)
+      sum(for (r1, r2) <- r.absSplitAt(t, start, 0); rf = r2.filterLengthGe(n); if rf.nonEmpty yield r1 * rf)
+        + filterIndexOfNeg(t, start)
+
     def filterIndexOfLt(x1: set.Symbol, x2: set.Symbol, start: Int): RegEx[A] =
       // Assume both character exist
       sum:
@@ -337,6 +342,16 @@ object REOps extends LazyLogging:
       sum:
         for
           (left, right) <- if i >= 0 then r.absSplitAt(i) else r.absSplitAtLast(i)
+          (target, skipped) <- right.absSplitAt1
+          filtered = f(target)
+          if filtered.nonEmpty
+        yield left * Lit(filtered) * skipped
+
+    def filterElemWith(indexOf: List[set.Symbol], start: Int, offset: Int, f: A => A): RegEx[A] =
+      require(start >= 0)
+      sum:
+        for
+          (left, right) <- r.absSplitAt(indexOf, start, offset)
           (target, skipped) <- right.absSplitAt1
           filtered = f(target)
           if filtered.nonEmpty

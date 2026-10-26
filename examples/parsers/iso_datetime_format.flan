@@ -1,0 +1,13 @@
+from iso_datetime_parse import DateTime, DateTimeStr
+from iso_time_format import TimeSpec, _format_time, _format_offset
+
+def format_iso_datetime(self: DateTime, timespec: TimeSpec) -> DateTimeStr:
+    ((year, month, day), (hour, minute, second, microsecond, utc_offset)) = self
+    sep = "T"
+
+    s = ("%04d-%02d-%02d%s" % (year, month, day, sep) +
+         _format_time(hour, minute, second, microsecond, timespec))
+    tz = _format_offset(utc_offset)
+    if tz != "":
+        s += tz
+    return s

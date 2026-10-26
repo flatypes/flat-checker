@@ -12,21 +12,21 @@ import scala.jdk.CollectionConverters.*
 import scala.util.{Success, Try}
 
 class LPSolver(constraints: List[Expr]) extends LazyLogging:
-  def solveMin(expr: Expr): Option[Int] =
+  def solveMin(expr: Expr): Option[BigInt] =
     val objective = prepareObjective(expr)
     val solver = new SimplexSolver
     Try(solver.optimize(objective, linearConstraints, GoalType.MINIMIZE, false)) match
-      case Success(value) => Some(value.getValue.toInt)
+      case Success(value) => Some(BigDecimal(value.getValue).toBigInt)
       case _ => None
 
-  def solveMax(expr: Expr): Option[Int] =
+  def solveMax(expr: Expr): Option[BigInt] =
     val objective = prepareObjective(expr)
     val solver = new SimplexSolver
     Try(solver.optimize(objective, linearConstraints, GoalType.MAXIMIZE, false)) match
-      case Success(value) => Some(value.getValue.toInt)
+      case Success(value) => Some(BigDecimal(value.getValue).toBigInt)
       case _ => None
 
-  def solve(goal: Expr): (Option[Int], Option[Int]) = (solveMin(goal), solveMax(goal))
+  def solve(goal: Expr): (Option[BigInt], Option[BigInt]) = (solveMin(goal), solveMax(goal))
 
   private val variables = ListBuffer.empty[Expr]
 

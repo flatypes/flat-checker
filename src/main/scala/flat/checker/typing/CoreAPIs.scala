@@ -86,6 +86,9 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.BinaryExpr(e1, op@untpd.Ident("in"), e2) =>
       inferOperation(e2, untpd.Ident("contains")(op.range), List(e1), node.range, ctx)
 
+    // Operations: index
+    case untpd.IndexAccess(e, ei) => inferOperation(e, untpd.Ident("__getitem__")(ei.range), List(ei), node.range, ctx)
+
     // Operations: string format
     case untpd.BinaryExpr(untpd.StrConst(fmt), untpd.Ident("%"), e) =>
       val args = e match
@@ -157,6 +160,16 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
             reporter.report(ctx.uri, ArityMismatch(node.range, 1, es.length))
             (NoType, NoExpr, Nil)
         case "str" => inferOperation(es.head, untpd.Ident("__str__")(id.range), es.tail, node.range, ctx)
+        case "divmod" => es match
+          case List(e1, e2) =>
+            val (left, leftSide) = check(e1, IntType, ctx)
+            val (right, rightSide) = check(e2, IntType, ctx)
+            (TupleType(List(IntType, IntType)),
+              TupleExpr(List(Div(left, right)(node.range), Mod(left, right)(node.range)))(node.range),
+              leftSide ++ rightSide)
+          case _ =>
+            reporter.report(ctx.uri, ArityMismatch(node.range, 2, es.length))
+            (NoType, NoExpr, Nil)
         case _ => throw NotImplementedError(s"Built-in function $f is not implemented")
 
     // Function application: others
@@ -267,8 +280,9 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
           case List(m) =>
             val expr = m.impl(receiver, args, span)
             (m.funType.returnType, expr, receiverSide ++ argSides.flatten)
-          case _ =>
-            throw UnsupportedOperationException(s"Ambiguous operation: ${op.name} for type $receiverType")
+          case ms =>
+            reporter.report(ctx.uri, TypeMismatch(span, "ambiguous overloaded operation", s"${op.name} for type $receiverType"))
+            (NoType, NoExpr, receiverSide ++ argSides.flatten)
 
   def checkArgs(es: List[untpd.Expr], ts: List[Type], span: Span, ctx: TypingCtx): (List[Expr], List[Stmt]) =
     if es.length != ts.length then

@@ -112,7 +112,21 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       val (invariants, side1) = s.invariants.map(resolver.coreAPIs.check(_, BoolType, ctx)).unzip
       assert(side1.flatten.isEmpty, "Side effects are not allowed in loop invariants")
       val (loopBody, loopCtx) = checkBlock(bd, ctx, methodInfo, loopLevel + 1)
-      (List(While(cond, invariants, loopBody)), ctx.copy(stack = loopCtx.stack))
+      (List(While(cond, invariants, loopBody)), loopCtx)
+
+    case untpd.For(id, iter, Nil, bd) =>
+      val (typ, values) = iter match
+        case untpd.StrConst(s) =>
+          (CharType, s.toList.map(c => CharConst(c)(iter.range)))
+        case untpd.ListExpr(es) if es.forall(_.isInstanceOf[untpd.IntConst]) =>
+          (IntType, es.map(e => IntConst(e.asInstanceOf[untpd.IntConst].value)(e.range)))
+        case untpd.Apply(untpd.TermName("range"), List(untpd.IntConst(i), untpd.IntConst(j))) =>
+          (IntType, (i until j).map(IntConst(_)(iter.range)).toList)
+        case _ =>
+          throw UnsupportedOperationException(iter.toString)
+      val newCtx = resolver.coreAPIs.declare(id, VarInfo(id, typ), ctx)
+      val (loopBody, loopCtx) = checkBlock(bd, newCtx, methodInfo, loopLevel + 1)
+      (List(UnrolledFor(id.name, values, loopBody)), loopCtx)
 
     case s@untpd.Break() =>
       if loopLevel > 0 then
@@ -144,6 +158,20 @@ class Typer(using reporter: Reporter) extends LazyLogging:
         case None => // declare a new variable
           val info = VarInfo(untpd.Ident(x)(tg.range), typ)
           (List(Assign(x, value)), localCtx.declare(x, info))
+
+    case untpd.IndexAccess(e@untpd.TermName(x), ei) =>
+      val (receiverType, _, side) = resolver.coreAPIs.infer(e, localCtx)
+      assert(side.isEmpty, "Side effects are not allowed in assignment left-hand side")
+      receiverType match
+        case ListType(elemType) =>
+          val (index, indexSide) = resolver.coreAPIs.check(ei, IntType, localCtx)
+          if !typ.toSort.subsortOf(elemType.toSort) then
+            reporter.report(localCtx.uri, TypeMismatch(tg.range, elemType.toSort.show, typ.toSort.show))
+          (List(Assign(x, ListUpdate(Var(x)(e.range), index, value)(tg.range))), localCtx)
+        case _ =>
+          reporter.report(localCtx.uri, TypeMismatch(tg.range, s"ListType", s"${receiverType.show}"))
+          (Nil, localCtx)
+
     case untpd.TupleExpr(tgs) =>
       typ match
         case TupleType(ts) if ts.length == tgs.length =>

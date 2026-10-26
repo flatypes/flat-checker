@@ -23,14 +23,7 @@ enum Domain:
   def membership(elem: Expr): List[Expr] = this match
     case Top => Nil
     case Nat(set) =>
-      if set.isFinite then
-        val ns = set.toFinSet.toList.sorted
-        if ns.length == ns.max - ns.min + 1 then
-          List(Le(IntConst(ns.min), elem), Le(elem, IntConst(ns.max)))
-        else
-          List(mkOr(for n <- set.toFinSet.toList.sorted yield Eq(elem, IntConst(n))))
-      else
-        List(Le(IntConst(set.min), elem))
+      inNatSet(elem, set.toNatSet)
 
     case Index(len, set) =>
       val leftCases = ListBuffer.empty[Expr]
@@ -87,6 +80,13 @@ enum Domain:
     case Char(set) => s"Char($set)"
     case Str(set) => s"Str(${set.pp})"
     case StrList(set) => s"StrList(${set.pp})"
+
+private def inNatSet(elem: Expr, set: NatSet): List[Expr] =
+  val nats = set.nats.toList.sorted
+  if set.infinite then
+    List(mkOr((for n <- nats.init yield Eq(elem, IntConst(n))()) :+ Le(IntConst(nats.last), elem)))
+  else
+    List(mkOr(for n <- nats yield Eq(elem, IntConst(n))))
 
 private def inCharSet(elem: Expr, set: CharSet): Expr =
   if set.pos then mkOr(for c <- set.chars.toList.sorted yield Eq(elem, CharConst(c)))
@@ -199,9 +199,8 @@ object Inferer extends LazyLogging:
           case BitAnd(_, IntConst(n)) if n >= 0 =>
             Domain.Str(absFromInt(0, n.toInt, fmt))
           case _ =>
-            val solver = LPSolver(goal.premises)
-            solver.solve(e) match
-              case (Some(min), Some(max)) if 0 <= min =>
+            inferInterval(e, goal) match
+              case Some(Interval(min, max)) if 0 <= min =>
                 Domain.Str(absFromInt(min, max, fmt))
               case _ =>
                 val r1 = RegEx.Lit(CharSet.from(fmt.digits))
@@ -235,7 +234,7 @@ object Inferer extends LazyLogging:
         infer(e) match
           case Domain.Str(r) => Domain.Str(r.absMap(_.map(_.toUpper)))
           case _ => Domain.Top
-      case StrForall(e, LambdaExpr(List(c -> _), CharIn(Var(c1), a))) if c1 == c =>
+      case StrForall(e, LambdaExpr(List(x -> _), CharInCharSet(Var(x1), a))) if x1 == x =>
         infer(e) match
           case Domain.Str(r) =>
             if r.alphabet.subsetOf(a) then Domain.Bool(BoolSet.True)
@@ -284,6 +283,12 @@ object Inferer extends LazyLogging:
       // Others
       case _ => Domain.Top
 
+  private object CharInCharSet:
+    def unapply(e: Expr): Option[(Expr, CharSet)] = e match
+      case CharIn(e1, a) => Some((e1, a))
+      case StrContains(StrConst(cs), CharToStr(e1)) => Some((e1, CharSet.from(cs)))
+      case _ => None
+
   def inferChar(expr: Expr, goal: Goal): CharSet =
     infer(expr)(using goal) match
       case Domain.Char(set) => set
@@ -298,3 +303,16 @@ object Inferer extends LazyLogging:
     infer(expr)(using goal) match
       case Domain.StrList(r) => r
       case _ => RegEx.Lit(RegEx.full).star
+
+  private def inferInterval(expr: Expr, goal: Goal): Option[Interval] = expr match
+    case Negate(e) => inferInterval(e, goal).map(-_)
+    case Add(e, IntConst(i)) => inferInterval(e, goal).map(_ + i)
+    case Sub(e, IntConst(i)) => inferInterval(e, goal).map(_ - i)
+    case Mul(e, IntConst(i)) => inferInterval(e, goal).map(_ * i)
+    case Div(e, IntConst(i)) if i != 0 => inferInterval(e, goal).map(_ / i)
+    case Mod(e, IntConst(i)) if i > 0 => inferInterval(e, goal).map(_ % i)
+    case _ =>
+      val solver = LPSolver(goal.premises)
+      solver.solve(expr) match
+        case (Some(min), Some(max)) => Some(Interval(min, max))
+        case _ => None

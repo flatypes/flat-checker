@@ -1,0 +1,58 @@
+from iso_time_parse import Time, TimeStr
+
+lang TimeSpec = "auto" | "hours" | "minutes" | "seconds" | "milliseconds" | "microseconds"
+
+def format_iso_time(self: Time, timespec: TimeSpec) -> TimeStr:
+    (hour, minute, second, microsecond, utc_offset) = self
+    s: str = _format_time(hour, minute, second, microsecond, timespec)
+    tz = _format_offset(utc_offset)
+    if tz != "":
+        s += tz
+    return s
+
+from iso_time_parse import Hour, Minute, Second, Microsecond, Format
+
+def _format_time(hh: Hour, mm: Minute, ss: Second, us: Microsecond, timespec: TimeSpec) -> Format:
+    spec = timespec
+    ms_or_us = us
+    if spec == "auto":
+        # Skip trailing microseconds when us==0.
+        spec = "microseconds" if us != 0 else "seconds"
+    elif spec == "milliseconds":
+        ms_or_us //= 1000
+
+    if spec == "hours":
+        return "%02d" % (hh)
+    elif spec == "minutes":
+        return "%02d:%02d" % (hh, mm)
+    elif spec == "seconds":
+        return "%02d:%02d:%02d" % (hh, mm, ss)
+    elif spec == "milliseconds":
+        return "%02d:%02d:%02d.%03d" % (hh, mm, ss, ms_or_us)
+    elif spec == "microseconds":
+        return "%02d:%02d:%02d.%06d" % (hh, mm, ss, ms_or_us)
+    else:
+        raise "Unknown timespec value"
+
+from iso_time_parse import UTCOffset, TZStr, HOUR, MINUTE, SECOND
+
+def _format_offset(offset: UTCOffset?) -> TZStr:
+    s = ""
+    if offset is not None:
+        off = offset
+        if off < 0:
+            sign = "-"
+            off = -off
+        else:
+            sign = "+"
+        hh, mm = divmod(off, HOUR)
+        mm, ss = divmod(mm, MINUTE)
+        sep = ":"
+        s += "%s%02d%s%02d" % (sign, hh, sep, mm)
+        if ss != 0:
+            ss, ff = divmod(ss, SECOND)
+            s += "%s%02d" % (sep, ss)
+
+            if ff != 0:
+                s += ".%06d" % ff
+    return s

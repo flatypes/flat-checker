@@ -52,6 +52,7 @@ class Narrower(goal: Goal) extends LazyLogging:
     case ElemAt(e, ei) =>
       val index = IndexInferer.inferListIndex(ei, e, goal)
       narrowStrListTarget(e, ListREAPI.filterElemWith(index, f))
+    case StrConst(_) => // ignore
     case _ =>
       val r0 = strTypes.getOrElse(expr, Inferer.inferStr(expr, newGoal()))
       val r1 = NarrowCache.getOrElseUpdate(expr, r0, cond, f(r0))
@@ -132,6 +133,10 @@ class Narrower(goal: Goal) extends LazyLogging:
         if k >= 0 then Some((e, StrREAPI.filterIndexOfEq(s, i, k.toInt)))
         else if k == -1 then Some((e, StrREAPI.filterIndexOfNeg(s, i)))
         else Some((e, _ => RegEx.Zero()))
+      case (CmpOp.NE, IntConst(-1)) =>
+        Some((e, StrREAPI.filterIndexOfGe(s, i, 0)))
+      case (CmpOp.NE, Sub(StrLen(`e`), IntConst(1))) =>
+        Some((e, StrREAPI.filterIndexOfNeLast(s, i)))
       case (CmpOp.LE, IntConst(k)) =>
         if k >= 0 then Some((e, StrREAPI.filterIndexOfLe(s, i, k.toInt)))
         else if k == -1 then Some((e, StrREAPI.filterIndexOfNeg(s, i)))

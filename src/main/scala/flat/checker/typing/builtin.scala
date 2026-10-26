@@ -39,7 +39,7 @@ object builtin:
     case "+" => List(Member(int -> int, { case List(n1, n2) => Add(n1, n2) }))
     case "-" => List(Member(int -> int, { case List(n1, n2) => Sub(n1, n2) }))
     case "*" => List(Member(int -> int, { case List(n1, n2) => Mul(n1, n2) }))
-    case "/" => List(Member(int -> int, { case List(n1, n2) => Div(n1, n2) }))
+    case "//" => List(Member(int -> int, { case List(n1, n2) => Div(n1, n2) }))
     case "%" => List(Member(int -> int, { case List(n1, n2) => Mod(n1, n2) }))
     case "**" => List(Member(int -> int, { case List(n1, n2) => Pow(n1, n2) }))
     // relational operators

@@ -6,6 +6,7 @@ import flat.checker.flan.Show.show
 import flat.checker.flan.sorting.{isSort, toSort}
 import flat.checker.flan.tpd.*
 import flat.checker.verif.Signal.*
+import flat.checker.verif.Simplifier.{isConst, simplify}
 
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -80,10 +81,8 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
     // Control flow
     case If(e, bd1, bd2) =>
-      val (trueState, falseState) =
-        if safetyCheck(e, state) then (assume(e, state), assume(Not(e), state))
-        else (state, state)
-      execBody(bd1, List(trueState)) ++ execBody(bd2, List(falseState))
+      val (trueState, falseState) = branch(e, state)
+      execBody(bd1, trueState.toList) ++ execBody(bd2, falseState.toList)
 
     case While(e, inv, bd) =>
       val havocState = state.havoc(collectModifiedVars(bd))
@@ -106,6 +105,10 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       else
         Nil
 
+    case UnrolledFor(x, es, bd) =>
+      require(es.forall(_.isConst))
+      execUnrolledFor(x, es, bd, state)
+
     case Return(e) =>
       val sig = state.getMethodSig
       if safetyCheck(e, state) then
@@ -116,6 +119,22 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
     case Break() => List(state.copy(signal = BREAK))
     case Continue() => List(state.copy(signal = CONTINUE))
+
+  private def execUnrolledFor(variable: String, values: List[Expr], body: List[Stmt], state: State): List[State] =
+    values match
+      case Nil => List(state)
+      case v :: vs =>
+        val initState = state.assign(variable, v)
+        val (breakStates, finalStates) = execBody(body, List(initState)).partition(_.signal == BREAK)
+        breakStates.map(_.copy(signal = NEXT)) ++ finalStates.flatMap(execUnrolledFor(variable, vs, body, _))
+
+  private def branch(expr: Expr, state: State): (Option[State], Option[State]) =
+    if safetyCheck(expr, state) then
+      eval(expr, state).simplify match
+        case BoolConst(true) => (Some(state), None)
+        case BoolConst(false) => (None, Some(state))
+        case _ => (Some(assume(expr, state)), Some(assume(Not(expr), state)))
+    else (Some(state), Some(state))
 
   private def safetyCheck(expr: Expr, state: State): Boolean = expr match
     // Boolean

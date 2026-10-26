@@ -31,16 +31,13 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def ident: Parser[Ident] = IDENTIFIER ^^ { tk => Ident(tk.value)(tk.span) }
 
   // Top-level statements
-  private def topStmt: Parser[TopStmt] = importStmt | typeAlias | valDef | langDef | funDef
+  private def topStmt: Parser[TopStmt] = importStmt | typeAlias | langDef | funDef | constDef
 
   private def importStmt: Parser[Import] =
     "from" ~>! ident ~ ("import" ~> rep1sep(ident, ",")) <~ NEWLINE ^^ { case id ~ ids => Import(id, ids) }
 
   private def typeAlias: Parser[TypeAlias] =
     "type" ~>! ident ~ ("=" ~> typ) <~ NEWLINE ^^ { case id ~ t => TypeAlias(id, t) }
-
-  private def valDef: Parser[ConstDef] =
-    "val" ~>! ident ~ ("=" ~> expr) <~ NEWLINE ^^ { case id ~ e => ConstDef(id, e) }
 
   private def langDef: Parser[LangDef] =
     "lang" ~>! ident ~ ("=" ~> pExpr) <~ NEWLINE ^^ { case id ~ e => LangDef(id, e) }
@@ -49,6 +46,9 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     "def" ~>! ident ~ params ~ ("->" ~> typ).?
       ~ (NEWLINE ^^^ new~(new~(Nil, Nil), Nil) | block(requireSpec.* ~! ensureSpec.* ~! stmt.*))
       ^^ { case id ~ ps ~ t ~ (pre ~ post ~ body) => FunDef(id, ps, t, pre, post, body)(id.range) }
+
+  private def constDef: Parser[ConstDef] =
+    "val".? ~> ident ~ ("=" ~>! expr) <~ NEWLINE ^^ { case id ~ e => ConstDef(id, e) }
 
   private def params: Parser[List[Param]] = "(" ~> repsep(param, ",") <~ ")"
 
@@ -90,13 +90,14 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   private def expr: Parser[Expr] = lambda | ite | implies
 
   private def lambda: Parser[Expr] =
-    "lambda" ~ lambdaParams ~ ("->" ~> expr)
+    "lambda" ~ lambdaParams ~ (("->" | ":") ~> expr)
       ^^ { case tk ~ ids ~ e => LambdaExpr(ids, e)(Span(tk.span.getStart, e.range.getEnd)) }
 
   private def lambdaParams: Parser[List[Param]] = ident ^^ { id => List(Param(id, None)) } | params
 
   private def ite: Parser[Expr] =
     implies ~ ("?" ~>! implies) ~ (":" ~> implies) ^^ { case e ~ e1 ~ e2 => Ite(e, e1, e2) }
+      | implies ~ ("if" ~>! implies) ~ ("else" ~> implies) ^^ { case e1 ~ e ~ e2 => Ite(e, e1, e2) }
 
   // Expressions: binary, unary
   private def binaryOp(op: Parser[Token]): Parser[(Expr, Expr) => Expr] =
@@ -110,7 +111,7 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
 
   private def relational: Parser[Expr] =
     chainedRelational("<=" | "<") | chainedRelational(">=" | ">")
-      | infixNonAssoc(binaryOp("==" | "!=" | "in") | notIn, bitOr)
+      | infixNonAssoc(binaryOp("==" | "!=" | "in") | notIn | isNot | is, bitOr)
 
   private def chainedRelational(op: Parser[Token]): Parser[Expr] =
     bitOr ~ (op ~ bitOr).+ ^^ {
@@ -129,6 +130,13 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
         val notOp = Ident("not")(tk1.span)
         (e1, e2) => Access(BinaryExpr(e1, inOp, e2), notOp)(Span(e1.range.getStart, e2.range.getEnd))
     }
+
+  private def is: Parser[(Expr, Expr) => Expr] =
+    "is" ^^ { tk => (e1, e2) => BinaryExpr(e1, Ident("==")(tk.span), e2) }
+
+  private def isNot: Parser[(Expr, Expr) => Expr] =
+    "is" ~ "not"
+      ^^ { case tk1 ~ tk2 => (e1, e2) => BinaryExpr(e1, Ident("!=")(Span(tk1.span.getStart, tk2.span.getEnd)), e2) }
 
   private def bitOr: Parser[Expr] = infixL(binaryOp("|"), bitXor)
 
@@ -221,10 +229,7 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     "." ~> ident ^^ { f => e => Access(e, f)(Span(e.range.getStart, f.range.getEnd)) }
 
   private def indexAccessOp: Parser[Expr => Expr] =
-    "[" ~ expr ~ "]" ^^ { case tk1 ~ ei ~ tk =>
-      val member = Ident("__getitem__")(tk1.span)
-      e => Apply(Access(e, member)(Span(e.range.getStart, tk1.span.getEnd)), List(ei))(tk.span.getEnd)
-    }
+    "[" ~ expr ~ "]" ^^ { case tk1 ~ ei ~ tk => e => IndexAccess(e, ei)(Span(e.range.getStart, tk.span.getEnd)) }
 
   private def applyOp: Parser[Expr => Expr] =
     "(" ~>! repsep(expr, ",") ~ ")" ^^ { case es ~ tk => ef => Apply(ef, es)(tk.span.getEnd) }
@@ -283,12 +288,21 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
 
   private def abort: Parser[Abort] = "raise" ~>! expr <~ NEWLINE ^^ (Abort(_))
 
-  private def ifStmt: Parser[If] =
-    "if" ~>! expr ~ block(stmt.+) ~ elsePart ^^ { case e ~ b1 ~ b2 => If(e, b1, b2) }
+  private def ifStmt: Parser[If] = "if" ~>! ifClause
 
-  private def elsePart: Parser[List[Stmt]] = "else" ~>! (ifStmt ^^ (List(_)) | block(stmt.+)) | success(Nil)
+  private def ifClause: Parser[If] =
+    expr ~ block(stmt.+) ~ elsePart ^^ { case e ~ b1 ~ b2 => If(e, b1, b2) }
 
-  private def returnStmt: Parser[Return] = "return" ~! expr.? <~ NEWLINE ^^ { case t ~ e => Return(e)(t.span) }
+  private def elsePart: Parser[List[Stmt]] =
+    "else" ~>! (ifStmt ^^ (List(_)) | block(stmt.+))
+      | "elif" ~>! (ifClause ^^ (List(_)))
+      | success(Nil)
+
+  private def returnStmt: Parser[Return] = "return" ~! repsep(expr, ",") <~ NEWLINE ^^ {
+    case t ~ Nil => Return(None)(t.span)
+    case t ~ List(e) => Return(Some(e))(t.span)
+    case t ~ es => Return(Some(TupleExpr(es)(Span(t.span.getStart, es.last.range.getEnd))))(t.span)
+  }
 
   private def whileStmt: Parser[While] =
     "while" ~>! expr ~ block(loopSpec.* ~! stmt.+) ^^ { case e ~ (specs ~ body) => While(e, specs, body) }
@@ -312,21 +326,24 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
   }
 
   private def pattern: Parser[Expr] =
-    IDENTIFIER ^^ { tk => TermName(tk.value)(tk.span) }
+    termName ~ ("[" ~> expr) ~ "]"
+      ^^ { case e ~ ei ~ tk => IndexAccess(e, ei)(Span(e.range.getStart, tk.span.getEnd)) }
       | "(" ~ rep1sep(pattern, ",") ~ ")"
       ^^ { case tk1 ~ ts ~ tk2 => TupleExpr(ts)(Span(tk1.span.getStart, tk2.span.getEnd)) }
       | "[" ~ repsep(pattern, ",") ~ "]"
       ^^ { case tk1 ~ ts ~ tk2 => ListExpr(ts)(Span(tk1.span.getStart, tk2.span.getEnd)) }
+      | termName
 
   private def augAssign: Parser[Assign] =
-    termName ~ augAssignOp ~! expr <~ NEWLINE ^^ {
-      case x ~ tk ~ e =>
+    pattern ~ augAssignOp ~! expr <~ NEWLINE ^^ {
+      case el ~ tk ~ e =>
         val op = Ident(tk.value.dropRight(1))(tk.span)
-        Assign(x, BinaryExpr(TermName(x.name)(x.range), op, e))
+        Assign(el, BinaryExpr(el, op, e))
     }
 
   private def augAssignOp: Parser[Token] =
-    "+=" | "-=" | "*=" | "/=" | "%=" | "&=" | "|=" | "^=" | "<<=" | ">>="
+    "+=" | "-=" | "*=" | "**=" | "/=" | "//=" | "%="
+      | "&=" | "|=" | "^=" | "<<=" | ">>="
 
   private def annAssign: Parser[AnnAssign] =
     ident ~ (":" ~>! typ) ~ ("=" ~>! expr).? <~ NEWLINE ^^ { case x ~ t ~ e => AnnAssign(x, t, e) }

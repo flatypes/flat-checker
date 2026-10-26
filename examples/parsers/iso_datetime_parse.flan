@@ -1,0 +1,78 @@
+from iso_date_parse import DateStr, Date, parse_iso_format_date
+from iso_time_parse import TimeStr, Time, parse_iso_format_time, ascii_digits
+
+lang DateTimeStr = DateStr "T" TimeStr
+
+type DateTime = (Date, Time)
+
+def parse_iso_format_datetime(date_string: DateTimeStr) -> DateTime:
+    if len(date_string) < 7:
+        raise "Invalid iso format string"
+
+    separator_location = _find_iso_format_datetime_separator(date_string)
+    dstr = date_string[0:separator_location]
+    tstr = date_string[(separator_location+1):]
+
+    date = parse_iso_format_date(dstr)
+    if tstr != "":
+        time = parse_iso_format_time(tstr)
+    else:
+        time = (0, 0, 0, 0, None)
+
+    return (date, time)
+
+def _find_iso_format_datetime_separator(dtstr: DateTimeStr) -> int:
+    ensures lambda i: i == dtstr.find('T')
+    len_dtstr = len(dtstr)
+    if len_dtstr == 7:
+        return 7
+
+    assert len_dtstr > 7
+    date_separator = '-'
+    week_indicator = 'W'
+
+    if dtstr[4] == date_separator:
+        if dtstr[5] == week_indicator:
+            if len_dtstr < 8:
+                raise "Invalid ISO string"
+            if len_dtstr > 8 and dtstr[8] == date_separator:
+                if len_dtstr == 9:
+                    raise "Invalid ISO string"
+                if len_dtstr > 10 and dtstr[10] in ascii_digits:
+                    # This is as far as we need to resolve the ambiguity for
+                    # the moment - if we have YYYY-Www-##, the separator is
+                    # either a hyphen at 8 or a number at 10.
+                    #
+                    # We'll assume it's a hyphen at 8 because it's way more
+                    # likely that someone will use a hyphen as a separator than
+                    # a number, but at this point it's really best effort
+                    # because this is an extension of the spec anyway.
+                    return 8
+                return 10
+            else:
+                # YYYY-Www (8)
+                return 8
+        else:
+            # YYYY-MM-DD (10)
+            return 10
+    else:
+        if dtstr[4] == week_indicator:
+            # YYYYWww (7) or YYYYWwwd (8)
+            idx = 7
+            while idx < len_dtstr:
+                invariant idx == 7 or (dtstr[7] in ascii_digits and idx == 8)
+                if dtstr[idx] not in ascii_digits:
+                    break
+                idx += 1
+
+            if idx < 9:
+                return idx
+
+            if idx % 2 == 0:
+                # If the index of the last number is even, it's YYYYWwwd
+                return 7
+            else:
+                return 8
+        else:
+            # YYYYMMDD (8)
+            return 8

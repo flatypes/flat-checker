@@ -37,4 +37,4 @@ object Prettifier:
   extension [A](r: RegEx[A])
     def pp: String =
       val prettifier = REPrettifier[A]()
-      prettifier.ppExpr(r)
+      prettifier.ppExpr(r).take(80)

@@ -65,7 +65,7 @@
       "patterns": [
         {
           "name": "keyword.control.flan",
-          "match": "\\b(pass|assume|assert|raise|if|else|return|while|break|continue|for|in|is|and|or|not)\\b"
+          "match": "\\b(pass|assume|assert|raise|if|elif|else|return|while|break|continue|for|in|is|and|or|not)\\b"
         },
         {
           "name": "storage.type.flan",

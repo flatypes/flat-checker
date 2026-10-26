@@ -68,41 +68,28 @@ object StrREOps extends LazyLogging:
       else BoolSet.Full
 
     def absToInt(radix: Int = 10): NatRange =
-      val r1 = r.absTrimLeft("0")
-      val s1 = r1.shortestMin
-      val n1 = if s1.isEmpty then 0 else Integer.parseInt(s1, radix)
-      val s2 = r1.longestMax
-      val n2 =
-        if s2.contains("∞") then None
-        else if s2.isEmpty then Some(0)
-        else Some(Integer.parseInt(s2, radix))
-      NatRange(n1, n2)
+      NatRange(Integer.parseInt(r.minInt, radix), r.maxInt.map(Integer.parseInt(_, radix)))
 
-    private def shortestMin: String = r match
+    private def minInt: String = r match
       case Zero() | One() | Star(_) => ""
       case Lit(CharSet(true, cs)) => cs.map(_.toUpper).min.toString
       case Lit(CharSet(false, cs)) => throw IllegalArgumentException("not valid digit character set")
-      case Plus(r1, r2) =>
-        val s1 = r1.shortestMin
-        val s2 = r2.shortestMin
-        if s1.length < s2.length then s1
-        else if s2.length < s1.length then s2
-        else List(s1, s2).min
-      case Comp(r1, r2) => r1.shortestMin + r2.shortestMin
+      case Plus(r1, r2) => List(r1.minInt, r2.minInt).min(using IntStringOrdering)
+      case Comp(r1, r2) => r1.minInt + r2.minInt
 
-    private def longestMax: String = r match
-      case Zero() | One() => ""
-      case Lit(CharSet(true, cs)) => cs.map(_.toUpper).max.toString
+    private def maxInt: Option[String] = r match
+      case Zero() | One() => Some("")
+      case Lit(CharSet(true, cs)) => Some(cs.map(_.toUpper).max.toString)
       case Lit(CharSet(false, cs)) => throw IllegalArgumentException("not valid digit character set")
       case Plus(r1, r2) =>
-        val s1 = r1.longestMax
-        val s2 = r2.longestMax
-        if s1.contains("∞") || s2.contains("∞") then "∞"
-        else if s1.length > s2.length then s1
-        else if s2.length > s1.length then s2
-        else List(s1, s2).max
-      case Comp(r1, r2) => r1.longestMax + r2.longestMax
-      case Star(_) => "∞"
+        (r1.maxInt, r2.maxInt) match
+          case (Some(s1), Some(s2)) => Some(List(s1, s2).max(using IntStringOrdering))
+          case _ => None
+      case Comp(r1, r2) =>
+        (r1.maxInt, r2.maxInt) match
+          case (Some(s1), Some(s2)) => Some(s1 + s2)
+          case _ => None
+      case Star(_) => None
 
     def isFiniteLang: Boolean = r match
       case Zero() | One() | Lit(CharSet(true, _)) => true
@@ -132,6 +119,11 @@ object StrREOps extends LazyLogging:
       case Comp(r1, r2) => r1.filterExistsCharIn(a) * r2 + r1 * r2.filterExistsCharIn(a)
       case Star(r1) => r * r1.filterExistsCharIn(a) * r
 
+  private object IntStringOrdering extends Ordering[String]:
+    def compare(s1: String, s2: String): Int =
+      if s1.length != s2.length then s1.length - s2.length
+      else s1.compareTo(s2)
+
   final case class NumStrFormat(zeroPadded: Boolean = false,
                                 width: Int = 0,
                                 conv: Char = 'd'):
@@ -155,8 +147,8 @@ object StrREOps extends LazyLogging:
       case 'X' => "0123456789ABCDEF"
       case _ => throw IllegalArgumentException(s"Invalid conversion: $conv")
 
-    def format(n: Int): String =
-      var s = Integer.toString(n, radix)
+    def format(n: BigInt): String =
+      var s = n.toString(radix)
       if conv == 'x' then
         s = s.toLowerCase
       else if conv == 'X' then
@@ -169,52 +161,55 @@ object StrREOps extends LazyLogging:
       val w = if width > 0 then width.toString else ""
       s"%$pad$w$conv"
 
-  def absFromInt(min: Int, max: Int, fmt: NumStrFormat): StrRE =
+  def absFromInt(min: BigInt, max: BigInt, fmt: NumStrFormat): StrRE =
     NumConverter(fmt).convert(min, max)
 
   private class NumConverter(fmt: NumStrFormat):
-    def convert(min: Int, max: Int): StrRE =
+    def convert(min: BigInt, max: BigInt): StrRE =
       val ranges = rangesBetween(min, max)
       sum(ranges.map(convert))
 
-    def rangesBetween(min: Int, max: Int): List[Range.Inclusive] =
-      val leftRanges = ListBuffer.empty[Range.Inclusive]
+    def rangesBetween(min: BigInt, max: BigInt): List[Interval] =
+      if min == max then
+        return List(Interval(min, max))
+
+      val leftRanges = ListBuffer.empty[Interval]
       var n = min
       while n < max do
         val range = rangeFrom(n)
         leftRanges += range
-        n = range.end + 1
+        n = range.max + 1
 
-      val rightRanges = ListBuffer.empty[Range.Inclusive]
+      val rightRanges = ListBuffer.empty[Interval]
       n = max
       while min < n do
         val range = rangeTo(n)
         rightRanges += range
-        n = range.start - 1
+        n = range.min - 1
 
       val merged = ListBuffer.from(leftRanges.init)
-      if rightRanges.last.start <= leftRanges.last.start && rightRanges.last.end <= leftRanges.last.end &&
-        leftRanges.last.start < rightRanges.last.end then
-        merged += (leftRanges.last.start to rightRanges.last.end)
+      if rightRanges.last.min <= leftRanges.last.min && rightRanges.last.max <= leftRanges.last.max &&
+        leftRanges.last.min < rightRanges.last.max then
+        merged += Interval(leftRanges.last.min, rightRanges.last.max)
       merged ++= rightRanges.init.reverse
       merged.toList
 
-    private def rangeFrom(min: Int): Range.Inclusive =
+    private def rangeFrom(min: BigInt): Interval =
       val s = fmt.format(min)
       val i = s.reverse.indexWhere(_ != '0')
       val d = fmt.maxDigit.toString
       val s1 = if i == -1 then d * s.length else s.dropRight(i + 1) + d * (i + 1)
-      min to Integer.parseInt(s1, fmt.radix)
+      Interval(min, BigInt(s1, fmt.radix))
 
-    private def rangeTo(max: Int): Range.Inclusive =
+    private def rangeTo(max: BigInt): Interval =
       val s = fmt.format(max)
       val i = s.reverse.indexWhere(_ != fmt.maxDigit)
       val s1 = if i == -1 then "0" * s.length else s.dropRight(i + 1) + "0" * (i + 1)
-      Integer.parseInt(s1, fmt.radix) to max
+      Interval(BigInt(s1, fmt.radix), max)
 
-    private def convert(r: Range.Inclusive): StrRE =
-      val s1 = fmt.format(r.start)
-      val s2 = fmt.format(r.end)
+    private def convert(r: Interval): StrRE =
+      val s1 = fmt.format(r.min)
+      val s2 = fmt.format(r.max)
       assert(s1.length == s2.length, s"Length mismatch: $s1 and $s2")
       val parts = for i <- s1.indices yield
         if s1(i) == s2(i) then symbol(s1(i))

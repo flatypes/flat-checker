@@ -70,6 +70,9 @@ object StrREAPI extends LazyLogging:
 
   def filterIndexOfGe(t: String, start: Int, i: Int): StrRE => StrRE = r => r.filterIndexOfGe(t.toList, start, i)
 
+  def filterIndexOfNeLast(t: String, start: Int): StrRE => StrRE =
+    r => r.filterIndexOfRightGe(t.toList, start, 2)
+
   // Higher-order filters
   def filterForall(f: CharSet => CharSet): StrRE => StrRE = r => r.filterForall(f)
 
@@ -78,7 +81,7 @@ object StrREAPI extends LazyLogging:
   def filterCharWith(at: AIndex | AIndexRange, f: CharSet => CharSet): StrRE => StrRE = at match
     case AIndex.Const(i) => r => r.filterElemWith(i, f)
     case AIndex.End => throw new IllegalArgumentException("AIndex.End out of bound")
-    case AIndex.Of(s, i, k) => throw new IllegalArgumentException("AIndex.Of does not make sense here")
+    case AIndex.Of(s, i, k) => r => r.filterElemWith(s.toList, i, k, f)
     case AIndexRange(from, until) =>
       tryFilterSubstrWith(from, until, filterExists(f)).getOrElse:
         logger.warn("fallback [{}, {}) to [0, -1)", from, until)

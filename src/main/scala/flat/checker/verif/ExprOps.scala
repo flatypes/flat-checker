@@ -32,16 +32,31 @@ object InequalitySolver:
 
   def unflatten(terms: Map[Expr, Int]): Expr =
     val variables = terms.filter(_._1 != IntConst(1)(noRange)).toList
-    require(variables.forall { (_, coef) => coef == 1 || coef == -1 }, "Coefficients must be 1 or -1")
     val constant = terms.getOrElse(IntConst(1), 0)
     variables match
       case Nil => IntConst(BigInt(constant))
       case (e, coef) :: rest =>
-        val first: Expr = if coef > 0 then e else Negate(e)
-        val sum = rest.foldLeft(first) { case (l, (r, coef)) => if coef > 0 then Add(l, r) else Sub(l, r) }
+        val first: Expr = multiply(e, coef)
+        val sum = rest.foldLeft(first) { case (l, (r, coef)) =>
+          if coef > 0 then Add(l, multiply(r, coef)) else Sub(l, multiply(r, -coef))
+        }
         if constant > 0 then Add(sum, IntConst(BigInt(constant)))
         else if constant < 0 then Sub(sum, IntConst(BigInt(-constant)))
         else sum
+
+  def multiply(expr: Expr, factor: Int): Expr =
+    if factor == 1 then expr
+    else if factor > 1 then Mul(IntConst(BigInt(factor)), expr)
+    else if factor == -1 then Negate(expr)
+    else if factor < -1 then Mul(IntConst(BigInt(factor)), expr)
+    else IntConst(BigInt(0))
+
+  def simplifyArith(expr: Expr): Expr = expr match
+    case _: (Negate | Add | Sub) =>
+      val terms = flatten(expr, 1)
+      val grouped = terms.groupBy(_._2).map { (x, list) => (x, list.map(_._1).sum) }.filter(_._2 != 0)
+      unflatten(grouped)
+    case _ => expr
 
   def isolate(target: Expr, ineq: Inequality): Option[(CmpOp, Expr)] =
     val (left, op, right) = ineq

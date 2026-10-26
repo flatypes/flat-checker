@@ -107,7 +107,7 @@ object IndexInferer extends LazyLogging:
   private def solveRangeStart(solver: LPSolver, idx: Expr, len: Expr, relatives: List[Expr],
                               relativeToIndex: (Expr, Int) => AIndex): AIndex =
     // idx >= e + k ==> idx - e >= k
-    val candidates = for e <- relatives; k <- solver.solveMin(Sub(idx, e)) yield relativeToIndex(e, k)
+    val candidates = for e <- relatives; k <- solver.solveMin(Sub(idx, e)) yield relativeToIndex(e, k.toInt)
     candidates match
       case List(index) =>
         return index
@@ -116,18 +116,18 @@ object IndexInferer extends LazyLogging:
     // idx >= i
     solver.solveMin(idx) match
       case Some(i) if i > 0 =>
-        return AIndex.Const(i)
+        return AIndex.Const(i.toInt)
       case _ =>
 
     // idx >= len - i ==> len - idx <= i
     solver.solveMax(Sub(len, idx)) match
-      case Some(i) if i > 0 => AIndex.Const(-i)
+      case Some(i) if i > 0 => AIndex.Const(-i.toInt)
       case _ => AIndex.Const(0) // default
 
   private def solveRangeEnd(solver: LPSolver, idx: Expr, len: Expr, relatives: List[Expr],
                             relativeToIndex: (Expr, Int) => AIndex): AIndex =
     // idx < e + k ==> idx - e < k ==> idx - e <= k - 1
-    val candidates = for e <- relatives; k <- solver.solveMax(Sub(idx, e)) yield relativeToIndex(e, k + 1)
+    val candidates = for e <- relatives; k <- solver.solveMax(Sub(idx, e)) yield relativeToIndex(e, k.toInt + 1)
     candidates match
       case List(index) =>
         return index
@@ -136,10 +136,10 @@ object IndexInferer extends LazyLogging:
     // idx < len - i ==> len - idx > i ==> len - idx >= i + 1
     solver.solveMin(Sub(len, idx)) match
       case Some(i) if i > 1 =>
-        return AIndex.Const(-(i - 1))
+        return AIndex.Const(-(i.toInt - 1))
       case _ =>
 
     // idx < i
     solver.solveMax(idx) match
-      case Some(i) if i >= 0 => AIndex.Const(i + 1)
+      case Some(i) if i >= 0 => AIndex.Const(i.toInt + 1)
       case _ => AIndex.End // default

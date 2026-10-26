@@ -8,7 +8,7 @@ import flat.checker.flan.tpd.*
 
 object Simplifier extends LazyLogging:
   extension (expr: Expr)
-    private def isConst: Boolean = expr match
+    def isConst: Boolean = expr match
       case IntConst(_) | BoolConst(_) | CharConst(_) | StrConst(_) | NullConst() => true
       case _ => false
 
@@ -74,25 +74,9 @@ object Simplifier extends LazyLogging:
           case (e1, e2) => Implies(e1, e2)
 
       // Int arithmetic
-      case Negate(e) =>
-        e.simplify match
-          case IntConst(i) => IntConst(-i)
-          case Negate(e) => e
-          case e => Negate(e)
-      case Add(e1, e2) =>
-        (e1.simplify, e2.simplify) match
-          case (IntConst(i1), IntConst(i2)) => IntConst(i1 + i2)
-          case (IntConst(0), e) => e
-          case (e, IntConst(0)) => e
-          case (e1, e2) => Add(e1, e2)
-      case Sub(e1, e2) =>
-        (e1.simplify, e2.simplify) match
-          case (e, IntConst(0)) => e // e - 0 = e
-          case (e1, Sub(e2, e)) if e2 == e1 => e // e1 - (e1 - e) = e
-          case (e1, Sub(Sub(e2, e3), e4)) if e2 == e1 => Add(e3, e4) // e1 - (e1 - e3 - e4) = e3 + e4
-          case (Sub(e, IntConst(i)), IntConst(j)) => Sub(e, IntConst(i + j)) // e - i - j = e - (i + j)
-          case (IntConst(i1), IntConst(i2)) => IntConst(i1 - i2)
-          case (e1, e2) => Sub(e1, e2)
+      case Negate(e) => InequalitySolver.simplifyArith(Negate(e.simplify))
+      case Add(e1, e2) => InequalitySolver.simplifyArith(Add(e1.simplify, e2.simplify))
+      case Sub(e1, e2) => InequalitySolver.simplifyArith(Sub(e1.simplify, e2.simplify))
       case Mul(e1, e2) =>
         (e1.simplify, e2.simplify) match
           case (IntConst(i1), IntConst(i2)) => IntConst(i1 * i2)

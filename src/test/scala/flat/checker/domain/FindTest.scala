@@ -121,4 +121,4 @@ class FindTest extends AnyFunSpec, REAssertions:
         assertCharRE("e|cd|cb")(r1.absAt(3))
 
       it("last element is e"):
-        assertCharRE("e")(r1.absAtRight(0))
+        assertCharRE("e")(r1.absAtRight(1))
