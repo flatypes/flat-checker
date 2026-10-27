@@ -221,6 +221,7 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
   private def encodeSort(sort: Type): cvc5.Sort = sort match
     case IntType => tm.getIntegerSort
     case BoolType => tm.getBooleanSort
+    case CharType => tm.getStringSort
     case StrType => tm.getStringSort
     case ListType(t) => tm.mkSequenceSort(encodeSort(t))
     case SetType(t) => tm.mkSetSort(encodeSort(t))

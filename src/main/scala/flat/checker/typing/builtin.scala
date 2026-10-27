@@ -92,7 +92,9 @@ object builtin:
     case "slice" | "substring" => List(
       Member(int -> str, { case List(s, i) => Substr(s, i, StrLen(s)) }),
       Member((int, int) -> str, { case List(s, i, j) => Substr(s, i, j) }))
-    case "__add__" | "+" | "concat" => List(Member(str -> str, { case List(s1, s2) => StrConcat(s1, s2) }))
+    case "__add__" | "+" | "concat" => List(
+      Member(char -> str, { case List(s, c) => StrConcat(s, CharToStr(c)) }),
+      Member(str -> str, { case List(s1, s2) => StrConcat(s1, s2) }))
     case "startswith" | "startsWith" => List(Member(str -> bool, { case List(s, t) => StrStartsWith(s, t) }))
     case "endswith" | "endsWith" => List(Member(str -> bool, { case List(s, t) => StrEndsWith(s, t) }))
     case "find" | "indexOf" => List(
@@ -185,7 +187,7 @@ object builtin:
     case "items" => List(Member(() -> ListType(mkTupleType(k, v)), { case List(m) => MapItems(m) }))
     case "size" => List(Member(() -> int, { case List(m) => MapSize(m) }))
     case "contains" => List(Member(k -> bool, { case List(m, x) => MapContains(m, x) }))
-    case "select" => List(Member(k -> v, { case List(m, x) => MapSelect(m, x) }))
+    case "__getitem__" | "select" => List(Member(k -> v, { case List(m, x) => MapSelect(m, x) }))
     case "update" => List(Member((k, v) -> MapType(k, v), { case List(m, k, v) => MapUpdate(m, k, v) }))
     case _ => Nil
 

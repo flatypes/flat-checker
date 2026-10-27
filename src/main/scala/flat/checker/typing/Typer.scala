@@ -84,12 +84,19 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     case untpd.Abort(em) =>
       resolver.coreAPIs.check(em, StrType, ctx)
       (List(Abort()(em.range)), ctx)
+
+    // Control flow
     case untpd.If(e, List(untpd.Abort(em)), Nil) =>
       resolver.coreAPIs.check(em, StrType, ctx)
       val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
       (side :+ Assert(Not(cond), () => AssertNotProved(em.range)), ctx)
+    case untpd.If(e, bd, List(untpd.Abort(em))) =>
+      resolver.coreAPIs.check(em, StrType, ctx)
+      val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
+      val (thenBody, thenCtx) =
+        checkBlock(bd, resolver.coreAPIs.assume(cond, ctx), methodInfo, loopLevel)
+      (side ++ List(Assert(cond, () => AssertNotProved(em.range))) ++ thenBody, thenCtx)
 
-    // Control flow
     case untpd.If(e, bd1, bd2) =>
       val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
       val (thenBody, thenCtx) =

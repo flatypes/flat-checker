@@ -170,6 +170,20 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
           case _ =>
             reporter.report(ctx.uri, ArityMismatch(node.range, 2, es.length))
             (NoType, NoExpr, Nil)
+        case "chr" => es match
+          case List(e) =>
+            val (arg, side) = check(e, IntType, ctx)
+            (CharType, CodeToChar(arg)(node.range), side)
+          case _ =>
+            reporter.report(ctx.uri, ArityMismatch(node.range, 1, es.length))
+            (NoType, NoExpr, Nil)
+        case "ord" => es match
+          case List(e) =>
+            val (arg, side) = check(e, CharType, ctx)
+            (IntType, CharToCode(arg)(node.range), side)
+          case _ =>
+            reporter.report(ctx.uri, ArityMismatch(node.range, 1, es.length))
+            (NoType, NoExpr, Nil)
         case _ => throw NotImplementedError(s"Built-in function $f is not implemented")
 
     // Function application: others

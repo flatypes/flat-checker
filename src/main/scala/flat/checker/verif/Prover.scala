@@ -129,6 +129,9 @@ object Prover extends LazyLogging:
           case Domain.Str(r1) =>
             logger.debug("Inferred: {} ∈ {}", e.show, r1.pp)
             r1 == r || RESub.check(r1, r)
+          case Domain.Top =>
+            logger.debug("Inferred: {} ∈ Top", e.show)
+            false
           case _ => throw IllegalStateException("type error")
       case b =>
         solveLogicalGoal(narrowedGoal)

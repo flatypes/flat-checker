@@ -36,7 +36,28 @@ class Narrower(goal: Goal) extends LazyLogging:
   private def narrowCharTarget(expr: Expr, f: CharSet => CharSet)(using cond: Expr): Unit = expr match
     case CharAt(e, ei) =>
       val index = IndexInferer.inferStrIndex(ei, e, goal)
+      // Case 1: determined index
+      if index.isInstanceOf[AIndex] then
+        narrowStrTarget(e, StrREAPI.filterCharWith(index, f))
+        return
+
+      // Case 2: index `x + k` relative to suffix `e[x:]`
+      for
+        (x, k) <- ei match
+          case Var(x) => Some((x, 0))
+          case Add(Var(x), IntConst(k)) => Some((x, k.toInt))
+          case _ => None
+        suffix = Substr(e, Var(x), StrLen(e))
+        r0 <- strTypes.get(suffix)
+      do
+        val r1 = NarrowCache.getOrElseUpdate(suffix, r0, cond, StrREAPI.filterCharWith(AIndex.Const(k), f)(r0))
+        strTypes(suffix) = r1
+        logger.debug("Narrow {} by {} to {}", suffix.show, cond.show, r1.pp)
+        return
+
+      // Case 3: nondetermined index
       narrowStrTarget(e, StrREAPI.filterCharWith(index, f))
+
     case _ =>
       val a0 = charTypes.getOrElse(expr, Inferer.inferChar(expr, newGoal()))
       val a1 = NarrowCache.getOrElseUpdate(expr, a0, cond, f(a0))

@@ -20,7 +20,7 @@ object StrREAPI extends LazyLogging:
     case AIndex.End => throw IllegalArgumentException("Cannot get element at end index")
     case AIndexRange(from, until) => substr(r, from, until).alphabet
 
-  def substr(r: StrRE, from: AIndex, until: AIndex): StrRE =
+  def substr(r: StrRE, from: AIndex, until: AIndex = AIndex.End): StrRE =
     (from, until) match
       case (AIndex.Const(i), AIndex.End) => r.absSlice(i)
       case (AIndex.Of(s, i, k), AIndex.End) => r.absSlice(s.toList, i, k)

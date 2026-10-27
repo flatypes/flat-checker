@@ -224,7 +224,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       expr.rebuild(values)
 
   private def hasType(expr: Expr, typ: Type): Option[Expr] = typ match
-    case IntType | BoolType | StrType => None
+    case IntType | BoolType | CharType | StrType => None
     case ListType(t) => for b <- hasType(Var("x"), t) yield ListForall(expr, LambdaExpr(List("x" -> t), b))
     case TupleType(ts) =>
       val bs = ts.zipWithIndex.flatMap { (t, i) => hasType(TupleSelect(i, expr), t) }
