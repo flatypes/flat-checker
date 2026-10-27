@@ -11,6 +11,7 @@ object IndexInferer extends LazyLogging:
   def inferStrIndex(idx: Expr, str: Expr, goal: Goal): AIndex | AIndexRange = idx match
     case IntConst(i) if i >= 0 => AIndex.Const(i.toInt) // i
     case StrLen(`str`) => AIndex.End // |str|
+    case Add(StrLen(`str`), IntConst(i)) if i > 0 => AIndex.End // |str| + i ==> |str|
     case Sub(StrLen(`str`), IntConst(i)) if i > 0 => AIndex.Const(-i.toInt) // |str| - i
     case StrIndexOf(`str`, StrConst(s), IntConst(i)) if i >= 0 => // str.indexOf(s, i)
       AIndex.Of(s, i.toInt, 0)
@@ -49,6 +50,7 @@ object IndexInferer extends LazyLogging:
   def inferListIndex(idx: Expr, lst: Expr, goal: Goal): AIndex | AIndexRange = idx match
     case IntConst(i) if i >= 0 => AIndex.Const(i.toInt) // i
     case ListLen(`lst`) => AIndex.End // |lst|
+    case Add(ListLen(`lst`), IntConst(i)) if i > 0 => AIndex.End // |lst| + i ==> |lst|
     case Sub(ListLen(`lst`), IntConst(i)) if i > 0 => AIndex.Const(-i.toInt) // |lst| - i
     case ListIndexOf(`lst`, StrConst(s), IntConst(i)) if i >= 0 => // lst.indexOf(s, i)
       AIndex.Of(s, i.toInt, 0)

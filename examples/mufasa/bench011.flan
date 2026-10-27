@@ -1,18 +1,15 @@
 lang Present = r"[0-9]+(jaj|jar|DIS)?"
 lang Past = r"[0-9]+(Hu|wen|ben| ret)?"
 
-method translatePast(present: Present): Past
-{
-  var time = present;
-  if (present.indexOf("jaj") != -1) {
-    time = time.slice(0, time.length - 3) + "Hu";
-  } else if (present.indexOf("jar") != -1) {
-    time = time.slice(0, time.length - 3) + "wen";
-  } else if (present.indexOf("DIS") != -1) {
-    time = time.slice(0, time.length - 3) + "ben";
-  } else {
-    time = time + " ret";
-  }
+def translate_past(present: Present) -> Past:
+    time: str = present
+    if present.find("jaj") != -1:
+        time = time[:len(time)-3] + "Hu"
+    elif present.find("jar") != -1:
+        time = time[:len(time)-3] + "wen"
+    elif present.find("DIS") != -1:
+        time = time[:len(time)-3] + "ben"
+    else:
+        time = time + " ret"
 
-  return time;
-}
+    return time

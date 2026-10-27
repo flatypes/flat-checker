@@ -205,11 +205,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     "hex", "int", "len", "list", "map", "max", "min", "oct", "ord", "reversed", "set", "str", "sum", "zip")
 
   private def narrow(x: String, typ: Type, ctx: TypingCtx): Type = typ match
-    case OptType(t) =>
-      val notNull = ctx.conds.exists:
-        case Ne(Var(`x`), NullConst()) | Not(Eq(Var(`x`), NullConst())) => true
-        case _ => false
-      if notNull then t else typ
+    case OptType(t) if ctx.notNone.contains(x) => t
     case _ => typ
 
   private def checkStrFormat(fmt: String, args: List[untpd.Expr], span: Span, ctx: TypingCtx): Expr =
@@ -450,9 +446,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
   def assume(cond: Expr, ctx: TypingCtx): TypingCtx =
     cond.simplify match
       case Ne(Var(x), NullConst()) =>
-        ctx.updatedWith(x):
-          case ValInfo(id, OptType(t)) => ValInfo(id, t)
-          case VarInfo(id, OptType(t)) => VarInfo(id, t)
+        ctx.copy(notNone = ctx.notNone + x)
       case And(e1, e2) =>
         assume(e2, assume(e1, ctx))
       case _ =>

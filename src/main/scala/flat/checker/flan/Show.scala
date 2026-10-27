@@ -16,9 +16,7 @@ object Show extends LazyLogging:
       case ListType(t) => s"List[${t.show}]"
       case SetType(t) => s"Set[${t.show}]"
       case MapType(tk, tv) => s"Map[${tk.show}, ${tv.show}]"
-      case t: ReftType =>
-        if t.name.nonEmpty then t.name
-        else s"{${t.base.show} | ${t.reft.show}}"
+      case ReftType(x, t, e) => s"{$x: ${t.show} | ${e.show}}"
       case TupleType(ts) => ts.map(_.show).mkString("(", ", ", ")")
       case FunType(ts, t) => ts.map(_.show).mkString("(", ", ", ")") + " -> " + t.show
       case NullType => "Null"

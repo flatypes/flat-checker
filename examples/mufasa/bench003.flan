@@ -1,11 +1,8 @@
-method normalizeLoGLine(line: String): String
-  ensures _.startsWith("ERROR") || _.startsWith("WARN") || _ == line
-{
-  if (line.contains("ERROR")) {
-    return line.substring(line.indexOf("ERROR"), line.length);
-  } else if (line.contains("WARN")) {
-    return line.substring(line.indexOf("WARN"), line.length);
-  } else {
-    return line;
-  }
-}
+def normalize_log_line(line: str) -> str:
+    ensures lambda s: s.startswith("ERROR") or s.startswith("WARN") or s == line
+    if "ERROR" in line:
+        return line[line.find("ERROR") : len(line)]
+    elif "WARN" in line:
+        return line[line.find("WARN") : len(line)]
+    else:
+        return line

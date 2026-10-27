@@ -2,70 +2,55 @@ lang Scheme = r"[A-Za-z][A-Za-z0-9+\-.]*"
 lang RegNameChar = r"[A-Za-z0-9\-._~]|%[0-9A-Fa-f][0-9A-Fa-f]|[!$&'()*+,;=]"
 lang IPLiteral = '[' r"[0-9A-Fa-f:.]+" ']'
 lang URL = Scheme "://" (RegNameChar* | IPLiteral) '/' (RegNameChar | ':' | '@' | '/')*
+
 lang ValidDomain = "www" RegNameChar* ".it"
-lang ParsedDomain = (ValidDomain '\n')?
+lang DomainLine = ValidDomain '\n'
 
-method parseHost(url: URL): ParsedDomain
-{
-  var input = url.trim();
-  if (!input.startsWith("https://")) {
-    return "";
-  }
+def parse_host(input: URL) -> DomainLine?:
+    s = input.strip()
+    if not s.startswith("https://"):
+        return None
 
-  input = input.substring(8, input.length);
-  if (input.charAt(0) == '[') {
-    return "";
-  }
+    s = s[8:]
+    if s.startswith("["):
+        return None
 
-  var index = input.indexOf(":");
-  if (index != -1) {
-    return "";
-  }
+    index = s.find(":")
+    if index != -1:
+        return None
 
-  index = input.indexOf("/");
-  var hostName = input.substring(0, index).toLower();
-  if (isValidDomain(hostName)) {
-    return hostName + "\n";
-  } else {
-    return "";
-  }
-}
+    index = s.find("/")
+    host_name = s[:index].lower()
+    if is_valid_domain(host_name):
+        return host_name + "\n"
+    else:
+        return None
 
-method isValidDomain(input: String): Bool
-  ensures _ == (input.startsWith("www.") && input.endsWith(".it"))
-{
-  if (!input.startsWith("www.")) {
-    return false;
-  } else if (input.endsWith(".it")) {
-    return true;
-  }
+def is_valid_domain(input: str) -> bool:
+    ensures lambda b: b == (input.startswith("www.") and input.endswith(".it"))
+    if not input.startswith("www."):
+        return False
+    if input.endswith(".it"):
+        return True
+    return False
 
-  return false;
-}
+lang URLLines = (URL '\n')* URL?
+lang DomainLines = DomainLine*
 
-lang Lines = (URL '\n')* URL?
-lang ParsedDomains = (ValidDomain '\n')*
+def parse(input: URLLines) -> DomainLines:
+    s = input
+    domains: DomainLines = ""
+    while len(s) > 0:
+        index = s.find("\n")
+        if index == -1:
+            sub = s[0:len(s)]
+            s = ""
+        else:
+            sub = s[:index]
+            s = s[index + 1:]
 
-method parse(lines: Lines): ParsedDomains
-{
-  var s: Lines = lines;
-  var domains: ParsedDomains = "";
-  while (s.length > 0)
-  {
-    var index = s.indexOf("\n");
-    var sub: String;
-    if (index == -1) {
-      sub = s.substring(0, s.length);
-      s = "";
-    } else {
-      sub = s.substring(0, index);
-      s = s.substring(index + 1, s.length);
-    }
-    var result = parseHost(sub);
-    if (result != "") {
-      domains = domains + result;
-    }
-  }
+        result = parse_host(sub)
+        if result is not None:
+            domains += result
 
-  return domains;
-}
+    return domains

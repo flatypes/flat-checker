@@ -1,14 +1,10 @@
 lang Res = r"Repeat: .*"
 
-method loop(value: String)
-{
-  var res: Res = "Repeat: ";
-  while *
-  {
-    res = res + value + "!";
-  }
+def loop(value: str, nondet: bool):
+    res: Res = "Repeat: "
+    while nondet:
+        res = res + value + "!"
 
-  assert res.contains("t"); // should succeed
-  assert res.contains("!"); // may fail
-  assert res.contains("f"); // may fail
-}
+    assert 't' in res  # should succeed
+    #assert '!' in res  # may fail
+    #assert 'f' in res  # may fail

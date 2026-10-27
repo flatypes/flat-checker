@@ -1,12 +1,10 @@
-lang Stripped = r"[^# \n\r\t]*"
+lang NoWS = r"[^# \n\r\t]*"
 
-method stripCommentAndWhitespace(input: String): Stripped
-{
-  var line = input;
-  var hash = line.indexOf("#");
-  if (hash != -1) {
-    line = line.substring(0, hash);
-  }
+def strip_comment_and_whitespace(line: str) -> NoWS:
+    hash = line.find("#")
+    if hash != -1:
+        s = line[0:hash]
+    else:
+        s = line
 
-  return line.trim();
-}
+    return s.strip()

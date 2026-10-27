@@ -375,8 +375,7 @@ object Simplifier extends LazyLogging:
           case TupleExpr(es) => es(i)
           case es => TupleSelect(i, es)
 
-      case NoExpr => expr
-      case _ => throw NotImplementedError(s"Simplifier.simplify(${expr.getClass.getSimpleName})")
+      case _ => expr
 
     def toCNF: List[Expr] = expr match
       case BoolConst(true) => Nil

@@ -1,26 +1,18 @@
-lang Removed = r"[^{]*"
+lang NoCurlies = r"[^{]*"
 
-method removeCurlies(input: String): Removed
-{
-  var result: Removed = "";
-  var skip = false;
-  var i = 0;
-  while (input.length > i + 1)
-    invariant 0 <= i
-  {
-    var c = input.charAt(i);
-    if (c == '{') {
-      skip = true;
-    }
-    if (!skip) {
-      result += c;
-    }
-    if (c == '}') {
-      skip = false;
-    }
+def remove_curlies(input: str) -> NoCurlies:
+    result: NoCurlies = ""
+    skip = False
+    i = 0
+    while len(input) > i + 1:
+        invariant 0 <= i
+        c = input[i]
+        if c == '{':
+            skip = True
+        if not skip:
+            result += c
+        if c == '}':
+            skip = False
+        i += 1
 
-    i = i + 1;
-  }
-
-  return result;
-}
+    return result

@@ -1,14 +1,18 @@
-method fixStations(stations: Map[String, String]): Map[String, String]
-{
-  var result: Map[String, String] = Map();
-  for (st in stations)
-  {
-    var input = stations[st];
-    var code = input.substring(0, 3).toUpperCase();
-    var semiC = input.indexOf(';');
-    var name = input.substring(semiC + 1, input.length);
-    result += st -> code + ": " + name;
-  }
+lang Code = r"[A-Z]{3}"
+lang Name = r"[A-Z][a-z]+"
+lang Station = Code r"[a-z]*;" Name
+lang Formatted = Code ": " Name
 
-  return result;
-}
+def fix_stations(stations: List[Station]) -> List[Formatted]:
+    result: List[Formatted] = []
+    i = 0
+    while i < len(stations):
+        invariant 0 <= i <= len(stations)
+        input = stations[i]
+        code = input[:3]
+        semi_c = input.find(';')
+        name = input[semi_c+1:]
+        result += code + ": " + name
+        i += 1
+
+    return result

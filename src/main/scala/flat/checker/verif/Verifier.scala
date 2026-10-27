@@ -2,6 +2,7 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
+import flat.checker.domain.RegEx
 import flat.checker.flan.Show.show
 import flat.checker.flan.sorting.{isSort, toSort}
 import flat.checker.flan.tpd.*
@@ -187,6 +188,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
         assert(es.length == ts.length)
         es.zip(ts).forall(typeCheck(_, _, state))
       case (ListExpr(es), ListType(t)) => es.forall(typeCheck(_, t, state))
+      case (ListConcat(e1, e2), ListType(t)) => typeCheck(e1, ListType(t), state) && typeCheck(e2, ListType(t), state)
       case (SetExpr(es), SetType(t)) => es.forall(typeCheck(_, t, state))
       case (MapExpr(eks, evs), MapType(tk, tv)) =>
         eks.forall(typeCheck(_, tk, state)) && evs.forall(typeCheck(_, tv, state))
@@ -225,7 +227,10 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
 
   private def hasType(expr: Expr, typ: Type): Option[Expr] = typ match
     case IntType | BoolType | CharType | StrType => None
-    case ListType(t) => for b <- hasType(Var("x"), t) yield ListForall(expr, LambdaExpr(List("x" -> t), b))
+    case ListType(ReftType(_, StrType, StrIn(_, r))) =>
+      Some(StrListIn(expr, RegEx.Lit(r).star))
+    case ListType(t) =>
+      for b <- hasType(Var("x"), t) yield ListForall(expr, LambdaExpr(List("x" -> t), b))
     case TupleType(ts) =>
       val bs = ts.zipWithIndex.flatMap { (t, i) => hasType(TupleSelect(i, expr), t) }
       if bs.isEmpty then None else Some(mkAnd(bs))

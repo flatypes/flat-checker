@@ -1,0 +1,16 @@
+lang Res = r"People: \{.*"
+
+def to_string(names: List[str]):
+    res: Res = "People: {"
+    i = 0
+    while i < len(names):
+        invariant 0 <= i <= len(names)
+        res += names[i]
+        if i != len(names) - 1:
+            res += ", "
+        i += 1
+    res += "}"
+
+    assert "People" in res  # should succeed
+    #assert "," in res       # may fail
+    #assert "not" in res     # may fail

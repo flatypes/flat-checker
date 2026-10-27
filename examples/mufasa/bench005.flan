@@ -1,18 +1,14 @@
-lang MethodName = ("is" | "get")? r"[A-Z][A-Za-z0-9_]*"
+lang MethodName = r"(is|get)?[A-Z][A-Za-z0-9_]*"
 lang PropertyName = r"[a-z][A-Za-z0-9_]*"
 
-method propertyName(methodName: MethodName): PropertyName
-{
-  var pn: String;
-  if (methodName.startsWith("is")) {
-    pn = methodName.substring("is".length, methodName.length);
-  } else if (methodName.startsWith("get")) {
-    pn = methodName.substring("get".length, methodName.length);
-  } else {
-    pn = methodName;
-  }
+def property_name(method_name: MethodName) -> PropertyName:
+    if method_name.startswith("is"):
+        pn = method_name[len("is"):]
+    elif method_name.startswith("get"):
+        pn = method_name[len("get"):]
+    else:
+        pn = method_name
 
-  var x = pn.substring(0, 1).toLower();
-  var y = pn.substring(1, pn.length + 1);
-  return x + y;
-}
+    x = pn[0:1].lower()
+    y = pn[1:len(pn) + 1]
+    return x + y

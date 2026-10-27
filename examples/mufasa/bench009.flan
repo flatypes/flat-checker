@@ -1,11 +1,8 @@
-lang Parsed = r"[^:]*"
+lang NoColon = r"[^:]*"
 
-method parse(name: String): Parsed
-{
-  var colonIndex = name.indexOf(":");
-  if (colonIndex < 0) {
-    return name;
-  } else {
-    return "";
-  }
-}
+def parse(name: str) -> (int, NoColon)?:
+    colon_index = name.find(":")
+    if colon_index < 0:
+        return (0, name)
+    else:
+        return None

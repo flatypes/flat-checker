@@ -3,57 +3,40 @@ lang RegNameChar = r"[A-Za-z0-9\-._~]|%[0-9A-Fa-f][0-9A-Fa-f]|[!$&'()*+,;=]"
 lang URL = Scheme "://" RegNameChar*
 lang Domain = r"([a-z0-9\-._~]|%[0-9a-f][0-9a-f]|[!$&'()*+,;=])*"
 
-method parseHost(url: URL): Domain
-{
-  var input = url.trim();
-  input = input.toLower();
-  var r: String;
-  if (!input.startsWith("https://")) {
-    r = "";
-  } else {
-    input = input.substring(8, input.length);
-    if (!input.startsWith("www.")) {
-      r = "";
-    } else if (input.endsWith(".it")) {
-      var domain = input.substring(4, input.length - 3);
-      r = domain;
-    } else {
-      r = "";
-    }
-  }
+def parse_host(input: URL) -> Domain?:
+    s = input.strip().lower()
+    if not s.startswith("https://"):
+        return None
 
-  return r;
-}
+    s = s[8:]
+    if not s.startswith("www."):
+        domain: Domain? = None
+    elif s.endswith(".it"):
+        domain = s[4:len(s)-3]
+    else:
+        domain = None
+    return domain
 
-lang Lines = (URL '\n')* URL?
+lang URLLines = (URL '\n')* URL?
 
-method parseFirstDomain(lines: Lines): Domain
-{
-  var s: Lines = lines;
-  var stop = false;
-  var result: Domain;
-  while (!stop)
-  {
-    if (s.length == 0) {
-      stop = true;
-      result = "";
-    } else {
-      var index = s.indexOf("\n");
-      var sub: String;
-      if (index == -1) {
-        sub = s.substring(0, s.length);
-        s = "";
-      } else {
-        sub = s.substring(0, index);
-        s = s.substring(index + 1, s.length);
-      }
+def parse_first_domain(input: URLLines) -> Domain?:
+    s = input
+    stop = False
+    while not stop:
+        if len(s) == 0:
+            stop = True
+            result: Domain? = None
+        else:
+            index = s.find("\n")
+            if index == -1:
+                sub = s[0:len(s)]
+                s = ""
+            else:
+                sub = s[0:index]
+                s = s[index + 1:]
 
-      result = parseHost(sub);
-      if (result != "") {
-        stop = true;
-      }
-    }
-  }
+            result = parse_host(sub)
+            if result is not None:
+                stop = True
 
-  return result;
-}
+    return result

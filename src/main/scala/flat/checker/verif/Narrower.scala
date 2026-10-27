@@ -57,6 +57,10 @@ class Narrower(goal: Goal) extends LazyLogging:
 
       // Case 3: nondetermined index
       narrowStrTarget(e, StrREAPI.filterCharWith(index, f))
+      val a0 = charTypes.getOrElse(expr, Inferer.inferChar(expr, newGoal()))
+      val a1 = NarrowCache.getOrElseUpdate(expr, a0, cond, f(a0))
+      charTypes(expr) = a1
+      logger.debug("Narrow {} by {} to {}", expr.show, cond.show, a1)
 
     case _ =>
       val a0 = charTypes.getOrElse(expr, Inferer.inferChar(expr, newGoal()))

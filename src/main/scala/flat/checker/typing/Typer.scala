@@ -77,7 +77,7 @@ class Typer(using reporter: Reporter) extends LazyLogging:
     // Proof derivatives
     case untpd.Assume(e) =>
       val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
-      (side :+ Assume(cond), ctx)
+      (side :+ Assume(cond), resolver.coreAPIs.assume(cond, ctx))
     case untpd.Assert(e) =>
       val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
       (side :+ Assert(cond, () => AssertNotProved(e.range)), ctx)
@@ -118,8 +118,8 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       assert(side.isEmpty, "Side effects are not allowed in loop guards")
       val (invariants, side1) = s.invariants.map(resolver.coreAPIs.check(_, BoolType, ctx)).unzip
       assert(side1.flatten.isEmpty, "Side effects are not allowed in loop invariants")
-      val (loopBody, loopCtx) = checkBlock(bd, ctx, methodInfo, loopLevel + 1)
-      (List(While(cond, invariants, loopBody)), loopCtx)
+      val (loopBody, loopCtx) = checkBlock(bd, resolver.coreAPIs.assume(cond, ctx), methodInfo, loopLevel + 1)
+      (List(While(cond, invariants, loopBody)), ctx.copy(stack = loopCtx.stack))
 
     case untpd.For(id, iter, Nil, bd) =>
       val (typ, values) = iter match

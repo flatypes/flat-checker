@@ -117,6 +117,7 @@ object Inferer extends LazyLogging:
       case _ =>
 
     val dom = goal.premises.reverseIterator.collectFirst:
+      case CharIn(`expr`, a) => Domain.Char(a)
       case StrIn(`expr`, r) => Domain.Str(r)
       case StrListIn(`expr`, r) => Domain.StrList(r)
     if dom.isDefined then

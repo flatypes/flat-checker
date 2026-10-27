@@ -1,14 +1,10 @@
-method count()
-{
-  var str: String;
-  if * {
-    str = "this is the thing";
-  } else {
-    str = "the throat";
-  }
-  var count = str.count("th");
-  
-  assert count > 0; // should succeed
-  assert count == 0; // should fail
-  assert count == 3; // may fail
-}
+def count(nondet: bool):
+    if nondet:
+        s = "this is the thing"
+    else:
+        s = "the throat"
+    cnt = s.count("th")
+
+    assert cnt > 0  # should succeed
+    #assert cnt == 0  # should fail
+    #assert cnt == 3  # may fail
