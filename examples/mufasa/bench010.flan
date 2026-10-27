@@ -1,18 +1,15 @@
 lang Present = r"[0-9]+(jaj|jar|DIS)?"
 lang Future = r"[0-9]+(leS|waQ|nem| pId)?"
 
-method translateFuture(present: Present): Future
-{
-  var time = present;
-  if (present.indexOf("jaj") != -1) {
-    time = time.slice(0, time.length - 3) + "leS";
-  } else if (present.indexOf("jar") != -1) {
-    time = time.slice(0, time.length - 3) + "waQ";
-  } else if (present.indexOf("DIS") != -1) {
-    time = time.slice(0, time.length - 3) + "nem";
-  } else {
-    time = time + " pId";
-  }
+def translate_future(present: Present) -> Future:
+    time: str = present
+    if present.find("jaj") != -1:
+        time = time[:len(time)-3] + "leS"
+    elif present.find("jar") != -1:
+        time = time[:len(time)-3] + "waQ"
+    elif present.find("DIS") != -1:
+        time = time[:len(time)-3] + "nem"
+    else:
+        time = time + " pId"
 
-  return time;
-}
+    return time

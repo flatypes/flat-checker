@@ -1,5 +1,6 @@
 package flat.checker.domain
 
+@deprecated
 trait SymbolSet[A]:
   type Set = A
 

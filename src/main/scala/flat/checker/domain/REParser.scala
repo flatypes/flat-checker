@@ -1,6 +1,7 @@
 package flat.checker.domain
 
 import com.ibm.icu.text.UnicodeSet
+import flat.checker.domain.RegExp.*
 import flat.checker.domain.given
 
 import scala.jdk.CollectionConverters.*
@@ -8,13 +9,13 @@ import scala.util.parsing.combinator.Parsers
 import scala.util.parsing.input.{CharSequenceReader, OffsetPosition}
 
 object REParser:
-  def parse(input: CharSequence): StrRE = tryParse(input) match
+  def parse(input: CharSequence): CharRE = tryParse(input) match
     case Left(err) => throw IllegalArgumentException(err)
     case Right(r) => r
 
-  def tryParse(input: CharSequence, rules: Map[String, StrRE] = Map.empty): Either[String, StrRE] =
+  def tryParse(input: CharSequence, rules: Map[String, CharRE] = Map.empty): Either[String, CharRE] =
     val in = CharSequenceReader(input)
-    val parsers = StrREParsers(rules)
+    val parsers = CharREParsers(rules)
     parsers.phrase(parsers.expr)(in) match
       case parsers.Success(r, _) => Right(r)
       case parsers.Failure(msg, nxt) => Left(formatError(input, nxt.offset, msg))
@@ -25,20 +26,20 @@ object REParser:
     val indentation = " ".repeat(pos.column - 1)
     "regular expression has invalid syntax:\n" + pos.lineContents + "\n" + indentation + "^\n" + indentation + msg
 
-  private class StrREParsers(rules: Map[String, StrRE]) extends Parsers:
+  private class CharREParsers(rules: Map[String, CharRE]) extends Parsers:
     type Elem = Char
 
     // expr -> alt ('|' alt)*
-    def expr: Parser[StrRE] = rep1sep(alt, '|') ^^ RegEx.sum
+    def expr: Parser[CharRE] = rep1sep(alt, '|') ^^ sum
 
     // alt -> term*
-    private def alt: Parser[StrRE] = term.* ^^ RegEx.product
+    private def alt: Parser[CharRE] = term.* ^^ product
 
     // term -> atom quantifier?
-    private def term: Parser[StrRE] = atom >> parseQuantifier
+    private def term: Parser[CharRE] = atom >> parseQuantifier
 
     // quantifier -> '*' | '+' | '?' | '{' int (',' int?)? '}'
-    private def parseQuantifier(r: StrRE): Parser[StrRE] =
+    private def parseQuantifier(r: CharRE): Parser[CharRE] =
       '*' ^^^ r.star | '+' ^^^ r.plus | '?' ^^^ r.opt | '{' ~> (int ^^ (r ^ _)) <~ '}' |
         '{' ~> (((int <~ ',') ~ int.?) ^^ { case n1 ~ n2 => r.loop(n1, n2) }) <~ '}' | success(r)
 
@@ -46,18 +47,18 @@ object REParser:
     private val syntaxChars: String = "^$\\.*+?()[]{}|"
 
     // atom -> char (EXCEPT syntaxChars) | '\' (charEscape | classEscape) | '.' | '[' classContents ']' | '(' expr ')'
-    private def atom: Parser[StrRE] =
-      acceptMatch("character", { case c if !syntaxChars.contains(c) => RegEx.symbol(c) }) |
-        '\\' ~>! (charEscape ^^ RegEx.symbol) |
-        '.' ^^^ RegEx.Lit(CharSet.full) | '[' ~>! classContents <~ ']' | '(' ~>! expr <~ ')'
+    private def atom: Parser[CharRE] =
+      acceptMatch("character", { case c if !syntaxChars.contains(c) => fromChar(c) }) |
+        '\\' ~>! (charEscape ^^ fromChar) |
+        '.' ^^^ Lit(CharSet.full) | '[' ~>! classContents <~ ']' | '(' ~>! expr <~ ')'
 
     // classContents -> '^'? classContent*
-    private def classContents: Parser[StrRE] =
+    private def classContents: Parser[CharRE] =
       for
         neg <- '^'.?
         css <- classContent.*
         cs = if css.isEmpty then CharSet.empty else css.reduce(_ | _)
-      yield RegEx.symbolSet(if neg.isDefined then ~cs else cs)
+      yield fromCharSet(if neg.isDefined then ~cs else cs)
 
     // classContent -> classChar ('-' classChar)? | classEscape
     private def classContent: Parser[CharSet] =
@@ -87,7 +88,7 @@ object REParser:
 //        'w' ^^^ CharSet.asciiWord | 'W' ^^^ !CharSet.asciiWord |
 //        'p' ~>! '{' ~> acceptIf(_ != '}')(_ => "").+ <~ '}' >> { cs => parsePropertyValueExpr(cs.mkString) }
 
-    private def rule: Parser[StrRE] =
+    private def rule: Parser[CharRE] =
       ident >> { name =>
         rules.get(name) match
           case Some(r) => success(r)

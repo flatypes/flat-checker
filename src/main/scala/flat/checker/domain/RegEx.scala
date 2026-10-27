@@ -5,6 +5,7 @@ import flat.checker.domain.REOps.filterNe
 
 /** A generic regular expression.
  * Names mirror the definition of a Kleene algebra. */
+@deprecated("Use RegExp instead", "2024-06-05")
 enum RegEx[A] extends LazyLogging:
   case Zero()
   case One()
@@ -137,4 +138,5 @@ given [A](using set: SymbolSet[A]): SymbolSet[RegEx[A]] with
     def |(r2: RegEx[A]): RegEx[A] = r1 + r2
     def -(x: Symbol): RegEx[A] = r1.filterNe(x)
 
+@deprecated("Use RegEx[CharSet] instead", "2024-06-05")
 type StrRE = RegEx[CharSet]

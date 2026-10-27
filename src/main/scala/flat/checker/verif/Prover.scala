@@ -137,10 +137,15 @@ object Prover extends LazyLogging:
         solveLogicalGoal(narrowedGoal)
 
   private def solveLogicalGoal(goal: Goal): Boolean =
-    val lemmas = Synthesizer.synthesizeLemmas(goal)
+    val conclusion = goal.conclusion.transform(Function.unlift(rewriteLemma(_, goal))).simplify
+    val goal1 = goal.copy(conclusion = conclusion)
+    if trivial(goal1) then
+      return true
+
+    val lemmas = Synthesizer.synthesizeLemmas(goal1)
     if lemmas.nonEmpty then
       logger.debug(s"Lemmas: ${lemmas.map(_.show).mkString(", ")}")
-      if lemmas.contains(goal.conclusion) then
+      if lemmas.contains(conclusion) then
         return true
 
     val tm = new cvc5.TermManager
@@ -150,7 +155,22 @@ object Prover extends LazyLogging:
     for e <- goal.premises ++ lemmas do
       val formula = encoder.encodeExpr(e, EncodingCtx.empty)
       solver.assertFormula(formula)
-    val formula = encoder.encodeExpr(goal.conclusion, EncodingCtx.empty)
+    val formula = encoder.encodeExpr(conclusion, EncodingCtx.empty)
     solver.assertFormula(formula.notTerm)
     val result = solver.checkSat()
     result.isUnsat
+
+  private def rewriteLemma(expr: Expr, goal: Goal): Option[Expr] = expr match
+    case StrCount(Substr(e, Var(x), ej), StrConst(s)) if s.length == 1 =>
+      // s[x:j].count(c) = s[x+1:j].count(c) + (if s[x] == c then 1 else 0)
+      val cnt: Expr = StrCount(Substr(e, Add(Var(x), IntConst(1)), ej), StrConst(s))
+      val chr = CharConst(s.head)
+      if goal.premises.contains(Eq(CharAt(e, Var(x)), chr)()) then
+        logger.debug("Rewrite {} into {} + 1", expr.show, cnt.show)
+        Some(Add(cnt, IntConst(1)))
+      else if goal.premises.contains(Ne(CharAt(e, Var(x)), chr)()) then
+        logger.debug("Rewrite {} into {}", expr.show, cnt.show)
+        Some(cnt)
+      else
+        None
+    case _ => None

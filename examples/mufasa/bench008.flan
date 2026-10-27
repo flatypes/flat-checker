@@ -1,19 +1,14 @@
-lang Word = r"[A-Za-z0-9_.:]+"
-lang Path = Word ('/' Word)*
-lang Input = Word '/' Path
-lang Coerced = "file://" Path
+lang Segment = r"[a-zA-Z0-9\-._~!$&'()*+,;=:@]+"
+lang Path = Segment ('/' Segment)*
+lang URL = "assets://"? Path
+lang FileURL = "file://" Path
 
-method coerceLocalScriptURL(input: Input): Coerced
-{
-  var scriptURL = input;
-  if (scriptURL.startsWith("assets://")) {
-    assert false;
-  }
+def coerce_local_script_url(script_url: URL) -> FileURL?:
+    if script_url.startswith("assets://"):
+        return None
 
-  scriptURL = scriptURL.substring(scriptURL.indexOf("/") + 1, scriptURL.length);
-  if (!scriptURL.contains("://")) {
-    scriptURL = "file://" + scriptURL;
-  }
+    s = script_url[script_url.find("/") + 1:]
+    if "://" not in s:
+        s = "file://" + script_url
 
-  return scriptURL;
-}
+    return s

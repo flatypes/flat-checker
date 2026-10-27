@@ -1,26 +1,26 @@
 package flat.checker.domain
 
-import flat.checker.domain.RegEx.*
+import flat.checker.domain.RegExp.*
 import flat.checker.util.ExprPrettifier
 
 object Prettifier:
-  private class REPrettifier[A] extends ExprPrettifier[RegEx[A]]:
+  private class REPrettifier[T, S] extends ExprPrettifier[RegExp[T, S]]:
     private val LEVEL_COMP = 30
     private val LEVEL_PLUS = 40
 
-    override protected def getLevel(r: RegEx[A]): Int = r match
+    override protected def getLevel(r: RegExp[T, S]): Int = r match
       case Zero() | One() | Lit(_) => 0
       case Star(_) => LEVEL_POSTFIX
       case Comp(_, _) => LEVEL_COMP
       case Plus(_, _) => LEVEL_PLUS
 
-    override def ppExpr(r: RegEx[A]): String =
+    override def ppExpr(r: RegExp[T, S]): String =
       if r.name.nonEmpty then "{" + r.name + "}"
       else r match
         case Zero() => "∅"
         case One() => "ε"
         case Lit(a: CharSet) => ppCharSet(a)
-        case Lit(r1: RegEx[_]) => "⌜" + r1.pp + "⌝"
+        case Lit(r1: RegExp[_, _]) => "⌜" + r1.pp + "⌝"
         case Lit(d) => "⟨" + d.toString + "⟩"
         case Plus(r1, r2) => ppInfix("|", LEVEL_PLUS, ASSOC_LEFT, r1, r2)
         case Comp(r1, r2) => ppInfix("", LEVEL_COMP, ASSOC_LEFT, r1, r2)
@@ -34,7 +34,10 @@ object Prettifier:
 
     override protected def ppInfixOp(op: String): String = op
 
-  extension [A](r: RegEx[A])
+  extension [T](r: RegEx[T])
+    def pp: String = ???
+
+  extension [T, S](r: RegExp[T, S])
     def pp: String =
-      val prettifier = REPrettifier[A]()
+      val prettifier = REPrettifier[T, S]()
       prettifier.ppExpr(r).take(80)

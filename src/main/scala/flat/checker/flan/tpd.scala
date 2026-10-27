@@ -1,7 +1,7 @@
 package flat.checker.flan
 
+import flat.checker.domain.*
 import flat.checker.domain.StrREOps.NumStrFormat
-import flat.checker.domain.{CharSet, RegEx, StrRE}
 import flat.checker.verif.ProofError
 import org.eclipse.lsp4j.{Position, Range}
 
@@ -303,7 +303,7 @@ object tpd:
       case List(e, et) => StrEndsWith(e, et)(range)
       case _ => throw IllegalArgumentException("SeqEndsWith must have exactly 2 subtrees")
 
-  final case class StrIn(str: Expr, regEx: StrRE)(val range: Range = noRange) extends Expr:
+  final case class StrIn(str: Expr, regEx: CharRE)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrIn = subtrees match
       case List(e) => StrIn(e, regEx)(range)
       case _ => throw IllegalArgumentException("StringInRegEx must have exactly 1 subtree")
@@ -438,7 +438,7 @@ object tpd:
       case List(e, ep) => ListFilter(e, ep)(range)
       case _ => throw IllegalArgumentException("SeqFilter must have exactly 2 subtrees")
 
-  final case class StrListIn(lst: Expr, regEx: RegEx[StrRE])(val range: Range = noRange) extends Expr:
+  final case class StrListIn(lst: Expr, regEx: StrListRE)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrListIn = subtrees match
       case List(e) => StrListIn(e, regEx)(range)
       case _ => throw IllegalArgumentException("StrListInRegEx must have exactly 1 subtree")

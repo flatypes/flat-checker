@@ -1,18 +1,18 @@
 from url_split import Scheme, Authority, Path, Query, Fragment, URL, RelativePath
 
 def url_unsplit(scheme: Scheme?, netloc: Authority?, path: Path, query: Query?, fragment: Fragment?) -> URL:
-    requires scheme == None ==> path in RelativePath
+    requires scheme is None ==> path in RelativePath
     url: str = path
-    if netloc != None:
+    if netloc is not None:
         if url != "" and url[:1] != "/":
             url = "/" + url
         url = "//" + netloc + url
-    else if url[:2] == "//":
+    elif url[:2] == "//":
         url = "//" + url
-    if scheme != None and scheme != "":
+    if scheme is not None and scheme != "":
         url = scheme + ":" + url
-    if query != None:
+    if query is not None:
         url = url + "?" + query
-    if fragment != None:
+    if fragment is not None:
         url = url + "#" + fragment
     return url

@@ -27,6 +27,8 @@ final case class NatSet private(nats: Set[Int], infinite: Boolean):
   def +(that: NatSet): NatSet =
     NatSet(for n1 <- this.nats; n2 <- that.nats yield n1 + n2, this.infinite || that.infinite)
 
+  def eq(n: Int): Boolean = !infinite && nats == Set(n)
+
 object NatSet:
   val empty: NatSet = new NatSet(Set.empty, false)
 
@@ -39,6 +41,13 @@ object NatSet:
       new NatSet(nats.filter(_ <= upper), true)
     else
       new NatSet(nats, false)
+
+  def apply(nats: Int*): NatSet = new NatSet(nats.toSet, false)
+
+  def union(sets: List[NatSet]): NatSet =
+    if sets.isEmpty then NatSet.empty else sets.reduce(_ | _)
+
+final case class IdxSet(negative: Boolean, left: NatSet, right: NatSet)
 
 /** A regular expression that encodes a (possibly infinite) set of natural numbers:
  *  - L(0) = ∅

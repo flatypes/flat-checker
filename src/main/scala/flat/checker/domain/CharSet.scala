@@ -88,3 +88,17 @@ given SymbolSet[CharSet] with
     def contains(c: Char): Boolean = a.contains(c)
     def |(b: CharSet): CharSet = a | b
     def -(c: Char): CharSet = a - c
+
+
+given LitOps[Char, CharSet] with
+  def empty: CharSet = CharSet.empty
+
+  def full: CharSet = CharSet.full
+
+  def singleton(x: Char): CharSet = CharSet(x)
+
+  extension (a: CharSet)
+    def isEmpty: Boolean = a.isEmpty
+    def contains(x: Char): Boolean = a.contains(x)
+    def |(b: CharSet): CharSet = a | b
+    def -(x: Char): CharSet = a - x

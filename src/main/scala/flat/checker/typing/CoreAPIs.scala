@@ -3,7 +3,7 @@ package flat.checker.typing
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
 import flat.checker.domain.StrREOps.NumStrFormat
-import flat.checker.domain.{CharSet, RegEx, StrRE, given}
+import flat.checker.domain.{CharRE, CharSet, RegExp, StrRE, given}
 import flat.checker.flan.Show.show
 import flat.checker.flan.sorting.{subsortOf, toSort}
 import flat.checker.flan.tpd.*
@@ -205,11 +205,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     "hex", "int", "len", "list", "map", "max", "min", "oct", "ord", "reversed", "set", "str", "sum", "zip")
 
   private def narrow(x: String, typ: Type, ctx: TypingCtx): Type = typ match
-    case OptType(t) =>
-      val notNull = ctx.conds.exists:
-        case Ne(Var(`x`), NullConst()) | Not(Eq(Var(`x`), NullConst())) => true
-        case _ => false
-      if notNull then t else typ
+    case OptType(t) if ctx.notNone.contains(x) => t
     case _ => typ
 
   private def checkStrFormat(fmt: String, args: List[untpd.Expr], span: Span, ctx: TypingCtx): Expr =
@@ -340,18 +336,18 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
           reporter.report(ctx.uri, TypeMismatch(node.range, expectedSort.show, actualSort.show))
           (expr, Nil)
 
-  def expand(node: untpd.PExpr, ctx: TypingCtx): StrRE = node match
-    case untpd.PChar(c) => RegEx.symbolSet(CharSet(c))
-    case untpd.PStr(s) => RegEx.word(s.toList)
+  def expand(node: untpd.PExpr, ctx: TypingCtx): CharRE = node match
+    case untpd.PChar(c) => RegExp.fromChar(c)
+    case untpd.PStr(s) => RegExp.fromString(s.toList)
     case n@untpd.PRef(x) =>
       ctx.lookup(x) match
         case Some(LangInfo(_, r)) => r
         case Some(_) =>
           reporter.report(ctx.uri, TypeMismatch(n.range, "Lang", "not a language"))
-          RegEx.Zero()
+          RegExp.Zero()
         case None =>
           reporter.report(ctx.uri, UndefinedName(n.range, x))
-          RegEx.Zero()
+          RegExp.Zero()
     case untpd.PStar(l) => expand(l, ctx).star
     case untpd.PPlus(l) => expand(l, ctx).plus
     case untpd.POpt(l) => expand(l, ctx).opt
@@ -363,8 +359,8 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       val chars = items.flatMap:
         case c: Char => List(c)
         case untpd.CharRange(c1, c2) => (c1 to c2).toList
-      RegEx.symbolSet(new CharSet(neg, chars.toSet))
-    case untpd.PAllChar => RegEx.symbolSet(CharSet.full)
+      RegExp.fromCharSet(new CharSet(neg, chars.toSet))
+    case untpd.PAllChar => RegExp.fromCharSet(CharSet.full)
 
   def unfold(node: untpd.Type, ctx: TypingCtx): Type = node match
     case t@untpd.TypeName(x) =>
@@ -450,9 +446,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
   def assume(cond: Expr, ctx: TypingCtx): TypingCtx =
     cond.simplify match
       case Ne(Var(x), NullConst()) =>
-        ctx.updatedWith(x):
-          case ValInfo(id, OptType(t)) => ValInfo(id, t)
-          case VarInfo(id, OptType(t)) => VarInfo(id, t)
+        ctx.copy(notNone = ctx.notNone + x)
       case And(e1, e2) =>
         assume(e2, assume(e1, ctx))
       case _ =>

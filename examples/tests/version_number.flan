@@ -1,0 +1,7 @@
+lang Number = r"[0-9]+"
+lang VersionNumber = Number "." Number "." Number
+
+def extract_minor(version: VersionNumber) -> Number:
+    i1 = version.find('.') + 1
+    i2 = version.find('.', i1)
+    return version[i1:i2]

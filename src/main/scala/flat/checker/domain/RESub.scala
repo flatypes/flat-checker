@@ -2,17 +2,16 @@ package flat.checker.domain
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.RegEx.*
+import flat.checker.domain.REAPI.deriv
+import flat.checker.domain.RegExp.*
 
 import scala.collection.mutable
 
 object RESub extends LazyLogging:
-  private val set = summon[SymbolSet[CharSet]]
-
   /** Checks if `r1` ⊆ `r2`. */
-  def check(r1: StrRE, r2: StrRE): Boolean =
-    val queue = mutable.Queue.empty[(StrRE, StrRE)]
-    val visited = mutable.Set.empty[(StrRE, StrRE)]
+  def check(r1: CharRE, r2: CharRE): Boolean =
+    val queue = mutable.Queue.empty[(CharRE, CharRE)]
+    val visited = mutable.Set.empty[(CharRE, CharRE)]
 
     queue.enqueue((r1, r2))
     while queue.nonEmpty do
@@ -35,7 +34,7 @@ object RESub extends LazyLogging:
         logger.trace("prove by cycle: {} ⊆ {}", r1.pp, r2.pp)
       else
         for a <- next(r1) <| next(r2) do
-          val c: set.Symbol = a.representative
+          val c = a.representative
           queue.enqueue((r1.deriv(c), r2.deriv(c)))
         visited.add((r1, r2))
 
@@ -48,7 +47,7 @@ object RESub extends LazyLogging:
   private type Partition = List[CharSet]
 
   /** Computes the equivalence class partitioning on the first set of `r`. */
-  private def next(r: StrRE): Partition = r match
+  private def next(r: CharRE): Partition = r match
     case Zero() | One() => Nil
     case Lit(a) => List(a)
     case Plus(r1, r2) => next(r1) | next(r2)

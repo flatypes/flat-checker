@@ -1,0 +1,8 @@
+lang AStar = r"a*"
+
+def check(s: AStar):
+    i = 0
+    while i < len(s):
+        invariant 0 <= i <= len(s)
+        assert s[i] == 'a'
+        i += 1

@@ -3,6 +3,7 @@ package flat.checker.domain
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.REOps.*
 
+@deprecated
 enum AIndex:
   /** Constant index. If positive, left to right. Otherwise, right to left. */
   case Const(i: Int)
@@ -10,8 +11,10 @@ enum AIndex:
   case Of(s: String, start: Int, offset: Int)
   case End
 
+@deprecated
 final case class AIndexRange(from: AIndex, until: AIndex)
 
+@deprecated
 object StrREAPI extends LazyLogging:
   // Operations
   def charAt(r: StrRE, at: AIndex | AIndexRange): CharSet = at match

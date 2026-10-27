@@ -68,7 +68,7 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
     case _ => FunType(List(left), right)(left.range.getStart)
 
   private def optType: Parser[Type] =
-    postfix(typeName | parenType | typeApply | reftType, "?" ^^ { tk => t => OptType(t)(tk.span.getEnd) })
+    postfix(typeApply | typeName | parenType | reftType, "?" ^^ { tk => t => OptType(t)(tk.span.getEnd) })
 
   private def typeName: Parser[TypeName] = IDENTIFIER ^^ { tk => TypeName(tk.value)(tk.span) }
 
