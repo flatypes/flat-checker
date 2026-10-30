@@ -125,4 +125,4 @@ class FindTest extends AnyFunSpec, REAssertions:
 
     it("filter '/' in s[2:]"):
       val r1 = r.absDrop(2).filterContains("/")
-      assertCharRE("(/[a-z]*)+")(r1)
+      assertCharRE("[a-z]+(/[a-z]*)+")(r1)

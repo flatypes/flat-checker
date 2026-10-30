@@ -37,15 +37,8 @@ enum CmpOp:
     case _ => this
 
 object REOps extends LazyLogging:
-  // Prefix, Suffix, Infix
+  // ElemAt, Slice
   extension [T, S](r: RegEx[T, S])(using litOps: LitOps[T, S])
-    def deriv(p: S => Boolean): RegEx[T, S] = r match
-      case Zero() | One() => Zero()
-      case Lit(a) => if p(a) then One() else Zero()
-      case Plus(r1, r2) => r1.deriv(p) + r2.deriv(p)
-      case Comp(r1, r2) => r1.deriv(p) * r2 + (if r1.nullable then r2.deriv(p) else Zero())
-      case Star(r1) => r1.deriv(p) * r
-
     def deriv(x: T): RegEx[T, S] = r match
       case Zero() | One() => Zero()
       case Lit(a) => if a.contains(x) then One() else Zero()
@@ -60,46 +53,45 @@ object REOps extends LazyLogging:
         val r1 = r.deriv(x)
         if r1.isEmpty then Zero() else r1.deriv(xs)
 
-    def mayStartWith(s: List[T]): Boolean = r.deriv(s).nonEmpty
+    private def absDrop1: RegEx[T, S] = r match
+      case Zero() | One() | Lit(_) => One()
+      case Plus(r1, r2) => r1.absDrop1 + r2.absDrop1
+      case Comp(r1, r2) => r1.absDrop1 * r2 + (if r1.nullable then r2.absDrop1 else Zero())
+      case Star(r1) => r1.absDrop1 * r
 
     @tailrec
-    def mustStartWith(s: List[T]): Boolean = s match
-      case Nil => true
-      case x :: xs => (r.first - x).isEmpty && r.deriv(x).mustStartWith(xs)
+    def absDrop(n: Int): RegEx[T, S] =
+      require(n >= 0, s"$n is negative")
+      if n == 0 then r
+      else r.absDrop1.absDrop(n - 1)
 
-    def absStartsWith(s: List[T]): BoolSet =
-      if r.mayStartWith(s) then
-        if r.mustStartWith(s) then BoolSet.True else BoolSet.Full
+    def absElemAt(n: Int): S =
+      require(n >= 0, s"$n is negative")
+      r.absDrop(n).first
+
+    def absHeadTail: List[(S, RegEx[T, S])] = r match
+      case Zero() | One() => Nil
+      case Lit(a) => if a.isEmpty then Nil else List((a, One()))
+      case Plus(r1, r2) => r1.absHeadTail ++ r2.absHeadTail
+      case Comp(r1, r2) =>
+        val splits = for (a, tail) <- r1.absHeadTail yield (a, tail * r2)
+        if r1.nullable then splits ++ r2.absHeadTail else splits
+      case Star(r1) => for (a, tail) <- r1.absHeadTail yield (a, tail * r)
+
+    def absSplitAt(n: Int): List[(RegEx[T, S], RegEx[T, S])] =
+      require(n >= 0)
+      if n == 0 then List((One(), r))
       else
-        BoolSet.False
+        val splits = for
+          (head, tail) <- r.absHeadTail
+          (mid, right) <- tail.absSplitAt(n - 1)
+        yield (Lit(head) * mid, right)
+        if r.nullable then (One(), One()) :: splits else splits
 
-    def absEndsWith(s: List[T]): BoolSet = r.reverse.absStartsWith(s.reverse)
-
-    def alphabet: S = r match
-      case Zero() | One() => litOps.empty
-      case Lit(a) => a
-      case Plus(r1, r2) => r1.alphabet | r2.alphabet
-      case Comp(r1, r2) => r1.alphabet | r2.alphabet
-      case Star(r1) => r1.alphabet
-
-    def mayContain(x: T): Boolean = r.alphabet.contains(x)
-
-    def filterNotContainElem(x: T): RegEx[T, S] =
-      if !r.mayContain(x) then r
-      else r match
-        case Zero() | One() => r
-        case Lit(a) => fromCharSet(a - x)
-        case Plus(r1, r2) => r1.filterNotContainElem(x) + r2.filterNotContainElem(x)
-        case Comp(r1, r2) => r1.filterNotContainElem(x) * r2.filterNotContainElem(x)
-        case Star(r1) => r1.filterNotContainElem(x).star
-
-    def mustContain(x: T): Boolean = r.filterNotContainElem(x).isEmpty
-
-    def absContainsElem(x: T): BoolSet =
-      if r.mayContain(x) then
-        if r.mustContain(x) then BoolSet.True else BoolSet.Full
-      else
-        BoolSet.False
+    def absTake(n: Int): RegEx[T, S] =
+      require(n >= 0)
+      if n == 0 then One()
+      else sum(r.absSplitAt(n).map(_._1))
 
     /** Search for any occurrence of the given symbol `x`, and return the possibilities as a list of pairs
      * (before `x`, after `x`). */
@@ -113,21 +105,52 @@ object REOps extends LazyLogging:
       case Star(r1) =>
         for (before, after) <- r1.search(x) yield (r * before, after * r)
 
-    def mayContain(s: List[T]): Boolean = s match
-      case Nil => true
-      case List(x) => r.mayContain(x)
-      case x :: xs =>
-        val a = r.alphabet
-        s.forall(a.contains) && r.search(x).exists(_._2.mayStartWith(xs))
+    def alphabet: S = r match
+      case Zero() | One() => litOps.empty
+      case Lit(a) => a
+      case Plus(r1, r2) => r1.alphabet | r2.alphabet
+      case Comp(r1, r2) => r1.alphabet | r2.alphabet
+      case Star(r1) => r1.alphabet
 
-    def absHeadTail: List[(S, RegEx[T, S])] = r match
-      case Zero() | One() => Nil
-      case Lit(a) => if a.isEmpty then Nil else List((a, One()))
-      case Plus(r1, r2) => r1.absHeadTail ++ r2.absHeadTail
-      case Comp(r1, r2) =>
-        val splits = for (a, tail) <- r1.absHeadTail yield (a, tail * r2)
-        if r1.nullable then splits ++ r2.absHeadTail else splits
-      case Star(r1) => for (a, tail) <- r1.absHeadTail yield (a, tail * r)
+    private inline def mayContain(x: T): Boolean = r.alphabet.contains(x)
+
+    def filterNotContainElem(x: T): RegEx[T, S] =
+      if !r.mayContain(x) then r
+      else r match
+        case Zero() | One() => r
+        case Lit(a) => fromCharSet(a - x)
+        case Plus(r1, r2) => r1.filterNotContainElem(x) + r2.filterNotContainElem(x)
+        case Comp(r1, r2) => r1.filterNotContainElem(x) * r2.filterNotContainElem(x)
+        case Star(r1) => r1.filterNotContainElem(x).star
+
+    def absSplitAtFirst(x: T): List[(RegEx[T, S], RegEx[T, S])] =
+      for
+        (before, after) <- r.search(x)
+        before1 = before.filterNotContainElem(x)
+        if before1.nonEmpty
+      yield (before1, fromChar(x) * after)
+
+    def filterStartsWith(s: List[T]): RegEx[T, S] =
+      val r1 = r.deriv(s)
+      if r1.isEmpty then Zero() else fromString(s) * r1
+
+    private def filterNotContainDiverge(x: T, xs: List[T]): RegEx[T, S] =
+      (if r.nullable then One() else Zero()) +
+        (if r.first.contains(x) then fromChar(x) * r.deriv(x).filterNotStartWith(xs).filterNotContainDiverge(x, xs)
+        else Zero()) +
+        sum(for (a, tail) <- r.absHeadTail if (a - x).nonEmpty
+          yield fromCharSet(a - x) * tail.filterNotContainDiverge(x, xs))
+
+    private def filterNotContainMulti(s: List[T]): RegEx[T, S] =
+      if !r.mayContain(s) then r
+      else r match
+        case Plus(r1, r2) => r1.filterNotContainMulti(s) + r2.filterNotContainMulti(s)
+        case _ => ArdenSolver.solve(r, notContainSpec(s.head, s.tail))
+
+    def filterNotContain(s: List[T]): RegEx[T, S] = s match
+      case Nil => Zero()
+      case List(x) => r.filterNotContainElem(x)
+      case _ => r.filterNotContainMulti(s)
 
     def filterNotStartWithElem(x: T): RegEx[T, S] =
       (if r.nullable then One() else Zero()) + sum:
@@ -148,113 +171,12 @@ object REOps extends LazyLogging:
 
     def filterNotEndWith(s: List[T]): RegEx[T, S] = r.reverse.filterNotStartWith(s.reverse).reverse
 
-    private def filterNotContainDiverge(x: T, xs: List[T]): RegEx[T, S] =
-      (if r.nullable then One() else Zero()) +
-        (if r.first.contains(x) then fromChar(x) * r.deriv(x).filterNotStartWith(xs).filterNotContainDiverge(x, xs)
-        else Zero()) +
-        sum(for (a, tail) <- r.absHeadTail if (a - x).nonEmpty
-          yield fromCharSet(a - x) * tail.filterNotContainDiverge(x, xs))
-
-    private def filterNotContainMulti(s: List[T]): RegEx[T, S] =
-      if !r.mayContain(s) then r
-      else r match
-        case Plus(r1, r2) => r1.filterNotContainMulti(s) + r2.filterNotContainMulti(s)
-        case _ => ArdenSolver.solve(r, notContainSpec(s.head, s.tail))
-
-    def filterNotContain(s: List[T]): RegEx[T, S] = s match
-      case Nil => Zero()
-      case List(x) => r.filterNotContainElem(x)
-      case _ => r.filterNotContainMulti(s)
-
-    def mustContain(s: List[T]): Boolean = s match
-      case Nil => true
-      case List(x) => r.mustContain(x)
-      case _ => r.filterNotContainMulti(s).isEmpty
-
-    def absContains(s: List[T]): BoolSet =
-      if r.mayContain(s) then
-        if r.mustContain(s) then BoolSet.True else BoolSet.Full
-      else
-        BoolSet.False
-
-    // More filters
-    def filterStartsWith(s: List[T]): RegEx[T, S] =
-      val r1 = r.deriv(s)
-      if r1.isEmpty then Zero() else fromString(s) * r1
-
-    def filterEndsWith(s: List[T]): RegEx[T, S] = r.reverse.filterStartsWith(s.reverse).reverse
-
-    // TODO: this version may produce large regex
-    def filterContains(s: List[T]): RegEx[T, S] = s match
-      case Nil => r
-      case x :: xs =>
-        sum:
-          for
-            (before, after) <- r.search(x)
-            after1 = after.filterStartsWith(xs)
-            if after1.nonEmpty
-          yield before * fromChar(x) * after1
-
-    def filterIsEmpty: RegEx[T, S] = if r.nullable then One() else Zero()
-
-    def filterNonEmpty: RegEx[T, S] = r match
-      case Zero() | One() => Zero()
-      case Lit(a) => if a.isEmpty then Zero() else r
-      case Plus(r1, r2) => r1.filterNonEmpty + r2.filterNonEmpty
-      case Comp(r1, r2) => r1.filterNonEmpty * r2 + (if r1.nullable then r2.filterNonEmpty else Zero())
-      case Star(r1) => r1.filterNonEmpty * r
-
-    def filterEq(s: List[T]): RegEx[T, S] =
-      if s.isEmpty then r.filterIsEmpty
-      else if r.contains(s) then fromString(s)
-      else Zero()
-
-    def filterNe(s: List[T]): RegEx[T, S] =
-      val r1 = r.deriv(s)
-      if r1.isEmpty then r
-      else fromString(s) * r1.filterNonEmpty + r.filterNotStartWith(s)
-
-  end extension
-
-  private def notContainSpec[T, S](x: T, xs: List[T])(using LitOps[T, S]): ArdenSolver.Spec[T, S, T, S] = r =>
-    (if r.nullable then One() else Zero(),
-      (if r.first.contains(x) then List((fromChar(x), r.deriv(x).filterNotStartWith(xs))) else Nil) ++
-        (for (a, tail) <- r.absHeadTail; if (a - x).nonEmpty yield (fromCharSet(a - x), tail)))
-
-  // Slice and Elem-At
-  extension [T, S](r: RegEx[T, S])(using litOps: LitOps[T, S])
     @tailrec
-    def absDrop(n: Int): RegEx[T, S] =
-      require(n >= 0, s"$n is negative")
-      if n == 0 then r
-      else
-        val tail = r.deriv(_.nonEmpty)
-        if tail.isEmpty then One() else tail.absDrop(n - 1)
-
-    def absElemAt(n: Int): S =
-      require(n >= 0, s"$n is negative")
-      r.absDrop(n).first
-
-    def absSplitAt(n: Int): List[(RegEx[T, S], RegEx[T, S])] =
-      require(n >= 0)
-      if n == 0 then List((One(), r))
-      else
-        val splits = for
-          (head, tail) <- r.absHeadTail
-          (mid, right) <- tail.absSplitAt(n - 1)
-        yield (Lit(head) * mid, right)
-        if r.nullable then (One(), One()) :: splits else splits
-
-    def absTake(n: Int): RegEx[T, S] =
-      require(n >= 0)
-      sum(r.absSplitAt(n).map(_._1))
-
-    def absSplitAtFirst(x: T): List[(RegEx[T, S], RegEx[T, S])] =
-      for
-        (before, after) <- r.search(x)
-        before1 = before.filterNotContainElem(x)
-        if before1.nonEmpty
-      yield (before1, RegEx.fromChar(x) * after)
+    private def filterNotEndWithMany(ss: List[List[T]]): RegEx[T, S] = ss match
+      case Nil => r
+      case s :: ss =>
+        val r1 = r.filterNotEndWith(s)
+        if r1.isEmpty then Zero() else r1.filterNotEndWithMany(ss)
 
     def absSplitAtFirst(s: List[T]): List[(RegEx[T, S], RegEx[T, S])] = s match
       case Nil => List((One(), r))
@@ -264,19 +186,12 @@ object REOps extends LazyLogging:
           (before, after) <- r.search(x)
           after1 = after.filterStartsWith(xs)
           if after1.nonEmpty
-          before1 = before.filterNotContain(s)
+          before1 = before.filterNotContainMulti(s)
           if before1.nonEmpty
           forbidden = for n <- 1.until(s.length).toList; if s.endsWith(s.take(n)) yield s.dropRight(n)
           before2 = before1.filterNotEndWithMany(forbidden)
           if before2.nonEmpty
-        yield (before2, RegEx.fromChar(x) * after1)
-
-    @tailrec
-    private def filterNotEndWithMany(ss: List[List[T]]): RegEx[T, S] = ss match
-      case Nil => r
-      case s :: ss =>
-        val r1 = r.filterNotEndWith(s)
-        if r1.isEmpty then Zero() else r1.filterNotEndWithMany(ss)
+        yield (before2, fromChar(x) * after1)
 
     def absSplitAt(index: Index[T]): List[(RegEx[T, S], RegEx[T, S])] = index match
       case ILeft(n) => r.absSplitAt(n)
@@ -349,6 +264,11 @@ object REOps extends LazyLogging:
 
   end extension
 
+  private def notContainSpec[T, S](x: T, xs: List[T])(using LitOps[T, S]): ArdenSolver.Spec[T, S, T, S] = r =>
+    (if r.nullable then One() else Zero(),
+      (if r.first.contains(x) then List((fromChar(x), r.deriv(x).filterNotStartWith(xs))) else Nil) ++
+        (for (a, tail) <- r.absHeadTail; if (a - x).nonEmpty yield (fromCharSet(a - x), tail)))
+
   private def shift[T, S](split: (RegEx[T, S], RegEx[T, S]), offset: Int)
                          (using LitOps[T, S]): List[(RegEx[T, S], RegEx[T, S])] =
     val (left, right) = split
@@ -357,6 +277,78 @@ object REOps extends LazyLogging:
       for (mid, right) <- right.absSplitAt(offset) yield (left * mid, right)
     else // offset < 0
       for (left, mid) <- left.absSplitAt(IRight(-offset)) yield (left, mid * right)
+
+  // StartsWith, EndsWith, Contains
+  extension [T, S](r: RegEx[T, S])(using litOps: LitOps[T, S])
+    private def mayStartWith(s: List[T]): Boolean = r.deriv(s).nonEmpty
+
+    @tailrec
+    private def mustStartWith(s: List[T]): Boolean = s match
+      case Nil => true
+      case x :: xs => (r.first - x).isEmpty && r.deriv(x).mustStartWith(xs)
+
+    def absStartsWith(s: List[T]): BoolSet =
+      if r.mayStartWith(s) then
+        if r.mustStartWith(s) then BoolSet.True else BoolSet.Full
+      else
+        BoolSet.False
+
+    def absEndsWith(s: List[T]): BoolSet = r.reverse.absStartsWith(s.reverse)
+
+    private def mustContain(x: T): Boolean = r.filterNotContainElem(x).isEmpty
+
+    def absContainsElem(x: T): BoolSet =
+      if r.mayContain(x) then
+        if r.mustContain(x) then BoolSet.True else BoolSet.Full
+      else
+        BoolSet.False
+
+    private def mayContain(s: List[T]): Boolean = s match
+      case Nil => true
+      case List(x) => r.mayContain(x)
+      case x :: xs =>
+        val a = r.alphabet
+        s.forall(a.contains) && r.search(x).exists(_._2.mayStartWith(xs))
+
+    private def mustContain(s: List[T]): Boolean = s match
+      case Nil => true
+      case List(x) => r.mustContain(x)
+      case _ => r.filterNotContainMulti(s).isEmpty
+
+    def absContains(s: List[T]): BoolSet =
+      if r.mayContain(s) then
+        if r.mustContain(s) then BoolSet.True else BoolSet.Full
+      else
+        BoolSet.False
+
+    // More filters
+    def filterEndsWith(s: List[T]): RegEx[T, S] = r.reverse.filterStartsWith(s.reverse).reverse
+
+    // NOTE: instead of just finding any occurrence of s, here we find the first occurrence.
+    // This is because: (a) the first occurrence must exist when s is contained;
+    // (b) the resulting regex is usually simpler, say a* -[contains a]-> a+, rather than a*aa*.
+    def filterContains(s: List[T]): RegEx[T, S] = sum(r.absSplitAtFirst(s).map(_ * _))
+
+    private inline def filterIsEmpty: RegEx[T, S] = if r.nullable then One() else Zero()
+
+    private def filterNonEmpty: RegEx[T, S] = r match
+      case Zero() | One() => Zero()
+      case Lit(a) => if a.isEmpty then Zero() else r
+      case Plus(r1, r2) => r1.filterNonEmpty + r2.filterNonEmpty
+      case Comp(r1, r2) => r1.filterNonEmpty * r2 + (if r1.nullable then r2.filterNonEmpty else Zero())
+      case Star(r1) => r1.filterNonEmpty * r
+
+    def filterEq(s: List[T]): RegEx[T, S] =
+      if s.isEmpty then r.filterIsEmpty
+      else if r.contains(s) then fromString(s)
+      else Zero()
+
+    def filterNe(s: List[T]): RegEx[T, S] =
+      val r1 = r.deriv(s)
+      if r1.isEmpty then r
+      else fromString(s) * r1.filterNonEmpty + r.filterNotStartWith(s)
+
+  end extension
 
   // Length, Find, Count
   extension [T, S](r: RegEx[T, S])(using LitOps[T, S])
@@ -395,7 +387,7 @@ object REOps extends LazyLogging:
       val set = r.absLength
       if !set.infinite && set.nats.size == 1 then Some(set.nats.head) else None
 
-    def groupByLength(bound: Int): Map[Int, RegEx[T, S]] =
+    private def groupByLength(bound: Int): Map[Int, RegEx[T, S]] =
       r.constLength match
         case Some(k) => Map(k -> r)
         case None => r match
@@ -465,14 +457,14 @@ object REOps extends LazyLogging:
         else r
 
     // IndexOf
-    def filterFound(s: List[T], start: Index[T]): RegEx[T, S] =
+    private def filterFound(s: List[T], start: Index[T]): RegEx[T, S] =
       sum:
         for
           (left, right) <- r.absSplitAt(start)
-          (mid, right) <- right.absSplitAtFirst(s)
-        yield left * mid * right
+          right1 = right.filterContains(s)
+        yield left * right1
 
-    def filterNotFound(s: List[T], start: Index[T]): RegEx[T, S] =
+    private def filterNotFound(s: List[T], start: Index[T]): RegEx[T, S] =
       sum:
         for
           (left, right) <- r.absSplitAt(start)
