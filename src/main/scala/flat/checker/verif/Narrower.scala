@@ -153,11 +153,9 @@ class Narrower(goal: Goal) extends LazyLogging:
 
     // e.indexOf(c1, i) < e.indexOf(c2, i)
     case Cmp(StrIndexOf(e, StrConst(s1), IntConst(i)), CmpOp.LT | CmpOp.LE,
-      StrIndexOf(e1, StrConst(s2), IntConst(i1)))
-      if e1 == e && i1 == i && s1.length == 1 && s2.length == 1 && s1 != s2 =>
-      val c1 = s1.head
-      val c2 = s2.head
-      Some((e, r => r.filterIndexOfLt(c1, c2, i.toInt)))
+      StrIndexOf(e1, StrConst(s2), IntConst(j)))
+      if e1 == e && s1.length == 1 && s2.length == 1 && s1 != s2 =>
+      Some((e, _.filterFindLtFind(s1, i.toInt, IFirst(s2, ILeft(j.toInt), 0))))
 
     // e.indexOf(s, i) == k
     case StrIndexOfCmp(e, s, i, op, e1) => (op, e1) match
