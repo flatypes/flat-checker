@@ -512,6 +512,7 @@ object REOps extends LazyLogging:
             if right1.nonEmpty
           yield left * right1
 
+    @deprecated("use filterFindLtFind instead")
     def filterIndexOfLt(x1: T, x2: T, start: Int): RegEx[T, S] =
       // Assume both character exist
       val index = IFirst(List(x2), ILeft(start), 0)
@@ -520,6 +521,15 @@ object REOps extends LazyLogging:
           (left, right) <- r.absSplitAt(start)
           (mid, right) <- right.absSplitAtFirst(List(x2))
           mid1 = mid.filterContains(List(x1))
+        yield left * mid1 * right
+
+    def filterFindLtFind(s: List[T], start: Int, index: IFirst[T]): RegEx[T, S] =
+      // Assume both indices exist
+      sum:
+        for
+          (left, right) <- r.absSplitAt(index)
+          (left, mid) <- left.absSplitAt(start)
+          mid1 = mid.filterContains(s)
         yield left * mid1 * right
 
   end extension
