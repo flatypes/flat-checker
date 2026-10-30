@@ -1,6 +1,6 @@
 package flat.checker.domain
 
-import flat.checker.domain.REAPI.*
+import flat.checker.domain.REOps.*
 import org.scalatest.funspec.AnyFunSpec
 
 class FindTest extends AnyFunSpec, REAssertions:
@@ -111,17 +111,18 @@ class FindTest extends AnyFunSpec, REAssertions:
       it("last element is e"):
         assertCharRE("e")(r1.absElemAt(IRight(1)))
 
-  describe("abc|bdb"):
-    val r = re("abc|bdb")
+  describe("//[a-z]+(/[a-z]*)*"):
+    val r = re("//[a-z]+(/[a-z]*)*")
 
-    it("find b from 2"):
-      val indexSet = r.absFind("b", ILeft(2))
+    it("find '/' from 2"):
+      val indexSet = r.absFind("/", ILeft(2))
       assert(indexSet.negative)
-      assertResult(NatSet(2))(indexSet.left)
-      assertResult(NatSet(1))(indexSet.right)
+      assertResult(NatSet(Set(3), true))(indexSet.left)
 
-    it("find second b"):
-      val indexSet = r.absFind("b", IFirst("b", ILeft(0), 1))
-      assert(indexSet.negative)
-      assertResult(NatSet(2))(indexSet.left)
-      assertResult(NatSet(1))(indexSet.right)
+    it("filter s.find('/', 2) >= 0"):
+      val r1 = r.filterFindCmp("/", ILeft(2), CmpOp.GE, 0)
+      assertCharRE("//[a-z]+(/[a-z]*)+")(r1)
+
+    it("filter '/' in s[2:]"):
+      val r1 = r.absDrop(2).filterContains("/")
+      assertCharRE("(/[a-z]*)+")(r1)

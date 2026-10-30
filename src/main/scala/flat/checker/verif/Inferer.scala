@@ -1,9 +1,9 @@
 package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
+import flat.checker.domain.CharREOps.*
 import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.REAPI.*
-import flat.checker.domain.StrREOps.*
+import flat.checker.domain.REOps.*
 import flat.checker.domain.{*, given}
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
@@ -14,12 +14,12 @@ import scala.collection.mutable.ListBuffer
 enum Domain:
   case Top
   case Nat(set: NatSet, e: Option[Expr] = None)
-  case Index(len: Expr, set: IdxSet)
+  case Index(len: Expr, set: IndexSet)
   case Num(set: NatRange)
   case Bool(set: BoolSet)
   case Char(set: CharSet)
   case Str(r: CharRE)
-  case StrList(r: StrListRE)
+  case StrList(r: StrRE)
 
   def membership(elem: Expr): List[Expr] = this match
     case Top => Nil
@@ -70,7 +70,7 @@ enum Domain:
 
     case Str(r) =>
       r match
-        case RegExp.Lit(a) => List(inCharSet(elem, a))
+        case RegEx.Lit(a) => List(inCharSet(elem, a))
         case _ =>
           if r.isFiniteLang then
             List(mkOr(for s <- r.getLang.toList.sorted yield Eq(elem, StrConst(s))))
@@ -117,7 +117,7 @@ object Inferer extends LazyLogging:
       case CharConst(c) =>
         return Domain.Char(CharSet(c))
       case StrConst(s) =>
-        return Domain.Str(RegExp.fromString(s))
+        return Domain.Str(RegEx.fromString(s))
       case _ =>
 
     val dom = goal.premises.reverseIterator.collectFirst:
@@ -130,8 +130,8 @@ object Inferer extends LazyLogging:
     expr match
       case Var(x) =>
         goal.ctx(x) match
-          case StrType => Domain.Str(RegExp.full)
-          case ListType(StrType) => Domain.StrList(RegExp.Lit(RegExp.full).star)
+          case StrType => Domain.Str(RegEx.full)
+          case ListType(StrType) => Domain.StrList(RegEx.Lit(RegEx.full).star)
           case _ => Domain.Top
 
       // Equality
@@ -153,7 +153,7 @@ object Inferer extends LazyLogging:
       // Char
       case CharToStr(e) =>
         infer(e) match
-          case Domain.Char(a) => Domain.Str(RegExp.fromCharSet(a))
+          case Domain.Char(a) => Domain.Str(RegEx.fromCharSet(a))
           case _ => Domain.Top
       case CharIn(e, a) =>
         infer(e) match
@@ -262,7 +262,7 @@ object Inferer extends LazyLogging:
               case Some(Interval(min, max)) if 0 <= min =>
                 Domain.Str(absFromInt(min, max, fmt))
               case _ =>
-                val r1: CharRE = RegExp.Lit(CharSet.from(fmt.digits))
+                val r1: CharRE = RegEx.Lit(CharSet.from(fmt.digits))
                 Domain.Str(r1.plus)
 
       // String extensions
@@ -304,8 +304,8 @@ object Inferer extends LazyLogging:
       case e@ListExpr(es) if e.elemSort == StrType =>
         val rs = es.map(infer).map:
           case Domain.Str(r) => r
-          case _ => RegExp.full
-        Domain.StrList(RegExp.product(rs.map(RegExp.fromCharSet)))
+          case _ => RegEx.full
+        Domain.StrList(RegEx.product(rs.map(RegEx.fromCharSet)))
       case ListContains(e, StrConst(t)) =>
         infer(e) match
           case Domain.StrList(r) =>
@@ -361,14 +361,14 @@ object Inferer extends LazyLogging:
       // Others
       case _ => Domain.Top
 
-  private def inferSlice[T, S](r: RegExp[T, S], from: Index[T], until: Index[T])
-                              (using LitOps[T, S]): RegExp[T, S] =
+  private def inferSlice[T, S](r: RegEx[T, S], from: Index[T], until: Index[T])
+                              (using LitOps[T, S]): RegEx[T, S] =
     (from, until) match
       case (ILeft(i), _) => r.absSliceFromLeft(i, until)
       case (_, IRight(j)) => r.absSliceUntilRight(from, j)
       case _ =>
         logger.warn("Unsupported slice range [{}, {}), fallback to alphabet*", from, until)
-        RegExp.fromCharSet(r.alphabet).star
+        RegEx.fromCharSet(r.alphabet).star
 
   private def relativeIndex(idx: Expr, str: Expr, goal: Goal): Option[(Int, Expr, CharRE)] = idx match
     case Var(x) =>
@@ -380,7 +380,7 @@ object Inferer extends LazyLogging:
     case _ =>
       None
 
-  private def relativeListIndex(idx: Expr, lst: Expr, goal: Goal): Option[(Int, Expr, StrListRE)] = idx match
+  private def relativeListIndex(idx: Expr, lst: Expr, goal: Goal): Option[(Int, Expr, StrRE)] = idx match
     case Var(x) =>
       val e: Expr = ListSlice(`lst`, Var(`x`), ListLen(`lst`))
       goal.premises.reverse.collectFirst { case StrListIn(`e`, r) => (0, e, r) }
@@ -404,12 +404,12 @@ object Inferer extends LazyLogging:
   def inferStr(expr: Expr, goal: Goal): CharRE =
     infer(expr)(using goal) match
       case Domain.Str(r) => r
-      case _ => RegExp.full
+      case _ => RegEx.full
 
-  def inferStrList(expr: Expr, goal: Goal): StrListRE =
+  def inferStrList(expr: Expr, goal: Goal): StrRE =
     infer(expr)(using goal) match
       case Domain.StrList(r) => r
-      case _ => RegExp.Lit(RegExp.full).star
+      case _ => RegEx.Lit(RegEx.full).star
 
   private def inferInterval(expr: Expr, goal: Goal): Option[Interval] = expr match
     case Negate(e) => inferInterval(e, goal).map(-_)

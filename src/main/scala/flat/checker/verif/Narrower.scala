@@ -2,7 +2,7 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.REAPI.*
+import flat.checker.domain.REOps.*
 import flat.checker.domain.{*, given}
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
@@ -14,7 +14,7 @@ import scala.collection.mutable.ListBuffer
 class Narrower(goal: Goal) extends LazyLogging:
   private val charTypes = mutable.Map.empty[Expr, CharSet]
   private val strTypes = mutable.Map.empty[Expr, CharRE]
-  private val strListTypes = mutable.Map.empty[Expr, StrListRE]
+  private val strListTypes = mutable.Map.empty[Expr, StrRE]
 
   def narrow: Goal =
     val conds = ListBuffer.empty[Expr]
@@ -103,7 +103,7 @@ class Narrower(goal: Goal) extends LazyLogging:
       logger.debug("Narrow {} by {} to {}", expr.show, cond.show, r1.pp)
 
   @tailrec
-  private def narrowStrListTarget(expr: Expr, f: StrListRE => StrListRE)(using cond: Expr): Unit = expr match
+  private def narrowStrListTarget(expr: Expr, f: StrRE => StrRE)(using cond: Expr): Unit = expr match
     case ListSlice(e, ei, ej) =>
       (IndexInferer.matchListIndex(ei, e, goal), IndexInferer.matchListIndex(ej, e, goal)) match
         case (Some(ILeft(n)), Some(until: StrListIndex)) => narrowStrListTarget(e, _.filterSliceFromLeft(n, until, f))
@@ -161,11 +161,11 @@ class Narrower(goal: Goal) extends LazyLogging:
 
     // e.indexOf(s, i) == k
     case StrIndexOfCmp(e, s, i, op, e1) => (op, e1) match
-      case (_, IntConst(v)) => Some((e, _.filterFindCmp(s, ILeft(i), op, v.toInt)))
+      case (_, IntConst(v)) if i >= 0 => Some((e, _.filterFindCmp(s, ILeft(i), op, v.toInt)))
       case (CmpOp.NE, Sub(StrLen(`e`), IntConst(1))) =>
         Some((e, _.filterFindCmpRight(s, ILeft(i), op, 1)))
-      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, StrLen(`e`)) => Some((e, _ => RegExp.Zero()))
-      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, Add(StrLen(`e`), IntConst(i))) if i > 0 => Some((e, _ => RegExp.Zero()))
+      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, StrLen(`e`)) => Some((e, _ => RegEx.Zero()))
+      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, Add(StrLen(`e`), IntConst(i))) if i > 0 => Some((e, _ => RegEx.Zero()))
       case _ => None
 
     // e.forall(lambda x -> ex)
@@ -205,7 +205,7 @@ class Narrower(goal: Goal) extends LazyLogging:
         (resultOp, result) <- InequalitySolver.isolate(target, (e1, op, e2))
       yield (e, s, i, resultOp, result)
 
-  private def matchStrListCond(cond: Expr): Option[(Expr, StrListRE => StrListRE)] = cond match
+  private def matchStrListCond(cond: Expr): Option[(Expr, StrRE => StrRE)] = cond match
     // s in e
     case ListContains(e, StrConst(s)) => Some((e, _.filterContains(List(s))))
     case Not(ListContains(e, StrConst(s))) => Some((e, _.filterNotContainElem(s)))

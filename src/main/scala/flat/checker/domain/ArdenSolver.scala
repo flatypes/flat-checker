@@ -7,14 +7,14 @@ import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 object ArdenSolver extends LazyLogging:
-  type Spec[T1, S1, T2, S2] = RegExp[T1, S1] => (RegExp[T2, S2], List[(RegExp[T2, S2], RegExp[T1, S1])])
+  type Spec[T1, S1, T2, S2] = RegEx[T1, S1] => (RegEx[T2, S2], List[(RegEx[T2, S2], RegEx[T1, S1])])
 
-  def solve[T1, S1, T2, S2](input: RegExp[T1, S1], spec: Spec[T1, S1, T2, S2]): RegExp[T2, S2] =
+  def solve[T1, S1, T2, S2](input: RegEx[T1, S1], spec: Spec[T1, S1, T2, S2]): RegEx[T2, S2] =
     // X_i semantically encodes f(inputs(i - 1)), for 1 <= i
     val inputs = ListBuffer(input)
     // X_i = sum_{j} eqs(i)(j) * X_j, for 1 <= i
     // NOTE: X_0 = 1, hence eqs(i)(0) is the constant term of X_i
-    val eqs: mutable.Map[Int, mutable.Map[Int, RegExp[T2, S2]]] = mutable.Map.empty
+    val eqs: mutable.Map[Int, mutable.Map[Int, RegEx[T2, S2]]] = mutable.Map.empty
 
     // Step 1: collect equations
     var i = 1
@@ -28,7 +28,7 @@ object ArdenSolver extends LazyLogging:
             inputs += x
             inputs.length
           case k => k + 1
-        eqs(i)(j) = eqs(i).getOrElse(j, RegExp.Zero()) + r
+        eqs(i)(j) = eqs(i).getOrElse(j, RegEx.Zero()) + r
       i += 1
 
     logger.trace("equations:\n{}\nwhere\n{}",
@@ -54,7 +54,7 @@ object ArdenSolver extends LazyLogging:
           //     = sum_{j != i} eqs(k)(j) * X_j + eqs(k)(i) * (sum_{j < i} eqs(i)(j) * X_j)
           //     = sum_{j != i} (eqs(k)(j) + eqs(k)(i) * eqs(i)(j)) * X_j
           for (j, r) <- eqs(i) do
-            eqs(k)(j) = eqs(k).getOrElse(j, RegExp.Zero()) + eqs(k)(i) * r
+            eqs(k)(j) = eqs(k).getOrElse(j, RegEx.Zero()) + eqs(k)(i) * r
           eqs(k).remove(i)
 
       i -= 1
@@ -63,7 +63,7 @@ object ArdenSolver extends LazyLogging:
     assert(eqs(1).keySet == Set(0))
     eqs(1)(0)
 
-  private def ppEquation[T, S](eq: (Int, Map[Int, RegExp[T, S]])): String =
+  private def ppEquation[T, S](eq: (Int, Map[Int, RegEx[T, S]])): String =
     val (i, coef) = eq
     val rhs = (for (j, rj) <- coef; if j > 0 yield s" + ${rj.pp} * X_$j").mkString
     s"X_$i = ${coef(0).pp}$rhs"

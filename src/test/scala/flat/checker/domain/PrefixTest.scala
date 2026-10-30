@@ -1,7 +1,6 @@
 package flat.checker.domain
 
-import flat.checker.domain.REAPI.*
-import flat.checker.domain.REOps.given
+import flat.checker.domain.REOps.*
 import org.scalatest.funspec.AnyFunSpec
 
 class PrefixTest extends AnyFunSpec, REAssertions:

@@ -1,12 +1,12 @@
 package flat.checker.domain
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.domain.REAPI.alphabet
-import flat.checker.domain.RegExp.*
+import flat.checker.domain.REOps.alphabet
+import flat.checker.domain.RegEx.*
 
 import scala.collection.mutable.ListBuffer
 
-object StrREOps extends LazyLogging:
+object CharREOps extends LazyLogging:
   extension (r: CharRE)
     def absReplace(s1: String, s2: String): CharRE = s1.length match
       case 0 => throw IllegalArgumentException("Replacement string cannot be empty")

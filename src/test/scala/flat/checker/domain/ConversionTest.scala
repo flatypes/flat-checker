@@ -1,6 +1,6 @@
 package flat.checker.domain
 
-import flat.checker.domain.StrREOps.*
+import flat.checker.domain.CharREOps.*
 import org.scalatest.funspec.AnyFunSpec
 
 class ConversionTest extends AnyFunSpec, REAssertions:
