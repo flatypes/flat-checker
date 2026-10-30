@@ -2,8 +2,8 @@ package flat.checker.domain
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.REAPI.deriv
-import flat.checker.domain.RegExp.*
+import flat.checker.domain.REOps.deriv
+import flat.checker.domain.RegEx.*
 
 import scala.collection.mutable
 

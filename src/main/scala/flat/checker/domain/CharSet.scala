@@ -74,22 +74,6 @@ object CharSet:
   val asciiSpace: CharSet = from(" \t\n\r\f")
   val ascii: CharSet = from(0.toChar to 127.toChar)
 
-given SymbolSet[CharSet] with
-  def empty: CharSet = CharSet.empty
-
-  def full: CharSet = CharSet.full
-
-  type Symbol = Char
-
-  def singleton(c: Char): CharSet = CharSet(c)
-
-  extension (a: CharSet)
-    def isEmpty: Boolean = a.isEmpty
-    def contains(c: Char): Boolean = a.contains(c)
-    def |(b: CharSet): CharSet = a | b
-    def -(c: Char): CharSet = a - c
-
-
 given LitOps[Char, CharSet] with
   def empty: CharSet = CharSet.empty
 

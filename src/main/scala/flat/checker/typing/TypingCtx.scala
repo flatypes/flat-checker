@@ -1,6 +1,6 @@
 package flat.checker.typing
 
-import flat.checker.domain.{CharRE, StrRE}
+import flat.checker.domain.CharRE
 import flat.checker.flan.tpd.{Expr, Type}
 import flat.checker.flan.untpd
 

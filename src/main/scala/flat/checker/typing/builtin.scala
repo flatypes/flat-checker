@@ -1,7 +1,7 @@
 package flat.checker.typing
 
+import flat.checker.domain.CharREOps.NumStrFormat
 import flat.checker.domain.CharSet
-import flat.checker.domain.StrREOps.NumStrFormat
 import flat.checker.flan.sorting.toSort
 import flat.checker.flan.tpd.{BoolType as bool, CharType as char, IntType as int, StrType as str, *}
 import org.eclipse.lsp4j.Range

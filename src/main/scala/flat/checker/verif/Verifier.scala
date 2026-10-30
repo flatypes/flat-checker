@@ -2,7 +2,7 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
-import flat.checker.domain.RegExp
+import flat.checker.domain.RegEx
 import flat.checker.flan.Show.show
 import flat.checker.flan.sorting.{isSort, toSort}
 import flat.checker.flan.tpd.*
@@ -228,7 +228,7 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
   private def hasType(expr: Expr, typ: Type): Option[Expr] = typ match
     case IntType | BoolType | CharType | StrType => None
     case ListType(ReftType(_, StrType, StrIn(_, r))) =>
-      Some(StrListIn(expr, RegExp.Lit(r).star))
+      Some(StrListIn(expr, RegEx.Lit(r).star))
     case ListType(t) =>
       for b <- hasType(Var("x"), t) yield ListForall(expr, LambdaExpr(List("x" -> t), b))
     case TupleType(ts) =>

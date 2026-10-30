@@ -1,7 +1,7 @@
 package flat.checker.domain
 
 import com.ibm.icu.text.UnicodeSet
-import flat.checker.domain.RegExp.*
+import flat.checker.domain.RegEx.*
 import flat.checker.domain.given
 
 import scala.jdk.CollectionConverters.*
