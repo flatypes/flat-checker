@@ -2,7 +2,7 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.REOps.*
+import flat.checker.domain.REAPI.*
 import flat.checker.domain.StrREOps.*
 import flat.checker.domain.{*, given}
 import flat.checker.flan.Show.show
@@ -13,35 +13,39 @@ import scala.collection.mutable.ListBuffer
 
 enum Domain:
   case Top
-  case Nat(set: CountingRE, e: Option[Expr] = None)
-  case Index(len: Expr, set: IndexSet)
+  case Nat(set: NatSet, e: Option[Expr] = None)
+  case Index(len: Expr, set: IdxSet)
   case Num(set: NatRange)
   case Bool(set: BoolSet)
   case Char(set: CharSet)
-  case Str(set: StrRE)
-  case StrList(set: RegEx[StrRE])
+  case Str(r: CharRE)
+  case StrList(r: StrListRE)
 
   def membership(elem: Expr): List[Expr] = this match
     case Top => Nil
     case Nat(set, e) =>
-      inNatSet(elem, set.toNatSet, e)
+      inNatSet(elem, set, e)
 
     case Index(len, set) =>
       val leftCases = ListBuffer.empty[Expr]
       val rightCases = ListBuffer.empty[Expr]
-      if set.neg.nonEmpty then
+      if set.negative then
         leftCases += Eq(elem, IntConst(-1))
         rightCases += Eq(elem, IntConst(-1))
-      if set.pos.isFinite then
-        for n <- set.pos.toFinSet.toList.sorted do
-          leftCases += Eq(elem, IntConst(n))
+      val leftNats = set.left.nats.toList.sorted
+      for n <- leftNats.init do
+        leftCases += Eq(elem, IntConst(n))
+      if set.left.infinite then
+        leftCases += Le(IntConst(leftNats.last), elem)
       else
-        leftCases += Le(IntConst(set.pos.min), elem)
-      if set.right.isFinite then
-        for n <- set.right.toFinSet.toList.sorted do
-          rightCases += Eq(elem, Sub(len, IntConst(n)))
+        leftCases += Eq(elem, IntConst(leftNats.last))
+      val rightNats = set.right.nats.toList.sorted
+      for n <- rightNats.init do
+        rightCases += Eq(elem, Sub(len, IntConst(n)))
+      if set.right.infinite then
+        rightCases += Le(Sub(len, IntConst(rightNats.last)), elem)
       else
-        rightCases += Le(elem, Sub(len, IntConst(set.right.min)))
+        rightCases += Eq(elem, Sub(len, IntConst(rightNats.last)))
       List(mkOr(leftCases.toList), mkOr(rightCases.toList))
 
     case Num(set) =>
@@ -66,7 +70,7 @@ enum Domain:
 
     case Str(r) =>
       r match
-        case RegEx.Lit(a) => List(inCharSet(elem, a))
+        case RegExp.Lit(a) => List(inCharSet(elem, a))
         case _ =>
           if r.isFiniteLang then
             List(mkOr(for s <- r.getLang.toList.sorted yield Eq(elem, StrConst(s))))
@@ -104,16 +108,16 @@ private def inCharSet(elem: Expr, set: CharSet): Expr =
   if set.pos then mkOr(for c <- set.chars.toList.sorted yield Eq(elem, CharConst(c)))
   else mkAnd(for c <- set.chars.toList.sorted yield Ne(elem, CharConst(c)))
 
-private val symbolSet =
-  given_SymbolSet_RegEx[CharSet].asInstanceOf[SymbolSet[RegEx[CharSet]] {type Symbol = List[Char]}]
 
 object Inferer extends LazyLogging:
+  given Conversion[String, List[Char]] = _.toList
+
   def infer(expr: Expr)(using goal: Goal): Domain =
     expr match
       case CharConst(c) =>
         return Domain.Char(CharSet(c))
       case StrConst(s) =>
-        return Domain.Str(RegEx.word(s.toList))
+        return Domain.Str(RegExp.fromString(s))
       case _ =>
 
     val dom = goal.premises.reverseIterator.collectFirst:
@@ -126,8 +130,8 @@ object Inferer extends LazyLogging:
     expr match
       case Var(x) =>
         goal.ctx(x) match
-          case StrType => Domain.Str(RegEx.full)
-          case ListType(StrType) => Domain.StrList(RegEx.Lit(RegEx.full).star)
+          case StrType => Domain.Str(RegExp.full)
+          case ListType(StrType) => Domain.StrList(RegExp.Lit(RegExp.full).star)
           case _ => Domain.Top
 
       // Equality
@@ -149,7 +153,7 @@ object Inferer extends LazyLogging:
       // Char
       case CharToStr(e) =>
         infer(e) match
-          case Domain.Char(a) => Domain.Str(RegEx.symbolSet(a))
+          case Domain.Char(a) => Domain.Str(RegExp.fromCharSet(a))
           case _ => Domain.Top
       case CharIn(e, a) =>
         infer(e) match
@@ -174,41 +178,52 @@ object Inferer extends LazyLogging:
               case Domain.Str(r) => Domain.Nat(r.absLength)
               case _ => Domain.Top
       case CharAt(e, ei) =>
-        relativeIndex(ei, e, goal) match
-          case Some(k, eb, r) =>
-            logger.debug("Infer {}[{}] as {}[{}]", e.show, ei.show, eb.show, k)
-            Domain.Char(StrREAPI.charAt(r, AIndex.Const(k)))
-          case None =>
+        // Case 1: index is determined
+        IndexInferer.matchStrIndex(ei, e, goal) match
+          case Some(index) =>
             infer(e) match
-              case Domain.Str(r) =>
-                val index = IndexInferer.inferStrIndex(ei, e, goal)
-                Domain.Char(StrREAPI.charAt(r, index))
+              case Domain.Str(r) => Domain.Char(r.absElemAt(index))
               case _ => Domain.Top
+          case None =>
+            // Case 2: index is relative to a substring
+            relativeIndex(ei, e, goal) match
+              case Some(k, eb, r) =>
+                logger.debug("Infer {}[{}] as {}[{}]", e.show, ei.show, eb.show, k)
+                Domain.Char(r.absElemAt(k))
+              case None =>
+                // Case 3: index is not determined
+                infer(e) match
+                  case Domain.Str(r) =>
+                    val IndexRange(from, until) = IndexInferer.solveStrIndexRange(ei, e, goal)
+                    logger.debug("Infer {}[{}] as any element in range {}:{}", e.show, ei.show, from, until)
+                    Domain.Char(inferSlice(r, from, until).alphabet)
+                  case _ => Domain.Top
 
       case Substr(e, ei, StrLen(e1)) if e1 == e =>
         relativeIndex(ei, e, goal) match
           case Some(k, eb, r) =>
             logger.debug("Infer {}[{}:] as {}[{}:]", e.show, ei.show, eb.show, k)
-            Domain.Str(StrREAPI.substr(r, AIndex.Const(k)))
+            Domain.Str(r.absSliceFromLeft(k))
           case _ =>
             infer(e) match
               case Domain.Str(r) =>
                 IndexInferer.inferStrIndex(ei, e, goal) match
-                  case from: AIndex => Domain.Str(StrREAPI.substr(r, from))
+                  case from: Index[_] => Domain.Str(r.absSliceUntilRight(from))
                   case _ => Domain.Top
               case _ => Domain.Top
       case Substr(e, ei, ej) =>
         (relativeIndex(ei, e, goal), relativeIndex(ej, e, goal)) match
           case (Some(k1, eb, r), Some(k2, eb1, r1)) if eb1 == eb && r1 == r =>
             logger.debug("Infer {}[{}:{}] as {}[{}:{}]", e.show, ei.show, ej.show, eb.show, k1, k2)
-            Domain.Str(StrREAPI.substr(r, AIndex.Const(k1), AIndex.Const(k2)))
+            Domain.Str(r.absSliceFromLeft(k1, ILeft(k2)))
           case _ =>
             infer(e) match
               case Domain.Str(r) =>
-                (IndexInferer.inferStrIndex(ei, e, goal), IndexInferer.inferStrIndex(ej, e, goal)) match
-                  case (from: AIndex, until: AIndex) => Domain.Str(StrREAPI.substr(r, from, until))
+                (IndexInferer.matchStrIndex(ei, e, goal), IndexInferer.matchStrIndex(ej, e, goal)) match
+                  case (Some(from), Some(until)) => Domain.Str(inferSlice(r, from, until))
                   case _ => Domain.Top
               case _ => Domain.Top
+
       case StrConcat(e1, e2) =>
         (infer(e1), infer(e2)) match
           case (Domain.Str(r1), Domain.Str(r2)) => Domain.Str(r1 * r2)
@@ -221,9 +236,12 @@ object Inferer extends LazyLogging:
         infer(e) match
           case Domain.Str(r) => Domain.Bool(r.absEndsWith(t.toList))
           case _ => Domain.Top
-      case StrIndexOf(e, StrConst(t), IntConst(i)) =>
+      case StrIndexOf(e, StrConst(t), ei) =>
         infer(e) match
-          case Domain.Str(r) => Domain.Index(StrLen(e), r.absIndexOf(t.toList, i.toInt))
+          case Domain.Str(r) =>
+            IndexInferer.matchStrIndex(ei, e, goal) match
+              case Some(start) => Domain.Index(StrLen(e), r.absFind(t.toList, start))
+              case None => ???
           case _ => Domain.Top
       case StrReplace(e, StrConst(t1), StrConst(t2)) =>
         infer(e) match
@@ -244,7 +262,7 @@ object Inferer extends LazyLogging:
               case Some(Interval(min, max)) if 0 <= min =>
                 Domain.Str(absFromInt(min, max, fmt))
               case _ =>
-                val r1 = RegEx.Lit(CharSet.from(fmt.digits))
+                val r1: CharRE = RegExp.Lit(CharSet.from(fmt.digits))
                 Domain.Str(r1.plus)
 
       // String extensions
@@ -286,51 +304,89 @@ object Inferer extends LazyLogging:
       case e@ListExpr(es) if e.elemSort == StrType =>
         val rs = es.map(infer).map:
           case Domain.Str(r) => r
-          case _ => RegEx.full
-        Domain.StrList(RegEx.product(rs.map(RegEx.symbolSet)))
+          case _ => RegExp.full
+        Domain.StrList(RegExp.product(rs.map(RegExp.fromCharSet)))
       case ListContains(e, StrConst(t)) =>
         infer(e) match
           case Domain.StrList(r) =>
-            Domain.Bool(REOps.absContainsElem[RegEx[CharSet]](r)(using symbolSet)(t.toList))
+            Domain.Bool(r.absContainsElem(t.toList))
           case _ => Domain.Top
       case ListLen(e) =>
         infer(e) match
           case Domain.StrList(r) => Domain.Nat(r.absLength)
           case _ => Domain.Top
+
       case ElemAt(e, ei) =>
-        infer(e) match
-          case Domain.StrList(r) =>
-            val index = IndexInferer.inferListIndex(ei, e, goal)
-            Domain.Str(ListREAPI.elemAt(r, index))
-          case _ => Domain.Top
+        IndexInferer.matchListIndex(ei, e, goal) match
+          case Some(index) =>
+            infer(e) match
+              case Domain.StrList(r) => Domain.Str(r.absElemAt(index))
+              case _ => Domain.Top
+          case None =>
+            // Case 2: index is relative to a list slice
+            relativeListIndex(ei, e, goal) match
+              case Some(k, eb, r) =>
+                logger.debug("Infer {}[{}] as {}[{}]", e.show, ei.show, eb.show, k)
+                Domain.Str(r.absElemAt(k))
+              case None =>
+                // Case 3: index is not determined
+                infer(e) match
+                  case Domain.StrList(r) =>
+                    val IndexRange(from, until) = IndexInferer.solveListIndexRange(ei, e, goal)
+                    logger.debug("Infer {}[{}] as any element in range {}:{}", e.show, ei.show, from, until)
+                    Domain.Str(inferSlice(r, from, until).alphabet)
+                  case _ => Domain.Top
+
       case ListSlice(e, ei, ej) =>
         infer(e) match
           case Domain.StrList(r) =>
-            (IndexInferer.inferListIndex(ei, e, goal), IndexInferer.inferListIndex(ej, e, goal)) match
-              case (from: AIndex, until: AIndex) => Domain.StrList(ListREAPI.slice(r, from, until))
+            (IndexInferer.matchListIndex(ei, e, goal), IndexInferer.matchListIndex(ej, e, goal)) match
+              case (Some(from), Some(until)) => Domain.StrList(inferSlice(r, from, until))
               case _ => Domain.Top
           case _ => Domain.Top
+
       case ListConcat(e1, e2) =>
         (infer(e1), infer(e2)) match
           case (Domain.StrList(r1), Domain.StrList(r2)) => Domain.StrList(r1 * r2)
           case _ =>
             Domain.Top
-      case ListIndexOf(e, StrConst(t), IntConst(i)) if i >= 0 =>
+      case ListIndexOf(e, StrConst(t), ei) =>
         infer(e) match
           case Domain.StrList(r) =>
-            Domain.Index(ListLen(e), REOps.absIndexOfElem[RegEx[CharSet]](r)(using symbolSet)(t.toList, i.toInt))
+            IndexInferer.matchListIndex(ei, e, goal) match
+              case Some(start) => Domain.Index(ListLen(e), r.absFind(List(t.toList), start))
+              case None => ???
           case _ => Domain.Top
 
       // Others
       case _ => Domain.Top
 
-  private def relativeIndex(idx: Expr, str: Expr, goal: Goal): Option[(Int, Expr, StrRE)] = idx match
+  private def inferSlice[T, S](r: RegExp[T, S], from: Index[T], until: Index[T])
+                              (using LitOps[T, S]): RegExp[T, S] =
+    (from, until) match
+      case (ILeft(i), _) => r.absSliceFromLeft(i, until)
+      case (_, IRight(j)) => r.absSliceUntilRight(from, j)
+      case _ =>
+        logger.warn("Unsupported slice range [{}, {}), fallback to alphabet*", from, until)
+        RegExp.fromCharSet(r.alphabet).star
+
+  private def relativeIndex(idx: Expr, str: Expr, goal: Goal): Option[(Int, Expr, CharRE)] = idx match
     case Var(x) =>
       val e: Expr = Substr(`str`, Var(`x`), StrLen(`str`))
       goal.premises.reverse.collectFirst { case StrIn(`e`, r) => (0, e, r) }
     case Add(Var(x), IntConst(k)) if k > 0 =>
       val e: Expr = Substr(`str`, Var(`x`), StrLen(`str`))
       goal.premises.reverse.collectFirst { case StrIn(`e`, r) => (k.toInt, e, r) }
+    case _ =>
+      None
+
+  private def relativeListIndex(idx: Expr, lst: Expr, goal: Goal): Option[(Int, Expr, StrListRE)] = idx match
+    case Var(x) =>
+      val e: Expr = ListSlice(`lst`, Var(`x`), ListLen(`lst`))
+      goal.premises.reverse.collectFirst { case StrListIn(`e`, r) => (0, e, r) }
+    case Add(Var(x), IntConst(k)) if k > 0 =>
+      val e: Expr = ListSlice(`lst`, Var(`x`), ListLen(`lst`))
+      goal.premises.reverse.collectFirst { case StrListIn(`e`, r) => (k.toInt, e, r) }
     case _ =>
       None
 
@@ -345,15 +401,15 @@ object Inferer extends LazyLogging:
       case Domain.Char(set) => set
       case _ => CharSet.full
 
-  def inferStr(expr: Expr, goal: Goal): StrRE =
+  def inferStr(expr: Expr, goal: Goal): CharRE =
     infer(expr)(using goal) match
       case Domain.Str(r) => r
-      case _ => RegEx.full
+      case _ => RegExp.full
 
-  def inferStrList(expr: Expr, goal: Goal): ListRE =
+  def inferStrList(expr: Expr, goal: Goal): StrListRE =
     infer(expr)(using goal) match
       case Domain.StrList(r) => r
-      case _ => RegEx.Lit(RegEx.full).star
+      case _ => RegExp.Lit(RegExp.full).star
 
   private def inferInterval(expr: Expr, goal: Goal): Option[Interval] = expr match
     case Negate(e) => inferInterval(e, goal).map(-_)

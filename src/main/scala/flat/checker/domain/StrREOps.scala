@@ -1,51 +1,26 @@
 package flat.checker.domain
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.RegEx.*
+import flat.checker.domain.REAPI.alphabet
+import flat.checker.domain.RegExp.*
 
 import scala.collection.mutable.ListBuffer
 
 object StrREOps extends LazyLogging:
-  extension (r: StrRE)
-    def filterStartWith(s: String): StrRE = REOps.filterStartsWith(r)(s.toList)
-
-    def absStartsWithStr(s: String): BoolSet = REOps.absStartsWith(r)(s.toList)
-
-    def absEndsWithStr(s: String): BoolSet = REOps.absEndsWith(r)(s.toList)
-
-    def filterContainsStr(s: String): StrRE = REOps.filterContains(r)(s.toList)
-
-    def filterNotContainStr(s: String): StrRE = REOps.filterNotContain(r)(s.toList)
-
-    def absContainsStr(s: String): BoolSet = REOps.absContains(r)(s.toList)
-
-    def absIndexOfStr(s: String): IndexSet = REOps.absIndexOf(r)(s.toList)
-
-    def forallIndexOfLt(c1: Char, c2: Char): Boolean =
-      val r1 = REOps.takeIndexOf(r)(List(c1))
-      logger.debug("forallIndexOfLt: r1 = {}", r1.pp)
-      val r2 = REOps.filterContains(r1)(List(c2))
-      logger.debug("forallIndexOfLt: r2 = {}", r2.pp)
-      r2.isEmpty
-
-    def absReplace(s1: String, s2: String): StrRE = s1.length match
+  extension (r: CharRE)
+    def absReplace(s1: String, s2: String): CharRE = s1.length match
       case 0 => throw IllegalArgumentException("Replacement string cannot be empty")
       case 1 => r.absReplace(s1.head, s2)
       case _ => throw UnsupportedOperationException("Replacement string is not a single character")
 
-    def absReplace(c: Char, s: String): StrRE = r match
+    def absReplace(c: Char, s: String): CharRE = r match
       case Zero() | One() => r
-      case Lit(a) => if a.contains(c) then word(s.toList) + symbolSet(a - c) else r
+      case Lit(a) => if a.contains(c) then fromString(s.toList) + fromCharSet(a - c) else r
       case Plus(r1, r2) => r1.absReplace(c, s) + r2.absReplace(c, s)
       case Comp(r1, r2) => r1.absReplace(c, s) * r2.absReplace(c, s)
       case Star(r1) => r1.absReplace(c, s).star
 
-    def absCountStr(s: String): CountingRE = REOps.absCount(r)(s.toList)
-
-    def absSplitStr(s: String): RegEx[StrRE] = REOps.absSplit(r)(s.toList)
-
-    def absTrimLeft(chars: String = " \n\r\t"): StrRE = r match
+    def absTrimLeft(chars: String = " \n\r\t"): CharRE = r match
       case Zero() => Zero()
       case One() => One()
       case Lit(a) =>
@@ -59,9 +34,9 @@ object StrREOps extends LazyLogging:
         val trimmed = r1.absTrimLeft(chars)
         if trimmed == One() then One() else trimmed.star
 
-    def absTrimRight(chars: String = " \n\r\t"): StrRE = r.reverse.absTrimLeft(chars).reverse
+    def absTrimRight(chars: String = " \n\r\t"): CharRE = r.reverse.absTrimLeft(chars).reverse
 
-    def absTrim(chars: String = " \n\r\t"): StrRE = r.absTrimLeft(chars).absTrimRight(chars)
+    def absTrim(chars: String = " \n\r\t"): CharRE = r.absTrimLeft(chars).absTrimRight(chars)
 
     def absIsAscii: BoolSet =
       if r.alphabet.subsetOf(CharSet.from(0.toChar to 0x7F.toChar)) then BoolSet.True
@@ -103,16 +78,16 @@ object StrREOps extends LazyLogging:
       case Lit(CharSet(true, cs)) => cs.map(_.toString)
       case Plus(r1, r2) => r1.getLang ++ r2.getLang
       case Comp(r1, r2) => for s1 <- r1.getLang; s2 <- r2.getLang yield s1 + s2
-      case _ => throw UnsupportedOperationException("Cannot convert infinite StrRE to finite set")
+      case _ => throw UnsupportedOperationException("Cannot convert infinite CharRE to finite set")
 
-    def filterForallCharIn(a: CharSet): StrRE = r match
+    def filterForallCharIn(a: CharSet): CharRE = r match
       case Zero() | One() => r
-      case Lit(b) => RegEx.symbolSet(b & a)
+      case Lit(b) => fromCharSet(b & a)
       case Plus(r1, r2) => r1.filterForallCharIn(a) + r2.filterForallCharIn(a)
       case Comp(r1, r2) => r1.filterForallCharIn(a) * r2.filterForallCharIn(a)
       case Star(r1) => r1.filterForallCharIn(a).star
 
-    def filterExistsCharIn(a: CharSet): StrRE = r match
+    def filterExistsCharIn(a: CharSet): CharRE = r match
       case Zero() | One() => Zero()
       case Lit(b) => if (b & a).isEmpty then Zero() else r
       case Plus(r1, r2) => r1.filterExistsCharIn(a) + r2.filterExistsCharIn(a)
@@ -161,11 +136,11 @@ object StrREOps extends LazyLogging:
       val w = if width > 0 then width.toString else ""
       s"%$pad$w$conv"
 
-  def absFromInt(min: BigInt, max: BigInt, fmt: NumStrFormat): StrRE =
+  def absFromInt(min: BigInt, max: BigInt, fmt: NumStrFormat): CharRE =
     NumConverter(fmt).convert(min, max)
 
   private class NumConverter(fmt: NumStrFormat):
-    def convert(min: BigInt, max: BigInt): StrRE =
+    def convert(min: BigInt, max: BigInt): CharRE =
       val ranges = rangesBetween(min, max)
       sum(ranges.map(convert))
 
@@ -207,11 +182,11 @@ object StrREOps extends LazyLogging:
       val s1 = if i == -1 then "0" * s.length else s.dropRight(i + 1) + "0" * (i + 1)
       Interval(BigInt(s1, fmt.radix), max)
 
-    private def convert(r: Interval): StrRE =
+    private def convert(r: Interval): CharRE =
       val s1 = fmt.format(r.min)
       val s2 = fmt.format(r.max)
       assert(s1.length == s2.length, s"Length mismatch: $s1 and $s2")
       val parts = for i <- s1.indices yield
-        if s1(i) == s2(i) then symbol(s1(i))
+        if s1(i) == s2(i) then fromChar(s1(i))
         else Lit(CharSet.from(fmt.digits.slice(fmt.digits.indexOf(s1(i)), fmt.digits.indexOf(s2(i)) + 1)))
-      RegEx.product(parts.toList)
+      product(parts.toList)

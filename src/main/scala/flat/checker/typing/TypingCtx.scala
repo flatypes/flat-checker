@@ -1,6 +1,6 @@
 package flat.checker.typing
 
-import flat.checker.domain.StrRE
+import flat.checker.domain.{CharRE, StrRE}
 import flat.checker.flan.tpd.{Expr, Type}
 import flat.checker.flan.untpd
 
@@ -16,7 +16,7 @@ final case class MethodInfo(id: untpd.Ident, params: List[(String, Type)], retur
 
 final case class ConstInfo(id: untpd.Ident, sort: Type, value: Expr) extends Info
 
-final case class LangInfo(id: untpd.Ident, regEx: StrRE) extends Info
+final case class LangInfo(id: untpd.Ident, regEx: CharRE) extends Info
 
 final case class TypeInfo(id: untpd.Ident, typ: Type) extends Info
 

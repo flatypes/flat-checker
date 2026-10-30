@@ -1,5 +1,6 @@
 package flat.checker.verif
 
+import flat.checker.domain.CmpOp
 import flat.checker.flan.tpd.*
 
 object ExprOps:
@@ -8,17 +9,6 @@ object ExprOps:
       case BoolConst(true) => Nil
       case And(e1, e2) => e1.conjuncts ++ e2.conjuncts
       case _ => List(expr)
-
-enum CmpOp:
-  case EQ, NE, LE, LT, GE, GT
-
-  def flip: CmpOp = this match
-    case EQ => EQ
-    case NE => NE
-    case LE => GE
-    case LT => GT
-    case GE => LE
-    case GT => LT
 
 type Inequality = (Expr, CmpOp, Expr)
 

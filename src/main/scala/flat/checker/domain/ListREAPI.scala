@@ -3,8 +3,10 @@ package flat.checker.domain
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.REOps.*
 
+@deprecated
 type ListRE = RegEx[StrRE]
 
+@deprecated
 object ListREAPI extends LazyLogging:
   private val symbolSet =
     given_SymbolSet_RegEx[CharSet].asInstanceOf[SymbolSet[RegEx[CharSet]] {type Symbol = List[Char]}]

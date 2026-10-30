@@ -2,7 +2,7 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.REOps.filterIndexOfLt
+import flat.checker.domain.REAPI.*
 import flat.checker.domain.{*, given}
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
@@ -13,8 +13,8 @@ import scala.collection.mutable.ListBuffer
 
 class Narrower(goal: Goal) extends LazyLogging:
   private val charTypes = mutable.Map.empty[Expr, CharSet]
-  private val strTypes = mutable.Map.empty[Expr, StrRE]
-  private val strListTypes = mutable.Map.empty[Expr, ListRE]
+  private val strTypes = mutable.Map.empty[Expr, CharRE]
+  private val strListTypes = mutable.Map.empty[Expr, StrListRE]
 
   def narrow: Goal =
     val conds = ListBuffer.empty[Expr]
@@ -37,9 +37,11 @@ class Narrower(goal: Goal) extends LazyLogging:
     case CharAt(e, ei) =>
       val index = IndexInferer.inferStrIndex(ei, e, goal)
       // Case 1: determined index
-      if index.isInstanceOf[AIndex] then
-        narrowStrTarget(e, StrREAPI.filterCharWith(index, f))
-        return
+      index match
+        case index: StrIndex =>
+          narrowStrTarget(e, _.filterElemWith(index, f))
+          return
+        case _ =>
 
       // Case 2: index `x + k` relative to suffix `e[x:]`
       for
@@ -50,13 +52,22 @@ class Narrower(goal: Goal) extends LazyLogging:
         suffix = Substr(e, Var(x), StrLen(e))
         r0 <- strTypes.get(suffix)
       do
-        val r1 = NarrowCache.getOrElseUpdate(suffix, r0, cond, StrREAPI.filterCharWith(AIndex.Const(k), f)(r0))
+        val r1 = NarrowCache.getOrElseUpdate(suffix, r0, cond, r0.filterElemWith(ILeft(k), f))
         strTypes(suffix) = r1
         logger.debug("Narrow {} by {} to {}", suffix.show, cond.show, r1.pp)
         return
 
       // Case 3: nondetermined index
-      narrowStrTarget(e, StrREAPI.filterCharWith(index, f))
+      val IndexRange(from, until) = index.asInstanceOf[StrIndexRange]
+      (from, until) match
+        case (ILeft(n), _) =>
+          narrowStrTarget(e, _.filterSliceFromLeft(n, until, _.filterExists(f)))
+        case (_, IRight(n)) =>
+          narrowStrTarget(e, _.filterSliceUntilRight(from, n, _.filterExists(f)))
+        case _ =>
+          logger.warn("fallback [{}, {}) to [0, -1)", from, until)
+          narrowStrTarget(e, _.filterExists(f))
+
       val a0 = charTypes.getOrElse(expr, Inferer.inferChar(expr, newGoal()))
       val a1 = NarrowCache.getOrElseUpdate(expr, a0, cond, f(a0))
       charTypes(expr) = a1
@@ -69,14 +80,21 @@ class Narrower(goal: Goal) extends LazyLogging:
       logger.debug("Narrow {} by {} to {}", expr.show, cond.show, a1)
 
   @tailrec
-  private def narrowStrTarget(expr: Expr, f: StrRE => StrRE)(using cond: Expr): Unit = expr match
+  private def narrowStrTarget(expr: Expr, f: CharRE => CharRE)(using cond: Expr): Unit = expr match
     case Substr(e, ei, ej) =>
-      (IndexInferer.inferStrIndex(ei, e, goal), IndexInferer.inferStrIndex(ej, e, goal)) match
-        case (from: AIndex, until: AIndex) => narrowStrTarget(e, StrREAPI.filterSubstrWith(from, until, f))
+      (IndexInferer.matchStrIndex(ei, e, goal), IndexInferer.matchStrIndex(ej, e, goal)) match
+        case (Some(ILeft(n)), Some(until: StrIndex)) => narrowStrTarget(e, _.filterSliceFromLeft(n, until, f))
+        case (Some(from: StrIndex), Some(IRight(n))) => narrowStrTarget(e, _.filterSliceUntilRight(from, n, f))
         case _ => logger.warn("Cannot narrow {} from {} until {}", expr.show, ei.show, ej.show)
     case ElemAt(e, ei) =>
       val index = IndexInferer.inferListIndex(ei, e, goal)
-      narrowStrListTarget(e, ListREAPI.filterElemWith(index, f))
+      index match
+        case index: StrListIndex => narrowStrListTarget(e, _.filterElemWith(index, f))
+        case IndexRange(ILeft(n), until) => narrowStrListTarget(e, _.filterSliceFromLeft(n, until, _.filterExists(f)))
+        case IndexRange(from, IRight(n)) => narrowStrListTarget(e, _.filterSliceUntilRight(from, n, _.filterExists(f)))
+        case IndexRange(from, until) =>
+          logger.warn("fallback [{}, {}) to [0, -1)", from, until)
+          narrowStrListTarget(e, _.filterExists(f))
     case StrConst(_) => // ignore
     case _ =>
       val r0 = strTypes.getOrElse(expr, Inferer.inferStr(expr, newGoal()))
@@ -85,10 +103,11 @@ class Narrower(goal: Goal) extends LazyLogging:
       logger.debug("Narrow {} by {} to {}", expr.show, cond.show, r1.pp)
 
   @tailrec
-  private def narrowStrListTarget(expr: Expr, f: ListRE => ListRE)(using cond: Expr): Unit = expr match
+  private def narrowStrListTarget(expr: Expr, f: StrListRE => StrListRE)(using cond: Expr): Unit = expr match
     case ListSlice(e, ei, ej) =>
-      (IndexInferer.inferListIndex(ei, e, goal), IndexInferer.inferListIndex(ej, e, goal)) match
-        case (from: AIndex, until: AIndex) => narrowStrListTarget(e, ListREAPI.filterSliceWith(from, until, f))
+      (IndexInferer.matchListIndex(ei, e, goal), IndexInferer.matchListIndex(ej, e, goal)) match
+        case (Some(ILeft(n)), Some(until: StrListIndex)) => narrowStrListTarget(e, _.filterSliceFromLeft(n, until, f))
+        case (Some(from: StrListIndex), Some(IRight(n))) => narrowStrListTarget(e, _.filterSliceUntilRight(from, n, f))
         case _ => logger.warn("Cannot narrow {} from {} until {}", expr.show, ei.show, ej.show)
     case _ =>
       val r0 = strListTypes.getOrElse(expr, Inferer.inferStrList(expr, newGoal()))
@@ -102,6 +121,8 @@ class Narrower(goal: Goal) extends LazyLogging:
       ++ (for (e, r) <- strTypes yield StrIn(e, r)())
       ++ (for (e, r) <- strListTypes yield StrListIn(e, r)()))
 
+  given Conversion[String, List[Char]] = _.toList
+
   private def matchCharCond(cond: Expr): Option[(Expr, CharSet => CharSet)] = cond match
     // e ∈ a
     case CharIn(e, a) => Some((e, _ & a))
@@ -114,35 +135,21 @@ class Narrower(goal: Goal) extends LazyLogging:
     case Not(StrContains(StrConst(cs), CharToStr(e))) => Some((e, _ & ~CharSet.from(cs)))
     case _ => None
 
-  private def matchStrCond(cond: Expr): Option[(Expr, StrRE => StrRE)] = cond match
+  private def matchStrCond(cond: Expr): Option[(Expr, CharRE => CharRE)] = cond match
     // e == s
-    case Eq(e, StrConst(s)) => Some((e, StrREAPI.filterEq(s)))
-    case Ne(e, StrConst(s)) => Some((e, StrREAPI.filterNe(s)))
+    case Eq(e, StrConst(s)) => Some((e, _.filterEq(s)))
+    case Ne(e, StrConst(s)) => Some((e, _.filterNe(s)))
     // s in e
-    case StrContains(e, StrConst(s)) => Some((e, StrREAPI.filterContains(s)))
-    case Not(StrContains(e, StrConst(s))) => Some((e, StrREAPI.filterNotContain(s)))
-    // |e| == n
-    case StrLenCmp(e, op, i) => op match
-      case CmpOp.EQ =>
-        if i >= 0 then Some((e, StrREAPI.filterLengthEq(i))) else Some((e, _ => RegEx.Zero()))
-      case CmpOp.NE =>
-        if i == 0 then Some((e, StrREAPI.filterLengthGe(1)))
-        else if i > 0 then Some((e, StrREAPI.filterLengthNe(i)))
-        else None
-      case CmpOp.LE =>
-        if i >= 0 then Some((e, StrREAPI.filterLengthLe(i))) else Some((e, _ => RegEx.Zero()))
-      case CmpOp.LT =>
-        if i > 0 then Some((e, StrREAPI.filterLengthLe(i - 1))) else Some((e, _ => RegEx.Zero()))
-      case CmpOp.GE =>
-        if i > 0 then Some((e, StrREAPI.filterLengthGe(i))) else None
-      case CmpOp.GT =>
-        if i >= 0 then Some((e, StrREAPI.filterLengthGe(i + 1))) else None
+    case StrContains(e, StrConst(s)) => Some((e, _.filterContains(s)))
+    case Not(StrContains(e, StrConst(s))) => Some((e, _.filterNotContain(s)))
+    // |e| op v
+    case StrLenCmp(e, op, v) => Some((e, _.filterLengthCmp(op, v)))
 
     // e.startsWith(s)
-    case StrStartsWith(e, StrConst(s)) => Some((e, StrREAPI.filterStartsWith(s)))
-    case Not(StrStartsWith(e, StrConst(s))) => Some((e, StrREAPI.filterNotStartWith(s)))
-    case StrEndsWith(e, StrConst(s)) => Some((e, StrREAPI.filterEndsWith(s)))
-    case Not(StrEndsWith(e, StrConst(s))) => Some((e, StrREAPI.filterNotEndWith(s)))
+    case StrStartsWith(e, StrConst(s)) => Some((e, _.filterStartsWith(s)))
+    case Not(StrStartsWith(e, StrConst(s))) => Some((e, _.filterNotStartWith(s)))
+    case StrEndsWith(e, StrConst(s)) => Some((e, _.filterEndsWith(s)))
+    case Not(StrEndsWith(e, StrConst(s))) => Some((e, _.filterNotEndWith(s)))
 
     // e.indexOf(c1, i) < e.indexOf(c2, i)
     case Cmp(StrIndexOf(e, StrConst(s1), IntConst(i)), CmpOp.LT | CmpOp.LE,
@@ -154,40 +161,21 @@ class Narrower(goal: Goal) extends LazyLogging:
 
     // e.indexOf(s, i) == k
     case StrIndexOfCmp(e, s, i, op, e1) => (op, e1) match
-      case (CmpOp.EQ, IntConst(k)) =>
-        if k >= 0 then Some((e, StrREAPI.filterIndexOfEq(s, i, k.toInt)))
-        else if k == -1 then Some((e, StrREAPI.filterIndexOfNeg(s, i)))
-        else Some((e, _ => RegEx.Zero()))
-      case (CmpOp.NE, IntConst(-1)) =>
-        Some((e, StrREAPI.filterIndexOfGe(s, i, 0)))
+      case (_, IntConst(v)) => Some((e, _.filterFindCmp(s, ILeft(i), op, v.toInt)))
       case (CmpOp.NE, Sub(StrLen(`e`), IntConst(1))) =>
-        Some((e, StrREAPI.filterIndexOfNeLast(s, i)))
-      case (CmpOp.LE, IntConst(k)) =>
-        if k >= 0 then Some((e, StrREAPI.filterIndexOfLe(s, i, k.toInt)))
-        else if k == -1 then Some((e, StrREAPI.filterIndexOfNeg(s, i)))
-        else Some((e, _ => RegEx.Zero()))
-      case (CmpOp.LT, IntConst(k)) =>
-        if k > 0 then Some((e, StrREAPI.filterIndexOfLe(s, i, k.toInt - 1)))
-        else if k == 0 then Some((e, StrREAPI.filterIndexOfNeg(s, i)))
-        else Some((e, _ => RegEx.Zero()))
-      case (CmpOp.GE, IntConst(k)) =>
-        if k >= 0 then Some((e, StrREAPI.filterIndexOfGe(s, i, k.toInt)))
-        else None
-      case (CmpOp.GT, IntConst(k)) =>
-        if k >= -1 then Some((e, StrREAPI.filterIndexOfGe(s, i, k.toInt + 1)))
-        else None
-      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, StrLen(`e`)) => Some((e, _ => RegEx.Zero()))
-      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, Add(StrLen(`e`), IntConst(i))) if i > 0 => Some((e, _ => RegEx.Zero()))
+        Some((e, _.filterFindCmpRight(s, ILeft(i), op, 1)))
+      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, StrLen(`e`)) => Some((e, _ => RegExp.Zero()))
+      case (CmpOp.EQ | CmpOp.GE | CmpOp.GT, Add(StrLen(`e`), IntConst(i))) if i > 0 => Some((e, _ => RegExp.Zero()))
       case _ => None
 
     // e.forall(lambda x -> ex)
     case StrForall(e, LambdaExpr(List(x -> _), ex)) =>
       matchCharCond(ex) match
-        case Some((Var(`x`), f)) => Some((e, StrREAPI.filterForall(f)))
+        case Some((Var(`x`), f)) => Some((e, _.filterForall(f)))
         case _ => None
     case Not(StrForall(e, LambdaExpr(List(x -> _), ex))) =>
       matchCharCond(Not(ex)) match
-        case Some((Var(`x`), f)) => Some((e, StrREAPI.filterExists(f)))
+        case Some((Var(`x`), f)) => Some((e, _.filterExists(f)))
         case _ => None
     case _ => None
 
@@ -217,10 +205,10 @@ class Narrower(goal: Goal) extends LazyLogging:
         (resultOp, result) <- InequalitySolver.isolate(target, (e1, op, e2))
       yield (e, s, i, resultOp, result)
 
-  private def matchStrListCond(cond: Expr): Option[(Expr, ListRE => ListRE)] = cond match
+  private def matchStrListCond(cond: Expr): Option[(Expr, StrListRE => StrListRE)] = cond match
     // s in e
-    case ListContains(e, StrConst(s)) => Some((e, ListREAPI.filterContains(s)))
-    case Not(ListContains(e, StrConst(s))) => Some((e, ListREAPI.filterNotContain(s)))
+    case ListContains(e, StrConst(s)) => Some((e, _.filterContains(List(s))))
+    case Not(ListContains(e, StrConst(s))) => Some((e, _.filterNotContainElem(s)))
     case _ => None
 
 object NarrowCache:

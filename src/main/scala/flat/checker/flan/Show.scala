@@ -2,7 +2,7 @@ package flat.checker.flan
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.domain.Prettifier.pp
-import flat.checker.domain.{RegEx, given}
+import flat.checker.domain.{RegEx, RegExp, given}
 import flat.checker.flan.tpd.*
 
 object Show extends LazyLogging:
@@ -104,7 +104,7 @@ object Show extends LazyLogging:
       case CharToCode(e) => showMemberApply(e, "toCode")
       case CodeToChar(e) => showMemberApply(e, "toChar")
       case CharToStr(e) => showMemberApply(e, "toStr")
-      case CharIn(e, a) => s"${showExpr(e)} ∈ ${RegEx.symbolSet(a).pp}"
+      case CharIn(e, a) => s"${showExpr(e)} ∈ ${RegExp.fromCharSet(a).pp}"
 
       // String
       case StrContains(e, et) => showMemberApply(e, "contains", et)

@@ -1,7 +1,7 @@
 package flat.checker.typing
 
+import flat.checker.domain.CharSet
 import flat.checker.domain.StrREOps.NumStrFormat
-import flat.checker.domain.{CharSet, RegEx, given}
 import flat.checker.flan.sorting.toSort
 import flat.checker.flan.tpd.{BoolType as bool, CharType as char, IntType as int, StrType as str, *}
 import org.eclipse.lsp4j.Range
@@ -136,7 +136,6 @@ object builtin:
     case _ => Nil
 
   private def mkStrIs(s: Expr, cs: CharSet): Range => Expr =
-    val re = RegEx.symbolSet(cs).star
     StrForall(s, LambdaExpr(List("c" -> char), CharIn(Var("c"), cs)))
 
   private def accessListMember(t: Type, name: String): List[Member] = name match

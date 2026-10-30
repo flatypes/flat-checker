@@ -1,24 +1,39 @@
 package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
-import flat.checker.domain.{AIndex, AIndexRange}
+import flat.checker.domain.*
 import flat.checker.flan.Show.show
 import flat.checker.flan.tpd.*
 
 import scala.collection.mutable
 
+type StrIndex = Index[Char]
+type StrListIndex = Index[List[Char]]
+
+final case class IndexRange[T](from: Index[T], until: Index[T])
+
+type StrIndexRange = IndexRange[Char]
+type StrListIndexRange = IndexRange[List[Char]]
+
 object IndexInferer extends LazyLogging:
-  def inferStrIndex(idx: Expr, str: Expr, goal: Goal): AIndex | AIndexRange = idx match
-    case IntConst(i) if i >= 0 => AIndex.Const(i.toInt) // i
-    case StrLen(`str`) => AIndex.End // |str|
-    case Add(StrLen(`str`), IntConst(i)) if i > 0 => AIndex.End // |str| + i ==> |str|
-    case Sub(StrLen(`str`), IntConst(i)) if i > 0 => AIndex.Const(-i.toInt) // |str| - i
-    case StrIndexOf(`str`, StrConst(s), IntConst(i)) if i >= 0 => // str.indexOf(s, i)
-      AIndex.Of(s, i.toInt, 0)
-    case Add(StrIndexOf(`str`, StrConst(s), IntConst(i)), IntConst(k)) if i >= 0 && k > 0 => // str.indexOf(s, i) + k
-      AIndex.Of(s, i.toInt, k.toInt)
-    case Sub(StrIndexOf(`str`, StrConst(s), IntConst(i)), IntConst(k)) if i >= 0 && k > 0 => // str.indexOf(s, i) - k
-      AIndex.Of(s, i.toInt, -k.toInt)
+  given Conversion[String, List[Char]] = _.toList
+
+  given Conversion[BigInt, Int] = _.toInt
+
+  def matchStrIndex(idx: Expr, str: Expr, goal: Goal): Option[StrIndex] = idx match
+    case IntConst(i) if i >= 0 => Some(ILeft(i)) // i
+    case StrLen(`str`) => Some(IRight(0)) // |str|
+    case Add(StrLen(`str`), IntConst(i)) if i > 0 => Some(IRight(0)) // |str| + i ==> |str|
+    case Sub(StrLen(`str`), IntConst(i)) if i > 0 => Some(IRight(i)) // |str| - i
+    case StrIndexOf(`str`, StrConst(s), ei) => // str.indexOf(s, i)
+      for start <- matchStrIndex(ei, str, goal) yield IFirst(s, start, 0)
+    case Add(StrIndexOf(`str`, StrConst(s), ei), IntConst(k)) if k > 0 => // str.indexOf(s, i) + k
+      for start <- matchStrIndex(ei, str, goal) yield IFirst(s, start, k)
+    case Sub(StrIndexOf(`str`, StrConst(s), ei), IntConst(k)) if k > 0 => // str.indexOf(s, i) - k
+      for start <- matchStrIndex(ei, str, goal) yield IFirst(s, start, -k)
+    case _ => None
+
+  def solveStrIndexRange(idx: Expr, str: Expr, goal: Goal): StrIndexRange = idx match
     case Var(x) =>
       solveIndex(x, StrLen(str), collectStrRelatives(str), strRelativeToIndex, goal)
     case Add(Var(x), IntConst(k)) =>
@@ -31,33 +46,41 @@ object IndexInferer extends LazyLogging:
       logger.debug(s"$idx, $str")
       throw new IllegalArgumentException(idx.show)
 
-  private def shiftIndex(index: AIndex, offset: Int): AIndex = index match
-    case AIndex.Const(i) => AIndex.Const(i + offset)
-    case AIndex.Of(s, i, k) => AIndex.Of(s, i, k + offset)
-    case AIndex.End => if offset < 0 then AIndex.Const(-offset) else AIndex.End
+  def inferStrIndex(idx: Expr, str: Expr, goal: Goal): StrIndex | StrIndexRange =
+    matchStrIndex(idx, str, goal)
+      .getOrElse(solveStrIndexRange(idx, str, goal))
 
-  private def shiftIndexRange(range: AIndexRange, offset: Int): AIndexRange =
-    AIndexRange(shiftIndex(range.from, offset), shiftIndex(range.until, offset))
+  private def shiftIndex[T](index: Index[T], offset: Int): Index[T] = index match
+    case ILeft(i) => ILeft(i + offset)
+    case IRight(0) => if offset < 0 then IRight(-offset) else IRight(0)
+    case IRight(i) => IRight(i - offset)
+    case IFirst(s, i, k) => IFirst(s, i, k + offset)
+
+  private def shiftIndexRange[T](range: IndexRange[T], offset: Int): IndexRange[T] =
+    IndexRange(shiftIndex(range.from, offset), shiftIndex(range.until, offset))
 
   private def collectStrRelatives(str: Expr): Expr => List[Expr] =
     _.collect:
       case e@StrIndexOf(`str`, CharConst(_) | StrConst(_), IntConst(i)) if i >= 0 => e
 
-  private def strRelativeToIndex(expr: Expr, offset: Int): AIndex = expr match
-    case StrIndexOf(_, StrConst(s), IntConst(i)) => AIndex.Of(s, i.toInt, offset)
+  private def strRelativeToIndex(expr: Expr, offset: Int): StrIndex = expr match
+    case StrIndexOf(_, StrConst(s), IntConst(i)) => IFirst(s, ILeft(i), offset)
     case _ => throw new IllegalArgumentException(expr.show)
 
-  def inferListIndex(idx: Expr, lst: Expr, goal: Goal): AIndex | AIndexRange = idx match
-    case IntConst(i) if i >= 0 => AIndex.Const(i.toInt) // i
-    case ListLen(`lst`) => AIndex.End // |lst|
-    case Add(ListLen(`lst`), IntConst(i)) if i > 0 => AIndex.End // |lst| + i ==> |lst|
-    case Sub(ListLen(`lst`), IntConst(i)) if i > 0 => AIndex.Const(-i.toInt) // |lst| - i
-    case ListIndexOf(`lst`, StrConst(s), IntConst(i)) if i >= 0 => // lst.indexOf(s, i)
-      AIndex.Of(s, i.toInt, 0)
-    case Add(ListIndexOf(`lst`, StrConst(s), IntConst(i)), IntConst(k)) if i >= 0 && k > 0 => // lst.indexOf(s, i) + k
-      AIndex.Of(s, i.toInt, k.toInt)
-    case Sub(ListIndexOf(`lst`, StrConst(s), IntConst(i)), IntConst(k)) if i >= 0 && k > 0 => // lst.indexOf(s, i) - k
-      AIndex.Of(s, i.toInt, -k.toInt)
+  def matchListIndex(idx: Expr, lst: Expr, goal: Goal): Option[StrListIndex] = idx match
+    case IntConst(i) if i >= 0 => Some(ILeft(i)) // i
+    case ListLen(`lst`) => Some(IRight(0)) // |lst|
+    case Add(ListLen(`lst`), IntConst(i)) if i > 0 => Some(IRight(0)) // |lst| + i ==> |lst|
+    case Sub(ListLen(`lst`), IntConst(i)) if i > 0 => Some(IRight(i)) // |lst| - i
+    case ListIndexOf(`lst`, StrConst(s), ei) => // lst.indexOf(s, i)
+      for start <- matchListIndex(ei, lst, goal) yield IFirst(List(s), start, 0)
+    case Add(ListIndexOf(`lst`, StrConst(s), ei), IntConst(k)) if k > 0 => // lst.indexOf(s, i) + k
+      for start <- matchListIndex(ei, lst, goal) yield IFirst(List(s), start, k)
+    case Sub(ListIndexOf(`lst`, StrConst(s), ei), IntConst(k)) if k > 0 => // lst.indexOf(s, i) - k
+      for start <- matchListIndex(ei, lst, goal) yield IFirst(List(s), start, -k)
+    case _ => None
+
+  def solveListIndexRange(idx: Expr, lst: Expr, goal: Goal): StrListIndexRange = idx match
     case Var(x) =>
       solveIndex(x, ListLen(lst), collectListRelatives(lst), listRelativeToIndex, goal)
     case Add(Var(x), IntConst(k)) =>
@@ -68,22 +91,26 @@ object IndexInferer extends LazyLogging:
       shiftIndexRange(range, -k.toInt)
     case _ => throw new IllegalArgumentException(idx.show)
 
+  def inferListIndex(idx: Expr, lst: Expr, goal: Goal): StrListIndex | StrListIndexRange =
+    matchListIndex(idx, lst, goal)
+      .getOrElse(solveListIndexRange(idx, lst, goal))
+
   private def collectListRelatives(lst: Expr): Expr => List[Expr] =
     _.collect:
       case e@ListIndexOf(`lst`, StrConst(_), IntConst(i)) if i >= 0 => e
 
-  private def listRelativeToIndex(expr: Expr, offset: Int): AIndex = expr match
-    case ListIndexOf(_, StrConst(s), IntConst(i)) => AIndex.Of(s, i.toInt, offset)
+  private def listRelativeToIndex(expr: Expr, offset: Int): StrListIndex = expr match
+    case ListIndexOf(_, StrConst(s), IntConst(i)) => IFirst(List(s), ILeft(i), offset)
     case _ => throw new IllegalArgumentException(expr.show)
 
-  private def solveIndex(idxVar: String, len: Expr, collectRelatives: Expr => List[Expr],
-                         relativeToIndex: (Expr, Int) => AIndex, goal: Goal): AIndexRange =
+  private def solveIndex[T](idxVar: String, len: Expr, collectRelatives: Expr => List[Expr],
+                            relativeToIndex: (Expr, Int) => Index[T], goal: Goal): IndexRange[T] =
     val inequalities = collectInequalities(idxVar, goal)
     val relatives = inequalities.flatMap(collectRelatives).distinct
     val solver = new LPSolver(inequalities)
     val start = solveRangeStart(solver, Var(idxVar), len, relatives, relativeToIndex)
     val end = solveRangeEnd(solver, Var(idxVar), len, relatives, relativeToIndex)
-    AIndexRange(start, end)
+    IndexRange(start, end)
 
   private def collectInequalities(variable: String, goal: Goal): List[Eq | Le | Lt] =
     val candidates: List[Eq | Le | Lt] = goal.premises.collect:
@@ -106,8 +133,8 @@ object IndexInferer extends LazyLogging:
       newVars = thisRoundSelected.flatMap(candidates(_).collect { case Var(x) => x }).toSet -- consideredVars
     selected.toList.map(candidates)
 
-  private def solveRangeStart(solver: LPSolver, idx: Expr, len: Expr, relatives: List[Expr],
-                              relativeToIndex: (Expr, Int) => AIndex): AIndex =
+  private def solveRangeStart[T](solver: LPSolver, idx: Expr, len: Expr, relatives: List[Expr],
+                                 relativeToIndex: (Expr, Int) => Index[T]): Index[T] =
     // idx >= e + k ==> idx - e >= k
     val candidates = for e <- relatives; k <- solver.solveMin(Sub(idx, e)) yield relativeToIndex(e, k.toInt)
     candidates match
@@ -118,16 +145,16 @@ object IndexInferer extends LazyLogging:
     // idx >= i
     solver.solveMin(idx) match
       case Some(i) if i > 0 =>
-        return AIndex.Const(i.toInt)
+        return ILeft(i.toInt)
       case _ =>
 
     // idx >= len - i ==> len - idx <= i
     solver.solveMax(Sub(len, idx)) match
-      case Some(i) if i > 0 => AIndex.Const(-i.toInt)
-      case _ => AIndex.Const(0) // default
+      case Some(i) if i > 0 => IRight(i.toInt)
+      case _ => ILeft(0) // default
 
-  private def solveRangeEnd(solver: LPSolver, idx: Expr, len: Expr, relatives: List[Expr],
-                            relativeToIndex: (Expr, Int) => AIndex): AIndex =
+  private def solveRangeEnd[T](solver: LPSolver, idx: Expr, len: Expr, relatives: List[Expr],
+                               relativeToIndex: (Expr, Int) => Index[T]): Index[T] =
     // idx < e + k ==> idx - e < k ==> idx - e <= k - 1
     val candidates = for e <- relatives; k <- solver.solveMax(Sub(idx, e)) yield relativeToIndex(e, k.toInt + 1)
     candidates match
@@ -138,10 +165,10 @@ object IndexInferer extends LazyLogging:
     // idx < len - i ==> len - idx > i ==> len - idx >= i + 1
     solver.solveMin(Sub(len, idx)) match
       case Some(i) if i > 1 =>
-        return AIndex.Const(-(i.toInt - 1))
+        return IRight(i.toInt - 1)
       case _ =>
 
     // idx < i
     solver.solveMax(idx) match
-      case Some(i) if i >= 0 => AIndex.Const(i.toInt + 1)
-      case _ => AIndex.End // default
+      case Some(i) if i >= 0 => ILeft(i.toInt + 1)
+      case _ => IRight(0) // default

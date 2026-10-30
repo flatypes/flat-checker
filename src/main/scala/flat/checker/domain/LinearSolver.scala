@@ -7,6 +7,7 @@ import flat.checker.domain.RegEx.*
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
+@deprecated("Use RegExSolver instead", "2024-06-01")
 abstract class LinearSolver[A, B] extends LazyLogging:
   protected type InputRE = RegEx[A]
   protected type OutputRE = RegEx[B]
