@@ -280,7 +280,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
       case List(m) =>
         val (args, argsSide) = checkArgs(es, m.funType.paramTypes, span, ctx)
         val expr = m.impl(receiver, args, span)
-        (m.funType.returnType, expr, receiverSide ++ argsSide)
+        (m.funType.returnType, expr, receiverSide ++ argsSide ++ m.side(receiver, args))
       case ms =>
         val (argTypes, args, argSides) = es.map(infer(_, ctx)).unzip3
         ms.filter(m => argTypes.zip(m.funType.paramTypes).forall(_.toSort.subsortOf(_))) match
@@ -289,7 +289,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
             (NoType, NoExpr, receiverSide ++ argSides.flatten)
           case List(m) =>
             val expr = m.impl(receiver, args, span)
-            (m.funType.returnType, expr, receiverSide ++ argSides.flatten)
+            (m.funType.returnType, expr, receiverSide ++ argSides.flatten ++ m.side(receiver, args))
           case ms =>
             reporter.report(ctx.uri, TypeMismatch(span, "ambiguous overloaded operation", s"${op.name} for type $receiverType"))
             (NoType, NoExpr, receiverSide ++ argSides.flatten)

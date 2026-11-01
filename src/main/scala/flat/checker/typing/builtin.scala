@@ -4,13 +4,18 @@ import flat.checker.domain.CharREOps.NumStrFormat
 import flat.checker.domain.CharSet
 import flat.checker.flan.sorting.toSort
 import flat.checker.flan.tpd.{BoolType as bool, CharType as char, IntType as int, StrType as str, *}
-import org.eclipse.lsp4j.Range
+import flat.checker.verif.ProofError
+import org.eclipse.lsp4j.{Range, Range as Span}
 
-final case class Member(funType: FunType, op: PartialFunction[List[Expr], Range => Expr]):
-  def impl(receiver: Expr, args: List[Expr], span: Range): Expr =
+final case class Member(funType: FunType, op: PartialFunction[List[Expr], Span => Expr],
+                        sideOp: PartialFunction[List[Expr], List[Stmt]] = PartialFunction.empty):
+  def impl(receiver: Expr, args: List[Expr], span: Span): Expr =
     if op.isDefinedAt(receiver :: args) then op(receiver :: args)(span)
     else
       throw new IllegalArgumentException(s"Invalid member access: $receiver.${args.mkString(", ")}")
+
+  def side(receiver: Expr, args: List[Expr]): List[Stmt] =
+    sideOp.applyOrElse(receiver :: args, _ => Nil)
 
 object builtin:
   def accessMember(typ: Type, name: String): List[Member] = typ.toSort match
@@ -66,10 +71,6 @@ object builtin:
     case "==>" => List(Member(bool -> bool, { case List(b1, b2) => Implies(b1, b2) }))
     case _ => Nil
 
-  def f(): Unit =
-    val s = "hello"
-    s.contains('h') // This will call the accessStrMember method with name "contains"
-
   private def accessCharMember(name: String): List[Member] = name match
     case "+" => List(
       Member(char -> str, { case List(c1, c2) => StrConcat(CharToStr(c1), CharToStr(c2)) }),
@@ -105,6 +106,24 @@ object builtin:
       Member((char, int) -> int, { case List(s, c, i) => StrIndexOf(s, CharToStr(c), i) }),
       Member(str -> int, { case List(s, t) => StrIndexOf(s, t) }),
       Member((str, int) -> int, { case List(s, t, i) => StrIndexOf(s, t, i) }))
+    case "index" => List(
+      Member(char -> int, { case List(s, c) => StrIndexOf(s, CharToStr(c)) },
+        sideOp = {
+          case List(s, c) => List(Assert(StrContains(s, CharToStr(c)),
+            () => StrNotFound(c.range)))
+        }),
+      Member((char, int) -> int, { case List(s, c, i) => StrIndexOf(s, CharToStr(c), i) },
+        sideOp = {
+          case List(s, c, i) => List(Assert(StrContains(Substr(s, i, StrLen(s)), CharToStr(c)),
+            () => StrNotFound(c.range)))
+        }),
+      Member(str -> int, { case List(s, t) => StrIndexOf(s, t) },
+        sideOp = {case List(s, t) => List(Assert(StrContains(s, t), () => StrNotFound(t.range)))}),
+      Member((str, int) -> int, { case List(s, t, i) => StrIndexOf(s, t, i) },
+        sideOp = {
+          case List(s, t, i) => List(Assert(StrContains(Substr(s, i, StrLen(s)), t),
+            () => StrNotFound(t.range)))
+        }))
     case "replace" => List(
       Member((char, char) -> str, { case List(s, c1, c2) => StrReplace(s, CharToStr(c1), CharToStr(c2)) }),
       Member((str, str) -> str, { case List(s, t1, t2) => StrReplace(s, t1, t2) }))
@@ -137,6 +156,8 @@ object builtin:
     case "lower" | "toLower" => List(Member(() -> str, { case List(s) => StrToLower(s) }))
     case "upper" | "toUpper" => List(Member(() -> str, { case List(s) => StrToUpper(s) }))
     case _ => Nil
+
+  private final class StrNotFound(span: Span) extends ProofError(span, s"substring might not exist")
 
   private def mkStrIs(s: Expr, cs: CharSet): Range => Expr =
     StrForall(s, LambdaExpr(List("c" -> char), CharIn(Var("c"), cs)))
