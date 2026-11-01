@@ -32,20 +32,22 @@ enum Domain:
       if set.negative then
         leftCases += Eq(elem, IntConst(-1))
         rightCases += Eq(elem, IntConst(-1))
-      val leftNats = set.left.nats.toList.sorted
-      for n <- leftNats.init do
-        leftCases += Eq(elem, IntConst(n))
-      if set.left.infinite then
-        leftCases += Le(IntConst(leftNats.last), elem)
-      else
-        leftCases += Eq(elem, IntConst(leftNats.last))
-      val rightNats = set.right.nats.toList.sorted
-      for n <- rightNats.init do
-        rightCases += Eq(elem, Sub(len, IntConst(n)))
-      if set.right.infinite then
-        rightCases += Le(Sub(len, IntConst(rightNats.last)), elem)
-      else
-        rightCases += Eq(elem, Sub(len, IntConst(rightNats.last)))
+      if set.left.nonEmpty then
+        val leftNats = set.left.nats.toList.sorted
+        for n <- leftNats.init do
+          leftCases += Eq(elem, IntConst(n))
+        if set.left.infinite then
+          leftCases += Le(IntConst(leftNats.last), elem)
+        else
+          leftCases += Eq(elem, IntConst(leftNats.last))
+      if set.right.nonEmpty then
+        val rightNats = set.right.nats.toList.sorted
+        for n <- rightNats.init do
+          rightCases += Eq(elem, Sub(len, IntConst(n)))
+        if set.right.infinite then
+          rightCases += Le(Sub(len, IntConst(rightNats.last)), elem)
+        else
+          rightCases += Eq(elem, Sub(len, IntConst(rightNats.last)))
       List(mkOr(leftCases.toList), mkOr(rightCases.toList))
 
     case Num(set) =>
