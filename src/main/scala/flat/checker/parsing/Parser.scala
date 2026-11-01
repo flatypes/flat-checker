@@ -107,7 +107,9 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
 
   private def or: Parser[Expr] = infixR(binaryOp("or"), and)
 
-  private def and: Parser[Expr] = infixR(binaryOp("and"), relational)
+  private def and: Parser[Expr] = infixR(binaryOp("and"), not)
+
+  private def not: Parser[Expr] = prefix(unaryOp("not"), relational)
 
   private def relational: Parser[Expr] =
     chainedRelational("<=" | "<") | chainedRelational(">=" | ">")
@@ -148,12 +150,14 @@ class Parser(uri: String, text: String)(using reporter: Reporter) extends ExprPa
 
   private def additive: Parser[Expr] = infixL(binaryOp("+" | "-"), multiplicative)
 
-  private def multiplicative: Parser[Expr] = infixL(binaryOp("*" | "/" | "%" | "**"), unary)
+  private def multiplicative: Parser[Expr] = infixL(binaryOp("*" | "/" | "%"), unary)
 
   private def unaryOp(op: Parser[Token]): Parser[Expr => Expr] =
     op ^^ { tk => e => Access(e, Ident("prefix_" + tk.value)(tk.span))(Span(tk.span.getStart, e.range.getEnd)) }
 
-  private def unary: Parser[Expr] = prefix(unaryOp("not" | "~" | "-"), term)
+  private def unary: Parser[Expr] = prefix(unaryOp("+" | "-" | "~"), exponential)
+
+  private def exponential: Parser[Expr] = infixL(binaryOp("**"), term)
 
   private def term: Parser[Expr] =
     postfix(intConst | charConst | strConst | boolConst | nullConst | termName | listExpr | setExpr | mapExpr

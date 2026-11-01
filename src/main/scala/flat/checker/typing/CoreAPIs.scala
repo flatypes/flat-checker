@@ -50,12 +50,12 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
 
     // Operations: equality
     case untpd.BinaryExpr(e1, untpd.Ident("=="), e2) =>
-      val (leftType, left, leftSide) = infer(e1, ctx)
-      val (rightType, right, rightSide) = infer(e2, ctx)
+      val (typ, left, leftSide) = infer(e1, ctx)
+      val (right, rightSide) = check(e2, typ.toSort, ctx)
       (BoolType, Eq(left, right)(node.range), leftSide ++ rightSide)
     case untpd.BinaryExpr(e1, untpd.Ident("!="), e2) =>
-      val (leftType, left, leftSide) = infer(e1, ctx)
-      val (rightType, right, rightSide) = infer(e2, ctx)
+      val (typ, left, leftSide) = infer(e1, ctx)
+      val (right, rightSide) = check(e2, typ.toSort, ctx)
       (BoolType, Ne(left, right)(node.range), leftSide ++ rightSide)
 
     // Operations: logical that may introduce assumptions
@@ -74,7 +74,7 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
     case untpd.Ite(e, e1, e2) =>
       val (cond, condSide) = check(e, BoolType, ctx)
       val (typ, thenExpr, thenSide) = infer(e1, assume(cond, ctx))
-      val (elseExpr, elseSide) = check(e2, typ, assume(Not(cond), ctx))
+      val (elseExpr, elseSide) = check(e2, typ.toSort, assume(Not(cond), ctx))
       (typ, Ite(cond, thenExpr, elseExpr)(node.range), condSide ++ thenSide ++ elseSide)
 
     // Operations: in
@@ -332,6 +332,8 @@ class CoreAPIs(using reporter: Reporter) extends LazyLogging:
         val actualSort = actual.toSort
         if actualSort.subsortOf(expectedSort) then
           (expr, side)
+        else if actualSort == CharType && expectedSort == StrType then
+          (CharToStr(expr)(node.range), side)
         else
           reporter.report(ctx.uri, TypeMismatch(node.range, expectedSort.show, actualSort.show))
           (expr, Nil)

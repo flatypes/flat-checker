@@ -86,10 +86,12 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       (List(Abort()(em.range)), ctx)
 
     // Control flow
-    case untpd.If(e, List(untpd.Abort(em)), Nil) =>
+    case untpd.If(e, List(untpd.Abort(em)), bd) =>
       resolver.coreAPIs.check(em, StrType, ctx)
       val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
-      (side :+ Assert(Not(cond), () => AssertNotProved(em.range)), ctx)
+      val (elseBody, elseCtx) =
+        checkBlock(bd, resolver.coreAPIs.assume(Not(cond), ctx), methodInfo, loopLevel)
+      (side ++ List(Assert(Not(cond), () => AssertNotProved(em.range))) ++ elseBody, elseCtx)
     case untpd.If(e, bd, List(untpd.Abort(em))) =>
       resolver.coreAPIs.check(em, StrType, ctx)
       val (cond, side) = resolver.coreAPIs.check(e, BoolType, ctx)
@@ -191,6 +193,22 @@ class Typer(using reporter: Reporter) extends LazyLogging:
           (body.toList, ctx)
         case _ =>
           reporter.report(localCtx.uri, PatternTypeMismatch(tg.range, s"${typ.show}", s"${tgs.length}-tuple"))
+          (Nil, localCtx)
+
+    case untpd.ListExpr(tgs) =>
+      typ.toSort match
+        case StrType =>
+          var ctx = localCtx
+          val body = ListBuffer.empty[Stmt]
+          body += Assert(Eq(StrLen(value), IntConst(tgs.length)(tg.range))(tg.range),
+            () => AssertNotProved(tg.range))
+          for i <- tgs.indices do
+            val (stmts, newCtx) = matchTarget(tgs(i), CharAt(value, IntConst(i))(tgs(i).range), CharType, ctx)
+            body ++= stmts
+            ctx = newCtx
+          (body.toList, ctx)
+        case _ =>
+          reporter.report(localCtx.uri, PatternTypeMismatch(tg.range, s"${typ.show}", s"list"))
           (Nil, localCtx)
     case _ =>
       throw IllegalArgumentException(s"Unexpected assignment target: $tg")

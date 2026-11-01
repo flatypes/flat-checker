@@ -71,6 +71,9 @@ object builtin:
     s.contains('h') // This will call the accessStrMember method with name "contains"
 
   private def accessCharMember(name: String): List[Member] = name match
+    case "+" => List(
+      Member(char -> str, { case List(c1, c2) => StrConcat(CharToStr(c1), CharToStr(c2)) }),
+      Member(str -> str, { case List(s, c) => StrConcat(s, CharToStr(c)) }))
     case "toCode" => List(Member(() -> int, { case List(c) => CharToCode(c) }))
     case "__str__" | "toStr" => List(Member(() -> str, { case List(c) => CharToStr(c) }))
 

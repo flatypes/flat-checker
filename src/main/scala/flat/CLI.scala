@@ -90,28 +90,31 @@ object CLI extends LazyLogging:
     for path <- paths.sorted do
       logger.info("Checking: {}", path)
       val source = Source.fromPath(path)
-      val reporter = Reporter(source)
-      val parser = Parser(source.uri, source.text)(using reporter)
-      val tree = parser.parse()
-      if reporter.hasError then
-        reporter.printTo(Console.err)
-        System.exit(1)
+      if source.text.startsWith("#skip") then
+        logger.info("Skipping: {}", path)
+      else
+        val reporter = Reporter(source)
+        val parser = Parser(source.uri, source.text)(using reporter)
+        val tree = parser.parse()
+        if reporter.hasError then
+          reporter.printTo(Console.err)
+          System.exit(1)
 
-      val typer = Typer(using reporter)
-      val module = typer.typeCheck(tree)
-      if reporter.hasError then
-        reporter.printTo(Console.err)
-        System.exit(1)
+        val typer = Typer(using reporter)
+        val module = typer.typeCheck(tree)
+        if reporter.hasError then
+          reporter.printTo(Console.err)
+          System.exit(1)
 
-      val verifier = Verifier(using reporter)
-      verifier.verify(module)
-      if reporter.hasError then
-        reporter.printTo(Console.err)
-        System.exit(1)
+        val verifier = Verifier(using reporter)
+        verifier.verify(module)
+        if reporter.hasError then
+          reporter.printTo(Console.err)
+          System.exit(1)
 
-      reporter.printTo(Console.err) // print warnings if any
-      logger.debug(f"Hit rate: ${NarrowCache.hitRate}%.2f")
-      logger.info("Checking passed: " + path.toString)
+        reporter.printTo(Console.err) // print warnings if any
+        logger.debug(f"Hit rate: ${NarrowCache.hitRate}%.2f")
+        logger.info("Checking passed: " + path.toString)
 
   private def collectFlan(path: os.Path): Seq[os.Path] =
     if os.isDir(path) then os.walk(path).filter(_.ext == "flan")
