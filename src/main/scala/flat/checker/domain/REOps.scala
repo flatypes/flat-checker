@@ -225,14 +225,17 @@ object REOps extends LazyLogging:
 
     // If Last is supported: from First until Last
 
-    def absSliceFromFirst(from: IFirst[T], until: PosIndex[T]): RegEx[T, S] =
-      // if from < until, then 1 can be removed
-      val r1 = sum:
+    def indexLt(leftIndex: IFirst[T], rightIndex: IFirst[T]): Boolean =
+      leftIndex.start == ILeft(0) && leftIndex.offset == 0 &&
+        r.absSplitAt(rightIndex).forall(_._1.mustContain(leftIndex.s))
+
+    def absSliceFromFirstUntilFirst(from: IFirst[T], until: IFirst[T]): RegEx[T, S] =
+      val slice = sum:
         for
           (left, _) <- r.absSplitAt(until)
-          (mid, _) <- left.absSplitAt(from)
+          (_, mid) <- left.absSplitAt(from)
         yield mid
-      r1.opt
+      if indexLt(from, until) then slice else slice.opt
 
     // Filters
     def filterElemWith(index: Index[T], f: S => S): RegEx[T, S] =

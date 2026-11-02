@@ -11,7 +11,7 @@ import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters.*
 import scala.util.{Success, Try}
 
-class LPSolver(constraints: List[Expr]) extends LazyLogging:
+class LPSolver(val constraints: List[Expr]) extends LazyLogging:
   def solveMin(expr: Expr): Option[BigInt] =
     val objective = prepareObjective(expr)
     val solver = new SimplexSolver

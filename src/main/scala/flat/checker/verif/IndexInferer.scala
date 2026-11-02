@@ -141,7 +141,13 @@ object IndexInferer extends LazyLogging:
     candidates match
       case List(index) =>
         return index
+      case Nil =>
       case _ =>
+        val f = relatives.find(f => solver.constraints.collectFirst { case Le(`f`, `idx`) => () }.isDefined)
+        if f.isDefined then
+          return relativeToIndex(f.get, 0)
+
+        logger.warn(s"Ambiguous choices: $candidates")
 
     // idx >= i
     solver.solveMin(idx) match
@@ -161,7 +167,13 @@ object IndexInferer extends LazyLogging:
     candidates match
       case List(index) =>
         return index
+      case Nil =>
       case _ =>
+        val f = relatives.find(f => solver.constraints.collectFirst { case Le(`idx`, `f`) => () }.isDefined)
+        if f.isDefined then
+          return relativeToIndex(f.get, 1)
+
+        logger.warn(s"Ambiguous choices: $candidates")
 
     // idx < len - i ==> len - idx > i ==> len - idx >= i + 1
     solver.solveMin(Sub(len, idx)) match

@@ -373,11 +373,12 @@ object Inferer extends LazyLogging:
       // Others
       case _ => Domain.Top
 
-  private def inferSlice[T, S](r: RegEx[T, S], from: Index[T], until: Index[T])
+  def inferSlice[T, S](r: RegEx[T, S], from: Index[T], until: Index[T])
                               (using LitOps[T, S]): RegEx[T, S] =
     (from, until) match
       case (ILeft(i), _) => r.absSliceFromLeft(i, until)
       case (_, IRight(j)) => r.absSliceUntilRight(from, j)
+      case (fromFirst: IFirst[T], untilFirst: IFirst[T]) => r.absSliceFromFirstUntilFirst(fromFirst, untilFirst)
       case _ =>
         logger.warn("Unsupported slice range [{}, {}), fallback to alphabet*", from, until)
         RegEx.fromCharSet(r.alphabet).star
