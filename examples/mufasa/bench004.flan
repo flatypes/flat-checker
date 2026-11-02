@@ -1,0 +1,30 @@
+HEADINGPREFIX = ""
+squashedPrefix = "a"
+
+def apply(input: str) -> str:
+    line = input
+    inProgressReport = False
+    lastLine: str = ""
+    heading: str = ""
+    if line.startswith("\r\u001b"):
+        line = line[2:len(line)]
+        if "[K" == line:
+            inProgressReport = True
+        return ""
+
+    if line.startswith(squashedPrefix):
+        line = line[len(squashedPrefix):len(line)]
+        inProgressReport = False
+        lastLine = line
+        if line.startswith(HEADINGPREFIX):
+            line = line[len(HEADINGPREFIX):len(line)]
+            heading = line + " > "
+        else:
+            line = line
+    elif inProgressReport:
+        inProgressReport = False
+        line = lastLine + line
+    else:
+        return ""
+
+    return line
