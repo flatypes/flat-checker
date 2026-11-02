@@ -532,6 +532,27 @@ object REOps extends LazyLogging:
           mid1 = mid.filterContains(s)
         yield left * mid1 * right
 
+    def search(f: S => S): List[(RegEx[T, S], S, RegEx[T, S])] = r match
+      case Zero() | One() => Nil
+      case Lit(a) =>
+        val a1 = f(a)
+        if a1.isEmpty then Nil else List((One(), a1, One()))
+      case Plus(r1, r2) => r1.search(f) ++ r2.search(f)
+      case Comp(r1, r2) =>
+        (for (before, a, after) <- r1.search(f) yield (before, a, after * r2))
+          ++ (for (before, a, after) <- r2.search(f) yield (r1 * before, a, after))
+      case Star(r1) =>
+        for (before, a, after) <- r1.search(f) yield (r * before, a, after * r)
+
+    def filterSomeElemWith(f: S => S): (RegEx[T, S], NatSet, NatSet) =
+      val splits = r.search(f)
+      if splits.isEmpty then (Zero(), NatSet.empty, NatSet.empty)
+      else
+        val r1 = sum(for (before, a, after) <- splits yield before * Lit(a) * after)
+        val before = sum(splits.map(_._1))
+        val after = sum(splits.map(_._3))
+        (r1, before.absLength, after.absLength)
+
   end extension
 
   private type CountingRE = RegEx[Int, Set[Int]]

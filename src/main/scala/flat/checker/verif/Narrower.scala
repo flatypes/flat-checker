@@ -15,6 +15,7 @@ class Narrower(goal: Goal) extends LazyLogging:
   private val charTypes = mutable.Map.empty[Expr, CharSet]
   private val strTypes = mutable.Map.empty[Expr, CharRE]
   private val strListTypes = mutable.Map.empty[Expr, StrRE]
+  private val lemmas = mutable.ListBuffer.empty[Expr]
 
   def narrow: Goal =
     val conds = ListBuffer.empty[Expr]
@@ -59,6 +60,7 @@ class Narrower(goal: Goal) extends LazyLogging:
 
       // Case 3: nondetermined index
       val IndexRange(from, until) = index.asInstanceOf[StrIndexRange]
+      logger.debug("Nondet index {} in range {}:{}", ei.show, from, until)
       (from, until) match
         case (ILeft(n), _) =>
           narrowStrTarget(e, _.filterSliceFromLeft(n, until, _.filterExists(f)))
@@ -67,6 +69,30 @@ class Narrower(goal: Goal) extends LazyLogging:
         case _ =>
           logger.warn("fallback [{}, {}) to [0, -1)", from, until)
           narrowStrTarget(e, _.filterExists(f))
+
+      (e, ei) match
+        case (Var(_), Var(_)) if strTypes.contains(e) =>
+          val r = strTypes(e)
+          val (r1, beforeLen, afterLen) = r.filterSomeElemWith(f)
+          strTypes(e) = r1
+          logger.debug("Narrow {} by {} to {}", e.show, cond.show, r1.pp)
+          if beforeLen.infinite && beforeLen.nats.min > 0 then
+            val lemma = Le(IntConst(beforeLen.nats.min), ei)
+            lemmas += lemma
+            logger.debug("Lemma {} by {}", lemma.show, cond.show)
+          else if !beforeLen.infinite then
+            val lemma = mkOr(beforeLen.nats.toList.sorted.map(n => Eq(ei, IntConst(n))))
+            lemmas += lemma
+            logger.debug("Lemma {} by {}", lemma.show, cond.show)
+          if afterLen.infinite && afterLen.nats.min > 0 then
+            val lemma = Lt(ei, Sub(StrLen(e), IntConst(afterLen.nats.min)))
+            lemmas += lemma
+            logger.debug("Lemma {} by {}", lemma.show, cond.show)
+          else if !afterLen.infinite then
+            val lemma = mkOr(afterLen.nats.toList.sorted.map(n => Eq(ei, Sub(StrLen(e), IntConst(n + 1)))))
+            lemmas += lemma
+            logger.debug("Lemma {} by {}", lemma.show, cond.show)
+        case _ =>
 
       val a0 = charTypes.getOrElse(expr, Inferer.inferChar(expr, newGoal()))
       val a1 = NarrowCache.getOrElseUpdate(expr, a0, cond, f(a0))
@@ -119,7 +145,8 @@ class Narrower(goal: Goal) extends LazyLogging:
     goal.copy(premises = goal.premises
       ++ (for (e, a) <- charTypes yield CharIn(e, a)())
       ++ (for (e, r) <- strTypes yield StrIn(e, r)())
-      ++ (for (e, r) <- strListTypes yield StrListIn(e, r)()))
+      ++ (for (e, r) <- strListTypes yield StrListIn(e, r)())
+      ++ lemmas)
 
   given Conversion[String, List[Char]] = _.toList
 
