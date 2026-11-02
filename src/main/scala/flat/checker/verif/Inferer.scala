@@ -14,7 +14,7 @@ import scala.collection.mutable.ListBuffer
 enum Domain:
   case Top
   case Nat(set: NatSet, e: Option[Expr] = None)
-  case Index(len: Expr, set: IndexSet)
+  case Index(len: Expr, set: IndexSet, e: Option[Expr] = None)
   case Num(set: NatRange)
   case Bool(set: BoolSet)
   case Char(set: CharSet)
@@ -26,7 +26,7 @@ enum Domain:
     case Nat(set, e) =>
       inNatSet(elem, set, e)
 
-    case Index(len, set) =>
+    case Index(len, set, None) =>
       val leftCases = ListBuffer.empty[Expr]
       val rightCases = ListBuffer.empty[Expr]
       if set.negative then
@@ -49,6 +49,20 @@ enum Domain:
         else
           rightCases += Eq(elem, Sub(len, IntConst(rightNats.last)))
       List(mkOr(leftCases.toList), mkOr(rightCases.toList))
+
+    case Index(len, set, Some(e)) =>
+      val cases = ListBuffer.empty[Expr]
+      if set.negative then
+        cases += Eq(elem, IntConst(-1))
+      if set.left.nonEmpty then
+        val leftNats = set.left.nats.toList.sorted
+        for n <- leftNats.init do
+          cases += Eq(elem, Add(e, IntConst(n)))
+        if set.left.infinite then
+          cases += Le(Add(e, IntConst(leftNats.last)), elem)
+        else
+          cases += Eq(elem, Add(e, IntConst(leftNats.last)))
+      List(mkOr(cases.toList))
 
     case Num(set) =>
       set.max match
@@ -84,7 +98,7 @@ enum Domain:
   override def toString: String = this match
     case Top => "Top"
     case Nat(set, _) => s"Nat($set)"
-    case Index(_, set) => s"Index($set)"
+    case Index(_, set, _) => s"Index($set)"
     case Num(set) => s"Num($set)"
     case Bool(set) => s"Bool($set)"
     case Char(set) => s"Char($set)"
@@ -208,10 +222,7 @@ object Inferer extends LazyLogging:
             Domain.Str(r.absSliceFromLeft(k))
           case _ =>
             infer(e) match
-              case Domain.Str(r) =>
-                IndexInferer.inferStrIndex(ei, e, goal) match
-                  case from: Index[_] => Domain.Str(r.absSliceUntilRight(from))
-                  case _ => Domain.Top
+              case Domain.Str(r) => Domain.Str(inferSubstr(r, ei, StrLen(e), e, goal))
               case _ => Domain.Top
       case Substr(e, ei, ej) =>
         (relativeIndex(ei, e, goal), relativeIndex(ej, e, goal)) match
@@ -220,10 +231,7 @@ object Inferer extends LazyLogging:
             Domain.Str(r.absSliceFromLeft(k1, ILeft(k2)))
           case _ =>
             infer(e) match
-              case Domain.Str(r) =>
-                (IndexInferer.matchStrIndex(ei, e, goal), IndexInferer.matchStrIndex(ej, e, goal)) match
-                  case (Some(from), Some(until)) => Domain.Str(inferSlice(r, from, until))
-                  case _ => Domain.Top
+              case Domain.Str(r) => Domain.Str(inferSubstr(r, ei, ej, e, goal))
               case _ => Domain.Top
 
       case StrConcat(e1, e2) =>
@@ -243,7 +251,9 @@ object Inferer extends LazyLogging:
           case Domain.Str(r) =>
             IndexInferer.matchStrIndex(ei, e, goal) match
               case Some(start) => Domain.Index(StrLen(e), r.absFind(t.toList, start))
-              case None => ???
+              case None =>
+                val right = inferSubstr(r, ei, StrLen(e), e, goal)
+                Domain.Index(StrLen(e), right.absFind(t.toList, ILeft(0)), Some(ei))
           case _ => Domain.Top
       case StrReplace(e, StrConst(t1), StrConst(t2)) =>
         infer(e) match
@@ -370,6 +380,26 @@ object Inferer extends LazyLogging:
       case (_, IRight(j)) => r.absSliceUntilRight(from, j)
       case _ =>
         logger.warn("Unsupported slice range [{}, {}), fallback to alphabet*", from, until)
+        RegEx.fromCharSet(r.alphabet).star
+
+  private def inferSubstr(r: CharRE, start: Expr, end: Expr, str: Expr, goal: Goal): CharRE =
+    (IndexInferer.inferStrIndex(start, str, goal), IndexInferer.inferStrIndex(end, str, goal)) match
+      case (ILeft(i), until: StrIndex) => r.absSliceFromLeft(i, until)
+      case (from: StrIndex, IRight(j)) => r.absSliceUntilRight(from, j)
+      case (IndexRange(startFrom, startUntil), until: StrIndex) =>
+        val char = RegEx.fromCharSet(inferSlice(r, startFrom, startUntil).alphabet)
+        val left = if goal.premises.contains(Lt(start, StrLen(str))()) then char.plus else char.star
+        val right = r.absSliceUntilRight(until)
+        logger.debug("Infer {}[{}:{}] => {}·{}", str.show, start.show, end.show, left.pp, right.pp)
+        left * right
+      case (from: StrIndex, IndexRange(endFrom, endUntil)) =>
+        val left = inferSlice(r, from, endFrom)
+        val char = RegEx.fromCharSet(inferSlice(r, endFrom, endUntil).alphabet)
+        val right = if goal.premises.contains(Lt(end, StrLen(str))()) then char.plus else char.star
+        logger.debug("Infer {}[{}:{}] => {}·{}", str.show, start.show, end.show, left.pp, right.pp)
+        left * right
+      case _ =>
+        logger.warn("Unsupported substring range [{}, {}), fallback to alphabet*", start.show, end.show)
         RegEx.fromCharSet(r.alphabet).star
 
   private def relativeIndex(idx: Expr, str: Expr, goal: Goal): Option[(Int, Expr, CharRE)] = idx match
