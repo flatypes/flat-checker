@@ -2,7 +2,7 @@ package flat.checker.verif
 
 import com.typesafe.scalalogging.LazyLogging
 import flat.checker.Reporter
-import flat.checker.domain.RegEx
+import flat.checker.domain.{CharSet, RegEx}
 import flat.checker.flan.Show.show
 import flat.checker.flan.sorting.{isSort, toSort}
 import flat.checker.flan.tpd.*
@@ -145,27 +145,56 @@ class Verifier(using reporter: Reporter) extends LazyLogging:
       safetyCheck(e, state)
         && safetyCheck(e1, assume(e, state)) && safetyCheck(e2, assume(Not(e), state))
 
+    // Char
+    case CodeToChar(e) =>
+      safetyCheck(e, state) &&
+        prove(And(Le(IntConst(0), e), Lt(e, IntConst(0x110000))), state, () => CodePointOutOfRange(e.range))
+
     // String
     case CharAt(e, ei) =>
       safetyCheck(e, state) && safetyCheck(ei, state)
         && prove(And(Le(IntConst(0), ei), Lt(ei, StrLen(e))), state, () => IndexOutOfBounds(ei.range))
     case Substr(e, ei, ej) =>
       val startCheck = ei match
-        case IntConst(0) => true
+        case IntConst(n) if n >= 0 => true
         case _ => safetyCheck(ei, state) && prove(Le(IntConst(0), ei), state, () => IndexOutOfBounds(ei.range))
       val endCheck = ej match
         case StrLen(`e`) => true
+        case IntConst(n) if n >= 0 => true
         case _ => safetyCheck(ej, state) && prove(Le(IntConst(0), ej), state, () => IndexOutOfBounds(ej.range))
       safetyCheck(e, state) && startCheck && endCheck
+    case StrIndexOf(e, es, ei) =>
+      val startCheck = ei match
+        case IntConst(n) if n >= 0 => true
+        case _ => safetyCheck(ei, state) && prove(Le(IntConst(0), ei), state, () => IndexOutOfBounds(ei.range))
+      safetyCheck(e, state) && safetyCheck(es, state) && startCheck
+
+    // String conversion
+    case StrToInt(e, IntConst(base)) =>
+      safetyCheck(e, state) &&
+        prove(StrIn(e, RegEx.Lit(CharSet.digit(base.toInt)).plus), state, () => InvalidInt(e.range, base.toInt))
 
     // List
     case ElemAt(e, ei) =>
       safetyCheck(e, state) && safetyCheck(ei, state)
         && prove(And(Le(IntConst(0), ei), Lt(ei, ListLen(e))), state, () => IndexOutOfBounds(ei.range))
+    case ListUpdate(e, ei, ev) =>
+      safetyCheck(e, state) && safetyCheck(ei, state) && safetyCheck(ev, state)
+        && prove(And(Le(IntConst(0), ei), Lt(ei, ListLen(e))), state, () => IndexOutOfBounds(ei.range))
     case ListSlice(e, ei, ej) =>
-      safetyCheck(e, state) && safetyCheck(ei, state) && safetyCheck(ej, state)
-        && prove(Le(IntConst(0), ei), state, () => IndexOutOfBounds(ei.range))
-        && prove(Le(IntConst(0), ej), state, () => IndexOutOfBounds(ej.range))
+      val startCheck = ei match
+        case IntConst(n) if n >= 0 => true
+        case _ => safetyCheck(ei, state) && prove(Le(IntConst(0), ei), state, () => IndexOutOfBounds(ei.range))
+      val endCheck = ej match
+        case ListLen(`e`) => true
+        case IntConst(n) if n >= 0 => true
+        case _ => safetyCheck(ej, state) && prove(Le(IntConst(0), ej), state, () => IndexOutOfBounds(ej.range))
+      safetyCheck(e, state) && startCheck && endCheck
+    case ListIndexOf(e, ev, ei) =>
+      val startCheck = ei match
+        case IntConst(n) if n >= 0 => true
+        case _ => safetyCheck(ei, state) && prove(Le(IntConst(0), ei), state, () => IndexOutOfBounds(ei.range))
+      safetyCheck(e, state) && safetyCheck(ev, state) && startCheck
 
     // Map
     case MapSelect(e, ek) =>

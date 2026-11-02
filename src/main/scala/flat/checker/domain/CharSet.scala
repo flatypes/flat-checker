@@ -2,6 +2,8 @@ package flat.checker.domain
 
 import flat.checker.util.CharSetUtil.compress
 
+import scala.collection.mutable.ListBuffer
+
 /** Infinite set of characters. */
 final case class CharSet(pos: Boolean, chars: Set[Char]):
   def isEmpty: Boolean = pos && chars.isEmpty
@@ -73,6 +75,17 @@ object CharSet:
   val asciiDecimal: CharSet = from('0' to '9')
   val asciiSpace: CharSet = from(" \t\n\r\f")
   val ascii: CharSet = from(0.toChar to 127.toChar)
+
+  def digit(base: Int): CharSet =
+    require(2 <= base && base <= 36, s"invalid base: $base")
+    val digits = ListBuffer.empty[Char]
+    for n <- 0 until base do
+      if n < 10 then
+        digits += ('0' + n).toChar
+      else
+        digits += ('a' + (n - 10)).toChar
+        digits += ('A' + (n - 10)).toChar
+    CharSet.from(digits)
 
 given LitOps[Char, CharSet] with
   def empty: CharSet = CharSet.empty

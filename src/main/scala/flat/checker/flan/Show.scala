@@ -137,8 +137,10 @@ object Show extends LazyLogging:
       case StrToLower(e) => showMemberApply(e, "toLower")
       case StrToUpper(e) => showMemberApply(e, "toUpper")
 
+      // RegEx
       case StrIn(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
       case StrListIn(e, r) => s"${showExpr(e)} ∈ ${r.pp}"
+
       // List
       case ListExpr(es) => es.map(showExpr(_)).mkString("[", ", ", "]")
       case ListContains(e, ev) => showMemberApply(e, "contains", ev)
@@ -169,7 +171,7 @@ object Show extends LazyLogging:
 
       // Map
       case MapExpr(eks, evs) =>
-        (for (ek, ev) <- (eks zip evs) yield s"${showExpr(ek)}: ${showExpr(ev)}").mkString("{", ", ", "}")
+        (for (ek, ev) <- eks zip evs yield s"${showExpr(ek)}: ${showExpr(ev)}").mkString("{", ", ", "}")
       case MapContains(e, ek) => showMemberApply(e, "contains", ek)
       case MapSize(e) => s"|${showExpr(e)}|"
       case MapSelect(e, ek) => s"${showTighter(e)}[${showExpr(ek)}]"

@@ -5,8 +5,14 @@ import org.eclipse.lsp4j.{Diagnostic, DiagnosticSeverity, Range as Span}
 class ProofError(val span: Span, val message: String)
   extends Diagnostic(span, s"Proof Error: $message", DiagnosticSeverity.Error, "flat-checker")
 
+final class CodePointOutOfRange(span: Span)
+  extends ProofError(span, s"code point is out of range for a character")
+
 final class IndexOutOfBounds(span: Span)
   extends ProofError(span, s"index might be out of bounds")
+
+final class InvalidInt(span: Span, base: Int)
+  extends ProofError(span, s"string might not be a valid integer with base $base")
 
 final class KeyNotExist(span: Span)
   extends ProofError(span, s"key might not exist in the map")
