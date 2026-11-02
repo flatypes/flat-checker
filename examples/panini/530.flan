@@ -1,0 +1,12 @@
+lang Input = r"([^a]|ab)*"
+
+def f530(s: Input):
+    i = 0
+    while i < len(s):
+        invariant 0 <= i <= len(s)
+        invariant s[i:] in Input
+        if s[i] == 'a':
+            assert s[i+1] == 'b'
+            i += 2
+        else:
+            i += 1

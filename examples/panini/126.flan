@@ -1,0 +1,8 @@
+lang Input = r"a.*"
+
+def f126(s: Input):
+    i = len(s)
+    while i > 0:
+        invariant 0 <= i <= len(s)
+        i -= 1
+    assert s[i] == 'a'

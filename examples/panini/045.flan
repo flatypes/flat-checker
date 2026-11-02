@@ -1,0 +1,5 @@
+lang Input = r".."
+
+def f045(s: Input) -> (Char, Char):
+    [a, b] = s
+    return a,b

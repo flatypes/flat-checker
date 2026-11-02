@@ -1,0 +1,16 @@
+lang Input = r"a*b*"
+
+def f240(s: Input):
+    i = 0
+    first_b = s.find('b') if 'b' in s else len(s)   # ghost variable
+    while i < len(s):
+        invariant 0 <= i <= first_b
+        if s[i] != 'a':
+            break
+        i += 1
+    while i < len(s):
+        invariant first_b <= i <= len(s)
+        if s[i] != 'b':
+            break
+        i += 1
+    assert i == len(s)

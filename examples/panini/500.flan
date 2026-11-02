@@ -1,0 +1,22 @@
+lang Input = r"a*b*c*"
+
+def f500(s: Input):
+    i = 0
+    first_c = s.find('c') if 'c' in s else len(s)   # ghost variable
+    first_b = s.find('b') if 'b' in s else first_c  # ghost variable
+    while i < len(s):
+        invariant 0 <= i <= first_b
+        if s[i] != 'a':
+            break
+        i += 1
+    while i < len(s):
+        invariant first_b <= i <= first_c
+        if s[i] != 'b':
+            break
+        i += 1
+    while i < len(s):
+        invariant first_c <= i <= len(s)
+        if s[i] != 'c':
+            break
+        i += 1
+    assert i == len(s)

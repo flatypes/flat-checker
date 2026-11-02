@@ -1,0 +1,15 @@
+lang Input = r"(a|b)*"
+
+def f411(s: Input):
+    i = 0
+    while i < len(s):
+        invariant 0 <= i <= len(s)
+        if s[i] == 'a':
+            i += 1
+        else:
+            j = 0
+            if j < len(s)-i:
+                if s[i+j] == 'b':
+                    j += 1
+            assert j > 0
+            i += j

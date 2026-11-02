@@ -225,17 +225,23 @@ object REOps extends LazyLogging:
 
     // If Last is supported: from First until Last
 
-    def indexLt(leftIndex: IFirst[T], rightIndex: IFirst[T]): Boolean =
-      leftIndex.start == ILeft(0) && leftIndex.offset == 0 &&
-        r.absSplitAt(rightIndex).forall(_._1.mustContain(leftIndex.s))
-
-    def absSliceFromFirstUntilFirst(from: IFirst[T], until: IFirst[T]): RegEx[T, S] =
-      val slice = sum:
-        for
-          (left, _) <- r.absSplitAt(until)
-          (_, mid) <- left.absSplitAt(from)
-        yield mid
-      if indexLt(from, until) then slice else slice.opt
+    def absSliceFromFirstUntilFirst(from: IFirst[T], until: IFirst[T]): RegEx[T, S] = until match
+      case IFirst(s, `from`, k) if k >= 0 =>
+        // w[from:w.find(s, from) + k] = w1[:w1.find(s) + k] where w1 = w[from:]
+        sum:
+          for
+            (_, right) <- r.absSplitAt(from)
+            (mid, right) <- right.absSplitAtFirst(s)
+          yield mid * right.absTake(k)
+      case _ =>
+        val nonEmpty =
+          from.start == ILeft(0) && from.offset == 0 && r.absSplitAt(until).forall(_._1.mustContain(from.s))
+        val slice = sum:
+          for
+            (left, _) <- r.absSplitAt(until)
+            (_, mid) <- left.absSplitAt(from)
+          yield mid
+        if nonEmpty then slice else slice.opt
 
     // Filters
     def filterElemWith(index: Index[T], f: S => S): RegEx[T, S] =

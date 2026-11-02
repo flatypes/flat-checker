@@ -1,0 +1,9 @@
+lang Input = r"a.*b"
+
+def f362(s: Input):
+    i = 0
+    assert s[i] == 'a'
+    while i < len(s)-1:
+        invariant 0 <= i < len(s)
+        i += 1
+    assert s[i] == 'b'

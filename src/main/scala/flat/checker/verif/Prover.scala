@@ -97,6 +97,7 @@ object Prover extends LazyLogging:
   private def trivial(goal: Goal): Boolean =
     goal.conclusion == BoolConst(true)(noRange) || goal.premises.contains(goal.conclusion) || goal.premises.exists:
       case BoolConst(false) => true
+      case CharIn(_, r) => r.isEmpty
       case StrIn(StrConst(s), r) => !r.contains(s.toList)
       case StrIn(_, r) => r.isEmpty
       case StrListIn(_, r) => r.isEmpty

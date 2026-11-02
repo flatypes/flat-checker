@@ -378,7 +378,8 @@ object Inferer extends LazyLogging:
     (from, until) match
       case (ILeft(i), _) => r.absSliceFromLeft(i, until)
       case (_, IRight(j)) => r.absSliceUntilRight(from, j)
-      case (fromFirst: IFirst[T], untilFirst: IFirst[T]) => r.absSliceFromFirstUntilFirst(fromFirst, untilFirst)
+      case (fromFirst: IFirst[_], untilFirst: IFirst[_]) =>
+        r.absSliceFromFirstUntilFirst(fromFirst.asInstanceOf[IFirst[T]], untilFirst.asInstanceOf[IFirst[T]])
       case _ =>
         logger.warn("Unsupported slice range [{}, {}), fallback to alphabet*", from, until)
         RegEx.fromCharSet(r.alphabet).star
@@ -387,6 +388,8 @@ object Inferer extends LazyLogging:
     (IndexInferer.inferStrIndex(start, str, goal), IndexInferer.inferStrIndex(end, str, goal)) match
       case (ILeft(i), until: StrIndex) => r.absSliceFromLeft(i, until)
       case (from: StrIndex, IRight(j)) => r.absSliceUntilRight(from, j)
+      case (from: IFirst[_], until: IFirst[_]) =>
+        r.absSliceFromFirstUntilFirst(from.asInstanceOf[IFirst[Char]], until.asInstanceOf[IFirst[Char]])
       case (IRight(0), _) => RegEx.One()
       case (IndexRange(startFrom, startUntil), until: StrIndex) =>
         val char = RegEx.fromCharSet(inferSlice(r, startFrom, startUntil).alphabet)

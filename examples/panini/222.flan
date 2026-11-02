@@ -1,0 +1,9 @@
+lang Input = r"a*b"
+
+def f222(s: Input):
+    assert s.index("b") == len(s)-1
+    i = 0
+    while i < len(s)-1:
+        invariant 0 <= i < len(s)
+        assert s[i] == 'a'
+        i += 1

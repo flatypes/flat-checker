@@ -1,0 +1,11 @@
+lang Input = r".*a.*"
+
+def f143(s: Input):
+    i = len(s)
+    while i > 0:
+        invariant 0 <= i <= len(s)
+        invariant 'a' not in s[i:]
+        if s[i-1] == 'a':
+            return
+        i -= 1
+    raise "Exception"

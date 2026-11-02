@@ -1,0 +1,9 @@
+lang Input = r"a*[^a]"
+
+def f201(s: Input):
+    assert s[len(s)-1] != 'a'
+    i = 0
+    while i < len(s)-1:
+        invariant 0 <= i < len(s)
+        assert s[i] == 'a'
+        i += 1
