@@ -331,7 +331,7 @@ object REOps extends LazyLogging:
 
     private inline def filterIsEmpty: RegEx[T, S] = if r.nullable then One() else Zero()
 
-    private def filterNonEmpty: RegEx[T, S] = r match
+    def filterNonEmpty: RegEx[T, S] = r match
       case Zero() | One() => Zero()
       case Lit(a) => if a.isEmpty then Zero() else r
       case Plus(r1, r2) => r1.filterNonEmpty + r2.filterNonEmpty

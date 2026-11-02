@@ -20,6 +20,9 @@ class Narrower(goal: Goal) extends LazyLogging:
   def narrow: Goal =
     val conds = ListBuffer.empty[Expr]
     goal.premises.foreach:
+      case StrIn(e@Substr(es, Var(x), StrLen(e1)), r)
+        if e1 == es && goal.premises.contains(Lt(Var(x), StrLen(es))()) =>
+        strTypes(e) = r.filterNonEmpty
       case StrIn(e, r) =>
         strTypes(e) = r
       case StrListIn(e, r) =>

@@ -386,6 +386,7 @@ object Inferer extends LazyLogging:
     (IndexInferer.inferStrIndex(start, str, goal), IndexInferer.inferStrIndex(end, str, goal)) match
       case (ILeft(i), until: StrIndex) => r.absSliceFromLeft(i, until)
       case (from: StrIndex, IRight(j)) => r.absSliceUntilRight(from, j)
+      case (IRight(0), _) => RegEx.One()
       case (IndexRange(startFrom, startUntil), until: StrIndex) =>
         val char = RegEx.fromCharSet(inferSlice(r, startFrom, startUntil).alphabet)
         val left = if goal.premises.contains(Lt(start, StrLen(str))()) then char.plus else char.star
