@@ -27,6 +27,6 @@ RUN python3 scripts/install_cvc5.py
 # Finally, we build and test FLAT-Checker.
 RUN sbt test
 RUN sbt assembly
-RUN ./flat-checker examples/a_star.py
+RUN ./flat-checker examples/tests/
 
 ENTRYPOINT [ "bash" ]

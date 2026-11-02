@@ -14,19 +14,17 @@ lazy val root = (project in file("."))
   )
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-collection-contrib" % "0.4.0"
-libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.4.0"
-libraryDependencies += "org.apache.commons" % "commons-text" % "1.13.0"
+libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.5.0"
 libraryDependencies += "org.apache.commons" % "commons-math" % "2.2"
-libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.11.4"
-libraryDependencies += "com.lihaoyi" %% "upickle" % "4.1.0"
-libraryDependencies += "com.lihaoyi" %% "fastparse" % "3.1.1"
+libraryDependencies += "com.lihaoyi" %% "os-lib" % "0.11.10"
+libraryDependencies += "com.lihaoyi" %% "upickle" % "4.4.3"
 libraryDependencies += "com.github.scopt" %% "scopt" % "4.1.0"
-libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.5.18"
-libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5"
-libraryDependencies += "com.ibm.icu" % "icu4j" % "78.1"
+libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.6.6"
+libraryDependencies += "com.typesafe.scala-logging" %% "scala-logging" % "3.9.6"
+libraryDependencies += "com.ibm.icu" % "icu4j" % "79.1"
 libraryDependencies += "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "1.0.0"
 libraryDependencies += "org.eclipse.lsp4j" % "org.eclipse.lsp4j.jsonrpc" % "1.0.0"
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % "test"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.20" % "test"
 
 assembly / assemblyOutputPath := file("target/flat-checker.jar")
 assembly / assemblyMergeStrategy := {
