@@ -123,7 +123,8 @@ class Typer(using reporter: Reporter) extends LazyLogging:
       val (loopBody, loopCtx) = checkBlock(bd, resolver.coreAPIs.assume(cond, ctx), methodInfo, loopLevel + 1)
       (List(While(cond, invariants, loopBody)), ctx.copy(stack = loopCtx.stack))
 
-    case untpd.For(id, iter, Nil, bd) =>
+    case untpd.For(id, iter, inv, bd) =>
+      require(inv.isEmpty, "Loop invariants are not supported for for-loops")
       val (typ, values) = iter match
         case untpd.StrConst(s) =>
           (CharType, s.toList.map(c => CharConst(c)(iter.range)))

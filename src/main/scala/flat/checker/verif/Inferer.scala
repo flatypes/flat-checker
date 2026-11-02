@@ -286,11 +286,12 @@ object Inferer extends LazyLogging:
         infer(e) match
           case Domain.Str(r) => Domain.Str(r.absTrim())
           case _ => Domain.Top
-      case StrSplit(e, StrConst(t), _) =>
+      case StrSplit(e, StrConst(t)) =>
         infer(e) match
           case Domain.Str(r) => Domain.StrList(r.absSplit(t.toList))
           case _ => Domain.Top
-      case StrJoin(_, _) => ???
+      case StrJoin(_, _) =>
+        throw new UnsupportedOperationException("StrJoin is not supported in Inferer")
       case StrCount(e, StrConst(t)) =>
         infer(e) match
           case Domain.Str(r) => Domain.Nat(r.absCount(t.toList))
@@ -367,14 +368,16 @@ object Inferer extends LazyLogging:
           case Domain.StrList(r) =>
             IndexInferer.matchListIndex(ei, e, goal) match
               case Some(start) => Domain.Index(ListLen(e), r.absFind(List(t.toList), start))
-              case None => ???
+              case None =>
+                logger.warn("Unsupported index {}, fallback to Top", ei.show)
+                Domain.Top
           case _ => Domain.Top
 
       // Others
       case _ => Domain.Top
 
   def inferSlice[T, S](r: RegEx[T, S], from: Index[T], until: Index[T])
-                              (using LitOps[T, S]): RegEx[T, S] =
+                      (using LitOps[T, S]): RegEx[T, S] =
     (from, until) match
       case (ILeft(i), _) => r.absSliceFromLeft(i, until)
       case (_, IRight(j)) => r.absSliceUntilRight(from, j)

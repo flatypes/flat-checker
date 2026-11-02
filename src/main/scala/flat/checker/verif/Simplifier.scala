@@ -213,15 +213,10 @@ object Simplifier extends LazyLogging:
           case (s1@ListExpr(es1), s2@ListExpr(es2)) if s1.isConst && s2.isConst => IntConst(es1.countSlice(es2))
           case (StrConst(s), StrConst(t)) => IntConst(s.countSlice(t))
           case (e, et) => StrCount(e, et)
-      case StrSplit(e, ex, None) =>
+      case StrSplit(e, ex) =>
         (e.simplify, ex.simplify) match
           case (StrConst(s), StrConst(t)) => ListExpr(s.split(t).toList.map(StrConst(_)))(StrType, expr.range)
           case (e, et) => StrSplit(e, et)
-      case StrSplit(e, ex, Some(em)) =>
-        (e.simplify, ex.simplify, em.simplify) match
-          case (StrConst(s), StrConst(t), IntConst(m)) =>
-            ListExpr(s.split(t, m.intValue).toList.map(StrConst(_)))(StrType, expr.range)
-          case (e, et, em) => StrSplit(e, et, Some(em))
       case StrReplace(e, e1, e2) =>
         (e.simplify, e1.simplify, e2.simplify) match
           case (StrConst(s), StrConst(s1), StrConst(s2)) => StrConst(s.replace(s1, s2))

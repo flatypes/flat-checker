@@ -140,9 +140,7 @@ class Lexer(uri: String, text: String)(using reporter: Reporter) extends RegexPa
   def lex(): List[Token] =
     val safeText = if text.endsWith("\n") then text else text + "\n"
     parseAll(file, safeText) match
-      case Success(tks, _) =>
-        // logger.debug("Tokens: {}", tks.map(t => s"${t.typ}(${t.value})").mkString("\n"))
-        tks
+      case Success(tks, _) => tks
       case NoSuccess(msg, next) =>
         val pos: Position = next.pos
         reporter.report(uri, SyntaxError(pos, msg))

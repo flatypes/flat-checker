@@ -102,7 +102,7 @@ class SMTEncoder(sorts: Map[String, Type], tm: TermManager) extends LazyLogging:
     case StrCount(e, et) => mkApplyUF(STRING_COUNT, encodeExpr(e, ctx), encodeExpr(et, ctx))
 
     // String: split and join
-    case StrSplit(e, et, _) => mkApplyUF(STRING_SPLIT, encodeExpr(e, ctx), encodeExpr(et, ctx))
+    case StrSplit(e, et) => mkApplyUF(STRING_SPLIT, encodeExpr(e, ctx), encodeExpr(et, ctx))
     case StrJoin(e, el) => mkApplyUF(STRING_JOIN, encodeExpr(e, ctx), encodeExpr(el, ctx))
 
     // String: transformation

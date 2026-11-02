@@ -326,11 +326,10 @@ object tpd:
       case List(e, et) => StrCount(e, et)(range)
       case _ => throw IllegalArgumentException("SeqCount must have exactly 2 subtrees")
 
-  final case class StrSplit(str: Expr, sep: Expr, max: Option[Expr] = None)(val range: Range = noRange) extends Expr:
+  final case class StrSplit(str: Expr, sep: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrSplit = subtrees match
       case List(e, et) => StrSplit(e, et)(range)
-      case List(e, et, em) => StrSplit(e, et, Some(em))(range)
-      case _ => throw IllegalArgumentException("StringSplit must have exactly 2 subtrees")
+      case _ => throw IllegalArgumentException("StrSplit must have exactly 2 subtrees")
 
   final case class StrReplace(str: Expr, target: Expr, replacement: Expr)(val range: Range = noRange) extends Expr:
     override def rebuild(subtrees: List[Expr]): StrReplace = subtrees match

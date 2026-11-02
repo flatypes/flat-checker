@@ -60,7 +60,7 @@ object Show extends LazyLogging:
       case IntConst(i) => i.toString
       case BoolConst(b) => b.toString
       case CharConst(c) => s"'${escapeChar(c)}'"
-      case StrConst(s) => s"'${escapeString(s)}'"
+      case StrConst(s) => s"\"${escapeString(s)}\""
       case NullConst() => "null"
       case Var(x) => showVar(x)
       case LambdaExpr(ps, e) => s"λ ${showParamList(ps)}, ${showExpr(e)}"
@@ -126,7 +126,7 @@ object Show extends LazyLogging:
       // String extensions
       case StrReverse(e) => showMemberApply(e, "reverse")
       case StrTrim(e) => showMemberApply(e, "trim")
-      case StrSplit(e, et, None) => showMemberApply(e, "split", et)
+      case StrSplit(e, et) => showMemberApply(e, "split", et)
       case StrJoin(e, es) => showMemberApply(e, "join", es)
       case StrCount(e, ep) => showMemberApply(e, "count", ep)
       case IntFormat(e, fmt) => s"format($fmt, ${showExpr(e)})"
@@ -221,6 +221,7 @@ object Show extends LazyLogging:
       case ExprStmt(e) => showExpr(e) + "\n"
       case Assign(x, e) => s"${showVar(x)} = ${showExpr(e)}\n"
       case Havoc(x) => s"${showVar(x)} = *\n"
+      case MethodCall(xs, m, es) => s"${xs.map(showVar).mkString(", ")}.$m(${es.map(showExpr(_)).mkString(", ")})\n"
       case Assume(e) => s"assume ${showExpr(e)}\n"
       case Assert(e, _) => s"assert ${showExpr(e)}\n"
       case Abort() => "abort\n"
@@ -234,6 +235,9 @@ object Show extends LazyLogging:
         s"while ${showExpr(e)}:\n$body"
       case Break() => "break\n"
       case Continue() => "continue\n"
+      case UnrolledFor(x, vs, b) =>
+        val body = b.map(showStmt(_, level + 1)).mkString
+        s"for $x in [${vs.map(_.show).mkString(", ")}]:\n$body"
     "  " * level + s
 
   extension (stmt: Stmt)
