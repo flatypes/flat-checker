@@ -90,7 +90,7 @@ object CLI extends LazyLogging:
     for path <- paths.sorted do
       logger.info("Checking: {}", path)
       val source = Source.fromPath(path)
-      if source.text.startsWith("#skip") then
+      if source.text.startsWith("# flat-checker: skip\n") then
         logger.info("Skipping: {}", path)
       else
         val reporter = Reporter(source)
