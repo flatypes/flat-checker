@@ -109,27 +109,35 @@ class Narrower(goal: Goal) extends LazyLogging:
       logger.debug("Narrow {} by {} to {}", expr.show, cond.show, a1)
 
   @tailrec
-  private def narrowStrTarget(expr: Expr, f: CharRE => CharRE)(using cond: Expr): Unit = expr match
-    case Substr(e, ei, ej) =>
-      (IndexInferer.matchStrIndex(ei, e, goal), IndexInferer.matchStrIndex(ej, e, goal)) match
-        case (Some(ILeft(n)), Some(until: StrIndex)) => narrowStrTarget(e, _.filterSliceFromLeft(n, until, f))
-        case (Some(from: StrIndex), Some(IRight(n))) => narrowStrTarget(e, _.filterSliceUntilRight(from, n, f))
-        case _ => logger.warn("Cannot narrow {} from {} until {}", expr.show, ei.show, ej.show)
-    case ElemAt(e, ei) =>
-      val index = IndexInferer.inferListIndex(ei, e, goal)
-      index match
-        case index: StrListIndex => narrowStrListTarget(e, _.filterElemWith(index, f))
-        case IndexRange(ILeft(n), until) => narrowStrListTarget(e, _.filterSliceFromLeft(n, until, _.filterExists(f)))
-        case IndexRange(from, IRight(n)) => narrowStrListTarget(e, _.filterSliceUntilRight(from, n, _.filterExists(f)))
-        case IndexRange(from, until) =>
-          logger.warn("fallback [{}, {}) to [0, -1)", from, until)
-          narrowStrListTarget(e, _.filterExists(f))
-    case StrConst(_) => // ignore
-    case _ =>
-      val r0 = strTypes.getOrElse(expr, Inferer.inferStr(expr, newGoal()))
+  private def narrowStrTarget(expr: Expr, f: CharRE => CharRE)(using cond: Expr): Unit =
+    if strTypes.contains(expr) then
+      val r0 = strTypes(expr)
       val r1 = NarrowCache.getOrElseUpdate(expr, r0, cond, f(r0))
       strTypes(expr) = r1
       logger.debug("Narrow {} by {} to {}", expr.show, cond.show, r1.pp)
+      return
+
+    expr match
+      case Substr(e, ei, ej) =>
+        (IndexInferer.matchStrIndex(ei, e, goal), IndexInferer.matchStrIndex(ej, e, goal)) match
+          case (Some(ILeft(n)), Some(until: StrIndex)) => narrowStrTarget(e, _.filterSliceFromLeft(n, until, f))
+          case (Some(from: StrIndex), Some(IRight(n))) => narrowStrTarget(e, _.filterSliceUntilRight(from, n, f))
+          case _ => logger.warn("Cannot narrow {} from {} until {}", expr.show, ei.show, ej.show)
+      case ElemAt(e, ei) =>
+        val index = IndexInferer.inferListIndex(ei, e, goal)
+        index match
+          case index: StrListIndex => narrowStrListTarget(e, _.filterElemWith(index, f))
+          case IndexRange(ILeft(n), until) => narrowStrListTarget(e, _.filterSliceFromLeft(n, until, _.filterExists(f)))
+          case IndexRange(from, IRight(n)) => narrowStrListTarget(e, _.filterSliceUntilRight(from, n, _.filterExists(f)))
+          case IndexRange(from, until) =>
+            logger.warn("fallback [{}, {}) to [0, -1)", from, until)
+            narrowStrListTarget(e, _.filterExists(f))
+      case StrConst(_) => // ignore
+      case _ =>
+        val r0 = strTypes.getOrElse(expr, Inferer.inferStr(expr, newGoal()))
+        val r1 = NarrowCache.getOrElseUpdate(expr, r0, cond, f(r0))
+        strTypes(expr) = r1
+        logger.debug("Narrow {} by {} to {}", expr.show, cond.show, r1.pp)
 
   @tailrec
   private def narrowStrListTarget(expr: Expr, f: StrRE => StrRE)(using cond: Expr): Unit = expr match
@@ -173,7 +181,10 @@ class Narrower(goal: Goal) extends LazyLogging:
     case StrContains(e, StrConst(s)) => Some((e, _.filterContains(s)))
     case Not(StrContains(e, StrConst(s))) => Some((e, _.filterNotContain(s)))
     // |e| op v
-    case StrLenCmp(e, op, v) => Some((e, _.filterLengthCmp(op, v)))
+    case StrLenCmp(e, op, IntConst(v)) => Some((e, _.filterLengthCmp(op, v.toInt)))
+    case StrLenCmp(e, op, Add(Var(x), IntConst(k)))
+      if k > 0 && strTypes.contains(Substr(e, Var(x), StrLen(e))()) =>
+      Some((Substr(e, Var(x), StrLen(e)), _.filterLengthCmp(op, k.toInt)))
 
     // e.startsWith(s)
     case StrStartsWith(e, StrConst(s)) => Some((e, _.filterStartsWith(s)))
@@ -216,13 +227,12 @@ class Narrower(goal: Goal) extends LazyLogging:
       case _ => None
 
   object StrLenCmp:
-    def unapply(expr: Expr): Option[(Expr, CmpOp, Int)] =
+    def unapply(expr: Expr): Option[(Expr, CmpOp, Expr)] =
       for
         (e1, op, e2) <- Cmp.unapply(expr)
         len <- expr.collectFirst { case e@StrLen(_) => e }
         (resultOp, result) <- InequalitySolver.isolate(len, (e1, op, e2))
-        i <- result match {case IntConst(i) => Some(i); case _ => None}
-      yield (len.str, resultOp, i.toInt)
+      yield (len.str, resultOp, result)
 
   object StrIndexOfCmp:
     def unapply(expr: Expr): Option[(Expr, String, Int, CmpOp, Expr)] =

@@ -25,6 +25,7 @@ object IndexInferer extends LazyLogging:
     case StrLen(`str`) => Some(IRight(0)) // |str|
     case Add(StrLen(`str`), IntConst(i)) if i > 0 => Some(IRight(0)) // |str| + i ==> |str|
     case Sub(StrLen(`str`), IntConst(i)) if i > 0 => Some(IRight(i)) // |str| - i
+    case Sub(Sub(StrLen(`str`), IntConst(i)), IntConst(j)) if i > 0 && j > 0 => Some(IRight(i + j)) // |str| - i - j
     case StrIndexOf(`str`, StrConst(s), ei) => // str.indexOf(s, i)
       for start <- matchStrIndex(ei, str, goal) yield IFirst(s, start, 0)
     case Add(StrIndexOf(`str`, StrConst(s), ei), IntConst(k)) if k > 0 => // str.indexOf(s, i) + k
